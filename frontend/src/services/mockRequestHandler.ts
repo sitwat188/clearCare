@@ -5,7 +5,7 @@
  */
 
 import type { InternalAxiosRequestConfig } from 'axios';
-import { mockApi } from './mockData';
+import { mockApi, getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification } from './mockData';
 import type { ApiResponse } from '../types/api.types';
 
 /**
@@ -60,14 +60,12 @@ export const handleMockRequest = async (
   }
 
   if (url.includes('/auth/forgot-password') && method === 'post') {
-    const { forgotPassword } = await import('./authService');
-    await forgotPassword(data.email);
+    // Mock: accept any email and return success
     return { success: true, data: undefined };
   }
 
   if (url.includes('/auth/reset-password') && method === 'post') {
-    const { resetPassword } = await import('./authService');
-    await resetPassword(data.token, data.newPassword);
+    // Mock: accept any token/reset and return success
     return { success: true, data: undefined };
   }
 
@@ -387,7 +385,6 @@ export const handleMockRequest = async (
       const match = url.match(/\/notifications\/([^/]+)\/read$/);
       const id = match?.[1];
       if (id) {
-        const { markNotificationAsRead, getNotifications } = await import('./mockData');
         const userId = 'user-1';
         markNotificationAsRead(userId, id);
         const notifications = getNotifications(userId);
@@ -398,7 +395,6 @@ export const handleMockRequest = async (
       }
     }
     if (url.includes('/read-all') && method === 'put') {
-      const { markAllNotificationsAsRead } = await import('./mockData');
       const userId = 'user-1';
       markAllNotificationsAsRead(userId);
       return { success: true, data: undefined };
@@ -407,14 +403,12 @@ export const handleMockRequest = async (
       const match = url.match(/\/notifications\/([^/]+)$/);
       const id = match?.[1];
       if (id) {
-        const { deleteNotification } = await import('./mockData');
         const userId = 'user-1';
         deleteNotification(userId, id);
         return { success: true, data: undefined };
       }
     }
     if (method === 'get') {
-      const { getNotifications } = await import('./mockData');
       const userId = 'user-1';
       const notifications = getNotifications(userId);
       return { data: notifications, success: true };
