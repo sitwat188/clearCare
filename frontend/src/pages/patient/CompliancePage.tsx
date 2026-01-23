@@ -1,0 +1,531 @@
+/**
+ * Patient Compliance Page
+ * Track medication adherence and lifestyle compliance
+ */
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSelector } from 'react-redux';
+import {
+  Typography,
+  Box,
+  CircularProgress,
+  Card,
+  CardContent,
+  Grid,
+  LinearProgress,
+  Button,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Tabs,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  IconButton,
+  Alert,
+} from '@mui/material';
+import {
+  LocalPharmacy as MedicationIcon,
+  FitnessCenter as LifestyleIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Edit as EditIcon,
+} from '@mui/icons-material';
+import { format, parseISO } from 'date-fns';
+import { toast } from 'react-toastify';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import type { RootState } from '../../store/store';
+import { complianceService } from '../../services/complianceService';
+import { instructionService } from '../../services/instructionService';
+import PageHeader from '../../components/common/PageHeader';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+const TabPanel = (props: TabPanelProps) => {
+  const { children, value, index, ...other } = props;
+  return (
+    <div role="tabpanel" hidden={value !== index} {...other}>
+      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
+    </div>
+  );
+};
+
+const PatientCompliance = () => {
+  const user = useSelector((state: RootState) => state.auth.user);
+  const queryClient = useQueryClient();
+  const [tabValue, setTabValue] = useState(0);
+  const [medicationDialogOpen, setMedicationDialogOpen] = useState(false);
+  const [selectedDose, setSelectedDose] = useState<{ date: string; time: string } | null>(null);
+  const [doseStatus, setDoseStatus] = useState<'taken' | 'missed'>('taken');
+  const [missedReason, setMissedReason] = useState('');
+
+  const { data: instructions, isLoading: instructionsLoading } = useQuery({
+    queryKey: ['patient-instructions', user?.id],
+    queryFn: () => instructionService.getInstructions(user?.id || '', 'patient'),
+    enabled: !!user?.id,
+  });
+
+  const { data: complianceRecords, isLoading: complianceLoading } = useQuery({
+    queryKey: ['patient-compliance', user?.id],
+    queryFn: () => complianceService.getComplianceRecords(user?.id || ''),
+    enabled: !!user?.id,
+  });
+
+  const { data: complianceMetrics, isLoading: metricsLoading } = useQuery({
+    queryKey: ['patient-compliance-metrics', user?.id],
+    queryFn: () => complianceService.getComplianceMetrics(user?.id || ''),
+    enabled: !!user?.id,
+  });
+
+  const updateMedicationMutation = useMutation({
+    mutationFn: async ({ instructionId, date, time, status, reason }: {
+      instructionId: string;
+      date: string;
+      time: string;
+      status: 'taken' | 'missed';
+      reason?: string;
+    }) => {
+      await complianceService.updateMedicationAdherence(instructionId, date, time, status, reason);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patient-compliance', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['patient-compliance-metrics', user?.id] });
+      toast.success('Medication adherence updated');
+      setMedicationDialogOpen(false);
+      setSelectedDose(null);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to update adherence');
+    },
+  });
+
+  const handleUpdateDose = () => {
+    if (!selectedDose) return;
+    // Find the instruction for this dose
+    const record = complianceRecords?.find((r) => r.medicationAdherence);
+    if (record) {
+      updateMedicationMutation.mutate({
+        instructionId: record.instructionId,
+        date: selectedDose.date,
+        time: selectedDose.time,
+        status: doseStatus,
+        reason: doseStatus === 'missed' ? missedReason : undefined,
+      });
+    }
+  };
+
+  const medicationInstructions = instructions?.filter((i) => i.type === 'medication' && i.complianceTrackingEnabled) || [];
+  const lifestyleInstructions = instructions?.filter((i) => i.type === 'lifestyle' && i.lifestyleTrackingEnabled) || [];
+
+  if (instructionsLoading || complianceLoading || metricsLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <PageHeader
+        title="Compliance Tracking"
+        subtitle="Track your medication adherence and lifestyle compliance"
+      />
+
+      {/* Overall Compliance Score */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={4}>
+          <Card
+            sx={{
+              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              color: 'white',
+            }}
+          >
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, opacity: 0.9 }}>
+                Overall Compliance
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
+                {complianceMetrics?.overallScore || 0}%
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={complianceMetrics?.overallScore || 0}
+                sx={{
+                  height: 8,
+                  borderRadius: 4,
+                  bgcolor: 'rgba(255, 255, 255, 0.2)',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: 'white',
+                  },
+                }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card
+            sx={{
+              background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+              color: 'white',
+            }}
+          >
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, opacity: 0.9 }}>
+                Medication Adherence
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
+                {complianceMetrics?.medicationAdherence || 0}%
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={complianceMetrics?.medicationAdherence || 0}
+                sx={{
+                  height: 8,
+                  borderRadius: 4,
+                  bgcolor: 'rgba(255, 255, 255, 0.2)',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: 'white',
+                  },
+                }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card
+            sx={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: 'white',
+            }}
+          >
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, opacity: 0.9 }}>
+                Lifestyle Compliance
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
+                {complianceMetrics?.lifestyleCompliance || 0}%
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={complianceMetrics?.lifestyleCompliance || 0}
+                sx={{
+                  height: 8,
+                  borderRadius: 4,
+                  bgcolor: 'rgba(255, 255, 255, 0.2)',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: 'white',
+                  },
+                }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Compliance Trends Chart */}
+      {complianceMetrics && complianceMetrics.trends.length > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>
+              Compliance Trends
+            </Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={complianceMetrics.trends}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(value) => format(parseISO(value), 'MMM dd')}
+                />
+                <YAxis domain={[0, 100]} />
+                <Tooltip
+                  formatter={(value: number) => [`${value}%`, 'Compliance Score']}
+                  labelFormatter={(label) => format(parseISO(label), 'MMM dd, yyyy')}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="score"
+                  stroke="#2563eb"
+                  strokeWidth={3}
+                  name="Compliance Score"
+                  dot={{ fill: '#2563eb', r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tabs for Medication and Lifestyle */}
+      <Card>
+        <CardContent>
+          <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} sx={{ mb: 3 }}>
+            <Tab label="Medication Adherence" icon={<MedicationIcon />} iconPosition="start" />
+            <Tab label="Lifestyle Compliance" icon={<LifestyleIcon />} iconPosition="start" />
+          </Tabs>
+
+          {/* Medication Tab */}
+          <TabPanel value={tabValue} index={0}>
+            {medicationInstructions.length === 0 ? (
+              <Alert severity="info">No medication instructions with compliance tracking enabled.</Alert>
+            ) : (
+              <Grid container spacing={3}>
+                {medicationInstructions.map((instruction) => {
+                  const record = complianceRecords?.find((r) => r.instructionId === instruction.id);
+                  const adherence = record?.medicationAdherence;
+
+                  return (
+                    <Grid item xs={12} key={instruction.id}>
+                      <Card>
+                        <CardContent>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Box>
+                              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+                                {instruction.medicationDetails?.name}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {instruction.medicationDetails?.dosage} {instruction.medicationDetails?.unit} - {instruction.medicationDetails?.frequency}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ textAlign: 'right' }}>
+                              <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                                {adherence?.adherencePercentage || 0}%
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Adherence Rate
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          <LinearProgress
+                            variant="determinate"
+                            value={adherence?.adherencePercentage || 0}
+                            sx={{ height: 10, borderRadius: 5, mb: 2 }}
+                          />
+
+                          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                            <Chip
+                              label={`${adherence?.takenDoses || 0} Taken`}
+                              color="success"
+                              size="small"
+                            />
+                            <Chip
+                              label={`${adherence?.missedDoses || 0} Missed`}
+                              color="error"
+                              size="small"
+                            />
+                            <Chip
+                              label={`${adherence?.totalDoses || 0} Total`}
+                              color="default"
+                              size="small"
+                            />
+                          </Box>
+
+                          {adherence && adherence.schedule.length > 0 && (
+                            <TableContainer component={Paper} variant="outlined">
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>Date</TableCell>
+                                    <TableCell>Time</TableCell>
+                                    <TableCell>Status</TableCell>
+                                    <TableCell>Reason</TableCell>
+                                    <TableCell align="right">Action</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {adherence.schedule.map((dose, index) => (
+                                    <TableRow key={index}>
+                                      <TableCell>{format(parseISO(dose.date), 'MMM dd, yyyy')}</TableCell>
+                                      <TableCell>{dose.time}</TableCell>
+                                      <TableCell>
+                                        <Chip
+                                          label={dose.status === 'taken' ? 'Taken' : dose.status === 'missed' ? 'Missed' : 'Pending'}
+                                          color={dose.status === 'taken' ? 'success' : dose.status === 'missed' ? 'error' : 'default'}
+                                          size="small"
+                                          icon={dose.status === 'taken' ? <CheckCircleIcon /> : dose.status === 'missed' ? <CancelIcon /> : undefined}
+                                        />
+                                      </TableCell>
+                                      <TableCell>{dose.reason || '-'}</TableCell>
+                                      <TableCell align="right">
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => {
+                                            if (dose.date && dose.time) {
+                                              setSelectedDose({ date: dose.date, time: dose.time });
+                                              setDoseStatus(dose.status === 'taken' ? 'taken' : dose.status === 'missed' ? 'missed' : 'taken');
+                                              setMissedReason(dose.reason || '');
+                                              setMedicationDialogOpen(true);
+                                            }
+                                          }}
+                                        >
+                                          <EditIcon fontSize="small" />
+                                        </IconButton>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            )}
+          </TabPanel>
+
+          {/* Lifestyle Tab */}
+          <TabPanel value={tabValue} index={1}>
+            {lifestyleInstructions.length === 0 ? (
+              <Alert severity="info">No lifestyle instructions with compliance tracking enabled.</Alert>
+            ) : (
+              <Grid container spacing={3}>
+                {lifestyleInstructions.map((instruction) => {
+                  const record = complianceRecords?.find((r) => r.instructionId === instruction.id);
+                  const lifestyle = record?.lifestyleCompliance;
+
+                  return (
+                    <Grid item xs={12} key={instruction.id}>
+                      <Card>
+                        <CardContent>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Box>
+                              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+                                {instruction.title}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {instruction.lifestyleDetails?.category
+                                  ? instruction.lifestyleDetails.category.charAt(0).toUpperCase() + instruction.lifestyleDetails.category.slice(1)
+                                  : 'Lifestyle'}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ textAlign: 'right' }}>
+                              <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>
+                                {lifestyle?.progress || 0}%
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Progress
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          <LinearProgress
+                            variant="determinate"
+                            value={lifestyle?.progress || 0}
+                            sx={{ height: 10, borderRadius: 5, mb: 2 }}
+                          />
+
+                          {lifestyle && lifestyle.milestones && lifestyle.milestones.length > 0 && (
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                                Milestones:
+                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                {lifestyle.milestones.map((milestone) => (
+                                  <Chip
+                                    key={milestone.id}
+                                    label={milestone.name}
+                                    color={milestone.achieved ? 'success' : 'default'}
+                                    icon={milestone.achieved ? <CheckCircleIcon /> : undefined}
+                                    size="small"
+                                  />
+                                ))}
+                              </Box>
+                            </Box>
+                          )}
+
+                          <Button
+                            variant="outlined"
+                            startIcon={<EditIcon />}
+                            onClick={() => {
+                              // TODO: Open lifestyle compliance update dialog
+                              toast.info('Lifestyle compliance update feature coming soon');
+                            }}
+                          >
+                            Update Progress
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            )}
+          </TabPanel>
+        </CardContent>
+      </Card>
+
+      {/* Update Medication Dose Dialog */}
+      <Dialog open={medicationDialogOpen} onClose={() => setMedicationDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Update Medication Dose</DialogTitle>
+        <DialogContent>
+          {selectedDose && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Date: {format(parseISO(selectedDose.date), 'MMM dd, yyyy')} at {selectedDose.time}
+              </Typography>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={doseStatus}
+                  label="Status"
+                  onChange={(e) => setDoseStatus(e.target.value as 'taken' | 'missed')}
+                >
+                  <MenuItem value="taken">Taken</MenuItem>
+                  <MenuItem value="missed">Missed</MenuItem>
+                </Select>
+              </FormControl>
+              {doseStatus === 'missed' && (
+                <FormControl fullWidth>
+                  <InputLabel>Reason</InputLabel>
+                  <Select
+                    value={missedReason}
+                    label="Reason"
+                    onChange={(e) => setMissedReason(e.target.value)}
+                  >
+                    <MenuItem value="Forgot">Forgot</MenuItem>
+                    <MenuItem value="Side effects">Side effects</MenuItem>
+                    <MenuItem value="Out of medication">Out of medication</MenuItem>
+                    <MenuItem value="Other">Other</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMedicationDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleUpdateDose}
+            variant="contained"
+            disabled={updateMedicationMutation.isPending}
+          >
+            {updateMedicationMutation.isPending ? <CircularProgress size={20} /> : 'Update'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default PatientCompliance;
