@@ -45,7 +45,7 @@ const makeApiRequest = async <T>(
   }
 
   // Production / real-backend path: expect axios to return ApiResponse<T> in response.data
-  const response = await api[method]<ApiResponse<T]>(url, data);
+  const response = await api[method]<ApiResponse<T>>(url, data);
   if (!response || !response.data || typeof response.data !== 'object' || !('success' in response.data)) {
     throw new Error(`[API] Unexpected response shape for ${method.toUpperCase()} ${url}`);
   }

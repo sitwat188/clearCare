@@ -33,15 +33,24 @@ export const handleMockRequest = async (
     const credentials = data;
     if (!credentials || !credentials.email || !credentials.password) {
       console.error('[MockHandler] Invalid login credentials:', credentials);
-      return null;
+      return { 
+        success: false, 
+        message: 'Email and password are required',
+        data: null as any
+      };
     }
     try {
       const response = await mockApi.login(credentials.email, credentials.password);
       console.log('[MockHandler] Login response:', response);
       return { data: response, success: true };
-    } catch (error) {
-      console.error('[MockHandler] Login error:', error);
-      return null;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Invalid credentials';
+      console.error('[MockHandler] Login error:', errorMessage);
+      return { 
+        success: false, 
+        message: errorMessage,
+        data: null as any
+      };
     }
   }
 
