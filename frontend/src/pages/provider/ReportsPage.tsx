@@ -33,6 +33,7 @@ import type { RootState } from '../../store/store';
 import { patientService } from '../../services/patientService';
 import { instructionService } from '../../services/instructionService';
 import PageHeader from '../../components/common/PageHeader';
+import { exportComplianceReport } from '../../utils/exportUtils';
 
 const ProviderReports = () => {
   const user = useSelector((state: RootState) => state.auth.user);
@@ -53,9 +54,81 @@ const ProviderReports = () => {
     enabled: !!user?.id,
   });
 
-  const handleGenerateReport = (format: 'pdf' | 'csv') => {
-    // Simulate report generation
-    toast.success(`Generating ${format.toUpperCase()} report...`);
+  const handleGenerateReport = (exportFormat: 'pdf' | 'csv') => {
+    try {
+      // Filter data based on selected parameters
+      let reportData: any[] = [];
+      
+      if (reportType === 'compliance' || reportType === 'summary') {
+        // Create compliance summary
+        const filteredInstructions = instructions?.filter(inst => {
+          if (selectedPatient !== 'all' && inst.patientId !== selectedPatient) return false;
+          if (startDate && new Date(inst.assignedDate) < startDate) return false;
+          if (endDate && new Date(inst.assignedDate) > endDate) return false;
+          return true;
+        }) || [];
+        
+        reportData = filteredInstructions.map(inst => ({
+          'Instruction ID': inst.id,
+          'Title': inst.title,
+          'Patient': inst.patientName,
+          'Type': inst.type,
+          'Status': inst.status,
+          'Priority': inst.priority,
+          'Assigned Date': format(new Date(inst.assignedDate), 'yyyy-MM-dd'),
+          'Acknowledged': inst.acknowledgedDate ? 'Yes' : 'No',
+        }));
+      } else if (reportType === 'instructions') {
+        const filteredInstructions = instructions?.filter(inst => {
+          if (selectedPatient !== 'all' && inst.patientId !== selectedPatient) return false;
+          if (startDate && new Date(inst.assignedDate) < startDate) return false;
+          if (endDate && new Date(inst.assignedDate) > endDate) return false;
+          return true;
+        }) || [];
+        
+        reportData = filteredInstructions.map(inst => ({
+          'ID': inst.id,
+          'Title': inst.title,
+          'Patient': inst.patientName,
+          'Type': inst.type,
+          'Status': inst.status,
+          'Priority': inst.priority,
+          'Assigned': format(new Date(inst.assignedDate), 'yyyy-MM-dd'),
+          'Acknowledged': inst.acknowledgedDate ? format(new Date(inst.acknowledgedDate), 'yyyy-MM-dd') : 'Not acknowledged',
+        }));
+      } else if (reportType === 'acknowledgments') {
+        // Acknowledgment report - only instructions that have been acknowledged
+        const filteredInstructions = instructions?.filter(inst => {
+          if (selectedPatient !== 'all' && inst.patientId !== selectedPatient) return false;
+          if (!inst.acknowledgedDate) return false; // Only acknowledged
+          if (startDate && new Date(inst.acknowledgedDate) < startDate) return false;
+          if (endDate && new Date(inst.acknowledgedDate) > endDate) return false;
+          return true;
+        }) || [];
+        
+        reportData = filteredInstructions.map(inst => ({
+          'Instruction ID': inst.id,
+          'Title': inst.title,
+          'Patient': inst.patientName,
+          'Type': inst.type,
+          'Acknowledged Date': format(new Date(inst.acknowledgedDate!), 'yyyy-MM-dd HH:mm'),
+          'Acknowledgment Count': inst.acknowledgments?.length || 0,
+          'Status': inst.status,
+        }));
+      }
+      
+      if (reportData.length === 0) {
+        toast.warning('No data found for the selected criteria');
+        return;
+      }
+      
+      const reportTitle = `${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report - ${format(startDate || new Date(), 'yyyy-MM-dd')} to ${format(endDate || new Date(), 'yyyy-MM-dd')}`;
+      exportComplianceReport(reportData, exportFormat, reportTitle);
+      toast.success(`Generated ${exportFormat.toUpperCase()} report with ${reportData.length} records`);
+    } catch (error) {
+      console.error('Report generation error:', error);
+      toast.error('Failed to generate report');
+    }
   };
 
   if (patientsLoading || instructionsLoading) {

@@ -38,6 +38,7 @@ import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import { adminService } from '../../services/adminService';
 import PageHeader from '../../components/common/PageHeader';
+import { exportAuditLogs } from '../../utils/exportUtils';
 
 const AdminAuditLogs = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,7 +71,17 @@ const AdminAuditLogs = () => {
   const uniqueActions = Array.from(new Set(auditLogs?.map((log) => log.action) || []));
 
   const handleExport = () => {
-    toast.success('Exporting audit logs (mock)');
+    try {
+      if (!filteredLogs || filteredLogs.length === 0) {
+        toast.warning('No audit logs to export');
+        return;
+      }
+      exportAuditLogs(filteredLogs, 'csv');
+      toast.success(`Exported ${filteredLogs.length} audit logs`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export audit logs');
+    }
   };
 
   if (isLoading) {

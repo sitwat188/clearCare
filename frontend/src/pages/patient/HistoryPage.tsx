@@ -50,6 +50,7 @@ import { ROUTES } from '../../config/routes';
 import { INSTRUCTION_TYPES } from '../../utils/constants';
 import type { CareInstruction, InstructionStatus, InstructionType } from '../../types/instruction.types';
 import PageHeader from '../../components/common/PageHeader';
+import { exportComplianceReport } from '../../utils/exportUtils';
 
 const PatientHistory = () => {
   const navigate = useNavigate();
@@ -274,7 +275,38 @@ const PatientHistory = () => {
                         >
                           View Details
                         </Button>
-                        <Button variant="outlined" startIcon={<DownloadIcon />}>
+                        <Button 
+                          variant="outlined" 
+                          startIcon={<DownloadIcon />}
+                          onClick={() => {
+                            try {
+                              if (!instruction) {
+                                toast.warning('No instruction selected');
+                                return;
+                              }
+                              
+                              // Create report data for this instruction
+                              const reportData = [{
+                                'Instruction ID': instruction.id,
+                                'Title': instruction.title,
+                                'Type': instruction.type,
+                                'Status': instruction.status,
+                                'Priority': instruction.priority,
+                                'Assigned Date': format(new Date(instruction.assignedDate), 'yyyy-MM-dd'),
+                                'Acknowledged Date': instruction.acknowledgedDate ? format(new Date(instruction.acknowledgedDate), 'yyyy-MM-dd') : 'Not acknowledged',
+                                'Provider': instruction.providerName,
+                                'Content': instruction.content,
+                              }];
+                              
+                              const reportTitle = `Instruction Report - ${instruction.title}`;
+                              exportComplianceReport(reportData, 'pdf', reportTitle);
+                              toast.success('Report downloaded successfully');
+                            } catch (error) {
+                              console.error('Export error:', error);
+                              toast.error('Failed to download report');
+                            }
+                          }}
+                        >
                           Download Report
                         </Button>
                       </Box>
@@ -409,8 +441,33 @@ const PatientHistory = () => {
                 variant="contained"
                 startIcon={<DownloadIcon />}
                 onClick={() => {
-                  // TODO: Generate and download report
-                  toast.info('Report download feature coming soon');
+                  try {
+                    if (!selectedInstruction) {
+                      toast.warning('No instruction selected');
+                      return;
+                    }
+                    
+                    // Create report data
+                    const reportData = [{
+                      'Instruction ID': selectedInstruction.id,
+                      'Title': selectedInstruction.title,
+                      'Type': selectedInstruction.type,
+                      'Status': selectedInstruction.status,
+                      'Priority': selectedInstruction.priority,
+                      'Assigned Date': format(new Date(selectedInstruction.assignedDate), 'yyyy-MM-dd'),
+                      'Acknowledged Date': selectedInstruction.acknowledgedDate ? format(new Date(selectedInstruction.acknowledgedDate), 'yyyy-MM-dd') : 'Not acknowledged',
+                      'Provider': selectedInstruction.providerName,
+                      'Content': selectedInstruction.content,
+                      'Compliance': getComplianceForInstruction(selectedInstruction.id)?.overallPercentage + '%' || 'N/A',
+                    }];
+                    
+                    const reportTitle = `Instruction Report - ${selectedInstruction.title}`;
+                    exportComplianceReport(reportData, 'pdf', reportTitle);
+                    toast.success('Report downloaded successfully');
+                  } catch (error) {
+                    console.error('Export error:', error);
+                    toast.error('Failed to download report');
+                  }
                 }}
               >
                 Download Report

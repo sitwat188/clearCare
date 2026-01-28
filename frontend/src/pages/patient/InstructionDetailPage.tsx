@@ -48,6 +48,7 @@ import { ROUTES } from '../../config/routes';
 import { PRIORITY_LEVELS, INSTRUCTION_TYPES } from '../../utils/constants';
 import type { AcknowledgmentType } from '../../types/instruction.types';
 import PageHeader from '../../components/common/PageHeader';
+import { exportInstructionPDF } from '../../utils/exportUtils';
 
 const PatientInstructionDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -149,7 +150,23 @@ const PatientInstructionDetail = () => {
               color={isAcknowledged ? 'success' : 'primary'}
               sx={{ fontWeight: 600 }}
             />
-            <Button variant="outlined" startIcon={<DownloadIcon />}>
+            <Button 
+              variant="outlined" 
+              startIcon={<DownloadIcon />}
+              onClick={() => {
+                try {
+                  if (!instruction) {
+                    toast.warning('Instruction not loaded');
+                    return;
+                  }
+                  exportInstructionPDF(instruction);
+                  toast.success('PDF downloaded successfully');
+                } catch (error) {
+                  console.error('PDF export error:', error);
+                  toast.error('Failed to download PDF');
+                }
+              }}
+            >
               Download PDF
             </Button>
             <Button variant="outlined" startIcon={<PrintIcon />}>

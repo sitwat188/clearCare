@@ -41,6 +41,7 @@ import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import { adminService } from '../../services/adminService';
 import PageHeader from '../../components/common/PageHeader';
+import { exportReport, exportToCSV, exportToJSON, arrayToHTMLTable, exportToPDF } from '../../utils/exportUtils';
 
 const AdminReports = () => {
   const [reportType, setReportType] = useState<string>('compliance');
@@ -51,12 +52,158 @@ const AdminReports = () => {
     queryFn: () => adminService.getAdminReports(),
   });
 
-  const handleGenerateReport = () => {
-    toast.success(`Generating ${reportType} report (mock)`);
+  const { data: auditLogs } = useQuery({
+    queryKey: ['admin-audit-logs-for-report', dateRange],
+    queryFn: () =>
+      adminService.getAuditLogs({
+        startDate: dateRange.start ? new Date(dateRange.start).toISOString() : undefined,
+        endDate: dateRange.end ? new Date(dateRange.end + 'T23:59:59').toISOString() : undefined,
+      }),
+    enabled: false, // Only fetch when generating report
+  });
+
+  const { data: users } = useQuery({
+    queryKey: ['admin-users-for-report'],
+    queryFn: () => adminService.getAllUsers(),
+    enabled: false, // Only fetch when generating report
+  });
+
+  const handleGenerateReport = async () => {
+    try {
+      if (!dateRange.start || !dateRange.end) {
+        toast.warning('Please select both start and end dates');
+        return;
+      }
+
+      let reportData: any[] = [];
+      let reportTitle = '';
+      const timestamp = new Date().toISOString().split('T')[0];
+      const startDateFormatted = format(new Date(dateRange.start), 'MMM dd, yyyy');
+      const endDateFormatted = format(new Date(dateRange.end), 'MMM dd, yyyy');
+
+      // Fetch data based on report type
+      if (reportType === 'audit') {
+        const logs = await adminService.getAuditLogs({
+          startDate: new Date(dateRange.start).toISOString(),
+          endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+        });
+        reportData = logs.map((log) => ({
+          'Timestamp': format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+          'User': log.userName,
+          'Email': log.userEmail,
+          'Action': log.action,
+          'Resource Type': log.resourceType,
+          'Resource Name': log.resourceName || '-',
+          'IP Address': log.ipAddress,
+          'Status': log.status,
+          'Details': log.details ? JSON.stringify(log.details) : '-',
+        }));
+        reportTitle = `Audit Report - ${startDateFormatted} to ${endDateFormatted}`;
+      } else if (reportType === 'users') {
+        const allUsers = await adminService.getAllUsers();
+        reportData = allUsers.map((user) => ({
+          'User ID': user.id,
+          'Name': `${user.firstName} ${user.lastName}`,
+          'Email': user.email,
+          'Role': user.role,
+          'Created At': format(new Date(user.createdAt), 'yyyy-MM-dd'),
+          'Permissions': user.permissions.join(', '),
+        }));
+        reportTitle = `User Activity Report - ${startDateFormatted} to ${endDateFormatted}`;
+      } else if (reportType === 'compliance') {
+        // For compliance, we'll create a summary report
+        const logs = await adminService.getAuditLogs({
+          startDate: new Date(dateRange.start).toISOString(),
+          endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+        });
+        const complianceActions = logs.filter((log) => log.action.includes('compliance') || log.action.includes('acknowledge'));
+        reportData = complianceActions.map((log) => ({
+          'Timestamp': format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+          'User': log.userName,
+          'Action': log.action,
+          'Resource': log.resourceName || '-',
+          'Status': log.status,
+        }));
+        reportTitle = `Compliance Report - ${startDateFormatted} to ${endDateFormatted}`;
+      } else if (reportType === 'system') {
+        // System report - combine multiple data sources
+        const logs = await adminService.getAuditLogs({
+          startDate: new Date(dateRange.start).toISOString(),
+          endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+        });
+        const allUsers = await adminService.getAllUsers();
+        
+        reportData = [
+          {
+            'Metric': 'Total Users',
+            'Value': allUsers.length,
+          },
+          {
+            'Metric': 'Total Audit Logs',
+            'Value': logs.length,
+          },
+          {
+            'Metric': 'Successful Actions',
+            'Value': logs.filter((l) => l.status === 'success').length,
+          },
+          {
+            'Metric': 'Failed Actions',
+            'Value': logs.filter((l) => l.status === 'failure').length,
+          },
+          {
+            'Metric': 'Date Range',
+            'Value': `${startDateFormatted} to ${endDateFormatted}`,
+          },
+        ];
+        reportTitle = `System Report - ${startDateFormatted} to ${endDateFormatted}`;
+      }
+
+      if (reportData.length === 0) {
+        toast.warning('No data found for the selected criteria');
+        return;
+      }
+
+      // Create report object
+      const generatedReport = {
+        id: `report-${Date.now()}`,
+        type: reportType as 'compliance' | 'audit' | 'users' | 'system',
+        title: reportTitle,
+        description: `Generated ${reportType} report for the selected date range`,
+        generatedAt: new Date().toISOString(),
+        generatedBy: 'current-user',
+        dateRange: {
+          start: new Date(dateRange.start).toISOString(),
+          end: new Date(dateRange.end + 'T23:59:59').toISOString(),
+        },
+        data: reportData,
+        format: 'pdf' as 'pdf' | 'csv' | 'json',
+      };
+
+      // Export as PDF (default)
+      exportReport(generatedReport, 'pdf');
+      toast.success(`Generated and downloaded ${reportType} report`);
+      
+      // Refresh reports list
+      setTimeout(() => refetch(), 500);
+    } catch (error) {
+      console.error('Report generation error:', error);
+      toast.error('Failed to generate report');
+    }
   };
 
-  const handleDownloadReport = (reportId: string, format: string) => {
-    toast.success(`Downloading report as ${format.toUpperCase()} (mock)`);
+  const handleDownloadReport = (reportId: string, format: 'pdf' | 'csv' | 'json') => {
+    try {
+      const report = reports?.find(r => r.id === reportId);
+      if (!report) {
+        toast.error('Report not found');
+        return;
+      }
+      exportReport(report, format);
+      toast.success(`Downloaded report as ${format.toUpperCase()}`);
+    } catch (error) {
+      console.error('Download error:', error);
+      toast.error('Failed to download report');
+    }
   };
 
   const getReportIcon = (format: string) => {
