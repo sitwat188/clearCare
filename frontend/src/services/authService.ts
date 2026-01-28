@@ -54,7 +54,7 @@ export const login = async (credentials: LoginCredentials): Promise<{ user: User
 /**
  * Handle OAuth callback
  */
-export const handleOAuthCallback = async (code: string, codeVerifier: string): Promise<OAuthTokenResponse> => {
+export const handleOAuthCallback = async (_code: string, _codeVerifier: string): Promise<OAuthTokenResponse> => {
   // Simulate OAuth token exchange
   // In production, this would call the actual OAuth token endpoint
   const tokenResponse: OAuthTokenResponse = {

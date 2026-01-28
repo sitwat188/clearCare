@@ -18,7 +18,6 @@ import {
   Divider,
   Alert,
   CircularProgress,
-  alpha,
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -35,7 +34,7 @@ const AdminSettings = () => {
   const [settings, setSettings] = useState<any>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
-  const { data: systemSettings, isLoading, isError } = useQuery({
+  const { data: systemSettings, isLoading } = useQuery({
     queryKey: ['admin-system-settings'],
     queryFn: () => adminService.getSystemSettings(),
   });

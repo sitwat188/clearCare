@@ -14,8 +14,6 @@ import {
   IconButton,
   Button,
   List,
-  ListItem,
-  Divider,
   Tooltip,
   CircularProgress,
   Alert,
@@ -31,7 +29,6 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import type { RootState } from '../../store/store';
 import { notificationService } from '../../services/notificationService';
-import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
 
 const getPriorityColor = (priority: string) => {
@@ -138,7 +135,7 @@ const NotificationsPage = () => {
         </Card>
       ) : (
         <List sx={{ p: 0 }}>
-          {notifications.map((notification, index) => (
+          {notifications.map((notification) => (
             <Box key={notification.id}>
               <Card
                 sx={{

@@ -5,7 +5,6 @@
 
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
   Typography,
@@ -37,7 +36,6 @@ import {
 import {
   Search as SearchIcon,
   History as HistoryIcon,
-  Assessment as ReportIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
 } from '@mui/icons-material';
@@ -46,14 +44,12 @@ import { toast } from 'react-toastify';
 import type { RootState } from '../../store/store';
 import { instructionService } from '../../services/instructionService';
 import { complianceService } from '../../services/complianceService';
-import { ROUTES } from '../../config/routes';
 import { INSTRUCTION_TYPES } from '../../utils/constants';
 import type { CareInstruction, InstructionStatus, InstructionType } from '../../types/instruction.types';
 import PageHeader from '../../components/common/PageHeader';
 import { exportComplianceReport } from '../../utils/exportUtils';
 
 const PatientHistory = () => {
-  const navigate = useNavigate();
   const user = useSelector((state: RootState) => state.auth.user);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<InstructionStatus | 'all'>('all');

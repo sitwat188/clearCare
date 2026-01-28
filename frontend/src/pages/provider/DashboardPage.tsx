@@ -25,7 +25,6 @@ import {
   Assignment as InstructionsIcon,
   CheckCircle as ComplianceIcon,
   TrendingUp as TrendingUpIcon,
-  LocalHospital as HospitalIcon,
   Warning as WarningIcon,
   ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
@@ -33,7 +32,6 @@ import { format } from 'date-fns';
 import type { RootState } from '../../store/store';
 import { patientService } from '../../services/patientService';
 import { instructionService } from '../../services/instructionService';
-import { complianceService } from '../../services/complianceService';
 import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
 

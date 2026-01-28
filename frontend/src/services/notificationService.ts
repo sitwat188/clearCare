@@ -10,7 +10,7 @@ export const notificationService = {
   /**
    * Get all notifications for the current user
    */
-  getNotifications: async (userId: string): Promise<Notification[]> => {
+  getNotifications: async (_userId: string): Promise<Notification[]> => {
     try {
       const response = await apiEndpoints.notifications.getNotifications();
       return response.data;
@@ -22,7 +22,7 @@ export const notificationService = {
   /**
    * Mark a notification as read
    */
-  markAsRead: async (userId: string, notificationId: string): Promise<void> => {
+  markAsRead: async (_userId: string, notificationId: string): Promise<void> => {
     try {
       await apiEndpoints.notifications.markAsRead(notificationId);
     } catch (error) {
@@ -33,7 +33,7 @@ export const notificationService = {
   /**
    * Mark all notifications as read
    */
-  markAllAsRead: async (userId: string): Promise<void> => {
+  markAllAsRead: async (_userId: string): Promise<void> => {
     try {
       await apiEndpoints.notifications.markAllAsRead();
     } catch (error) {
@@ -44,7 +44,7 @@ export const notificationService = {
   /**
    * Delete a notification
    */
-  deleteNotification: async (userId: string, notificationId: string): Promise<void> => {
+  deleteNotification: async (_userId: string, notificationId: string): Promise<void> => {
     try {
       await apiEndpoints.notifications.deleteNotification(notificationId);
     } catch (error) {

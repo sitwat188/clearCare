@@ -11,7 +11,6 @@ import {
   CardContent,
   Typography,
   Switch,
-  FormControlLabel,
   Divider,
   Button,
   Grid,
@@ -27,7 +26,6 @@ import {
   Email as EmailIcon,
   Security as SecurityIcon,
   Language as LanguageIcon,
-  DarkMode as DarkModeIcon,
   Save as SaveIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';

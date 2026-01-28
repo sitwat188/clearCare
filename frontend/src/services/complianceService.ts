@@ -47,11 +47,11 @@ export const complianceService = {
    * Update medication adherence
    */
   updateMedicationAdherence: async (
-    instructionId: string,
-    date: string,
-    time: string,
-    status: 'taken' | 'missed',
-    reason?: string
+    _instructionId: string,
+    _date: string,
+    _time: string,
+    _status: 'taken' | 'missed',
+    _reason?: string
   ): Promise<void> => {
     // TODO: Implement with actual API call
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -61,8 +61,8 @@ export const complianceService = {
    * Update lifestyle compliance
    */
   updateLifestyleCompliance: async (
-    instructionId: string,
-    data: {
+    _instructionId: string,
+    _data: {
       date: string;
       completed: boolean;
       notes?: string;

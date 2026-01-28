@@ -4,15 +4,13 @@
  */
 
 import { apiEndpoints } from './apiEndpoints';
-import { mockInstructions } from './mockData';
 import type { CareInstruction } from '../types/instruction.types';
-import type { ApiResponse, PaginatedResponse } from '../types/api.types';
 
 export const instructionService = {
   /**
    * Get all instructions for current user
    */
-  getInstructions: async (userId: string, role: string): Promise<CareInstruction[]> => {
+  getInstructions: async (_userId: string, role: string): Promise<CareInstruction[]> => {
     try {
       if (role === 'patient') {
         const response = await apiEndpoints.patient.getMyInstructions();
@@ -48,7 +46,7 @@ export const instructionService = {
   /**
    * Create new instruction
    */
-  createInstruction: async (instruction: Partial<CareInstruction>): Promise<CareInstruction> => {
+  createInstruction: async (_instruction: Partial<CareInstruction>): Promise<CareInstruction> => {
     // TODO: Implement with actual API call
     throw new Error('Not implemented - will connect to backend');
   },
@@ -56,7 +54,7 @@ export const instructionService = {
   /**
    * Update instruction
    */
-  updateInstruction: async (id: string, updates: Partial<CareInstruction>): Promise<CareInstruction> => {
+  updateInstruction: async (_id: string, _updates: Partial<CareInstruction>): Promise<CareInstruction> => {
     // TODO: Implement with actual API call
     throw new Error('Not implemented - will connect to backend');
   },

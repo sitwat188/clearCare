@@ -3,7 +3,7 @@
  * View patient compliance metrics and tracking
  */
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -22,10 +22,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Avatar,
   Button,
-  alpha,
   Alert,
 } from '@mui/material';
 import {
@@ -35,10 +33,8 @@ import {
   People as PeopleIcon,
   ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
-import { format } from 'date-fns';
 import type { RootState } from '../../store/store';
 import { patientService } from '../../services/patientService';
-import { complianceService } from '../../services/complianceService';
 import { instructionService } from '../../services/instructionService';
 import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';

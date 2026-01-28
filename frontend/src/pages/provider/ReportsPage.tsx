@@ -22,8 +22,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import {
-  Assessment as ReportsIcon,
-  Download as DownloadIcon,
   PictureAsPdf as PdfIcon,
   Description as CsvIcon,
 } from '@mui/icons-material';

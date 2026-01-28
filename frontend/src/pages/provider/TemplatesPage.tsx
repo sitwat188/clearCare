@@ -101,7 +101,7 @@ const ProviderTemplates = () => {
     setDialogOpen(true);
   };
 
-  const handleDeleteTemplate = (id: string) => {
+  const handleDeleteTemplate = (_id: string) => {
     toast.success('Template deleted');
   };
 

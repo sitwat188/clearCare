@@ -3,7 +3,7 @@
  * Handles persisting auth state to localStorage
  */
 
-import type { User, AuthState } from '../types/auth.types';
+import type { User } from '../types/auth.types';
 
 const AUTH_STORAGE_KEY = 'clearcare_auth';
 

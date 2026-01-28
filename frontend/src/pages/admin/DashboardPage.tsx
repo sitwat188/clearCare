@@ -19,12 +19,9 @@ import {
   Security as RolesIcon,
   Assessment as ReportsIcon,
   History as AuditIcon,
-  TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { adminService } from '../../services/adminService';
-import { instructionService } from '../../services/instructionService';
-import { patientService } from '../../services/patientService';
 import PageHeader from '../../components/common/PageHeader';
 
 const AdminDashboard = () => {

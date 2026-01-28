@@ -41,7 +41,7 @@ import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import { adminService } from '../../services/adminService';
 import PageHeader from '../../components/common/PageHeader';
-import { exportReport, exportToCSV, exportToJSON, arrayToHTMLTable, exportToPDF } from '../../utils/exportUtils';
+import { exportReport } from '../../utils/exportUtils';
 
 const AdminReports = () => {
   const [reportType, setReportType] = useState<string>('compliance');
@@ -52,21 +52,7 @@ const AdminReports = () => {
     queryFn: () => adminService.getAdminReports(),
   });
 
-  const { data: auditLogs } = useQuery({
-    queryKey: ['admin-audit-logs-for-report', dateRange],
-    queryFn: () =>
-      adminService.getAuditLogs({
-        startDate: dateRange.start ? new Date(dateRange.start).toISOString() : undefined,
-        endDate: dateRange.end ? new Date(dateRange.end + 'T23:59:59').toISOString() : undefined,
-      }),
-    enabled: false, // Only fetch when generating report
-  });
-
-  const { data: users } = useQuery({
-    queryKey: ['admin-users-for-report'],
-    queryFn: () => adminService.getAllUsers(),
-    enabled: false, // Only fetch when generating report
-  });
+  // These queries are only used inside handleGenerateReport, so we don't need to declare them here
 
   const handleGenerateReport = async () => {
     try {
@@ -77,7 +63,6 @@ const AdminReports = () => {
 
       let reportData: any[] = [];
       let reportTitle = '';
-      const timestamp = new Date().toISOString().split('T')[0];
       const startDateFormatted = format(new Date(dateRange.start), 'MMM dd, yyyy');
       const endDateFormatted = format(new Date(dateRange.end), 'MMM dd, yyyy');
 

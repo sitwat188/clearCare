@@ -23,7 +23,6 @@ import {
   Switch,
   Alert,
   CircularProgress,
-  Divider,
 } from '@mui/material';
 import {
   Save as SaveIcon,
@@ -32,7 +31,6 @@ import {
 import { toast } from 'react-toastify';
 import type { RootState } from '../../store/store';
 import { patientService } from '../../services/patientService';
-import { instructionService } from '../../services/instructionService';
 import { ROUTES } from '../../config/routes';
 import { INSTRUCTION_TYPES, PRIORITY_LEVELS } from '../../utils/constants';
 import type { InstructionType, InstructionPriority } from '../../types/instruction.types';

@@ -6,20 +6,16 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
-import { useDispatch } from 'react-redux';
-import { loginSuccess } from '../../store/slices/authSlice';
 import { handleOAuthCallback } from '../../services/authService';
 import { ROUTES } from '../../config/routes';
 
 const OAuthCallbackPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
 
   useEffect(() => {
     const processCallback = async () => {
       const code = searchParams.get('code');
-      const state = searchParams.get('state');
       const error = searchParams.get('error');
 
       if (error) {
@@ -36,7 +32,7 @@ const OAuthCallbackPage = () => {
           }
 
           // Exchange code for tokens
-          const tokenResponse = await handleOAuthCallback(code, codeVerifier);
+          await handleOAuthCallback(code, codeVerifier);
 
           // TODO: Decode ID token to get user info
           // For now, redirect to login
@@ -51,7 +47,7 @@ const OAuthCallbackPage = () => {
     };
 
     processCallback();
-  }, [searchParams, navigate, dispatch]);
+  }, [searchParams, navigate]);
 
   return (
     <Box

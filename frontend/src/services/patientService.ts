@@ -12,7 +12,7 @@ export const patientService = {
    * Get patients assigned to provider
    * Returns decrypted patient data for display
    */
-  getPatients: async (providerId: string): Promise<Patient[]> => {
+  getPatients: async (_providerId: string): Promise<Patient[]> => {
     try {
       const response = await apiEndpoints.provider.getPatients();
       // Decrypt PHI fields for display
