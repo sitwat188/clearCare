@@ -31,6 +31,7 @@ import {
 import { toast } from 'react-toastify';
 import type { RootState } from '../../store/store';
 import { patientService } from '../../services/patientService';
+import { instructionService } from '../../services/instructionService';
 import { ROUTES } from '../../config/routes';
 import { INSTRUCTION_TYPES, PRIORITY_LEVELS } from '../../utils/constants';
 import type { InstructionType, InstructionPriority } from '../../types/instruction.types';
@@ -68,11 +69,47 @@ const CreateInstruction = () => {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      return { id: `inst-${Date.now()}` };
+      const selectedPatient = patients?.find((p) => p.id === formData.patientId);
+      if (!user) throw new Error('Not authenticated');
+      if (!selectedPatient) throw new Error('Please select a patient');
+
+      const now = new Date().toISOString();
+      const instructionPayload: any = {
+        providerId: user.id,
+        providerName: `${user.firstName} ${user.lastName}`,
+        patientId: selectedPatient.id,
+        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+        title: formData.title,
+        type: formData.type,
+        status: 'active',
+        priority: formData.priority,
+        content: formData.content,
+        assignedDate: now,
+        complianceTrackingEnabled: formData.complianceTrackingEnabled,
+        lifestyleTrackingEnabled: formData.type === 'lifestyle',
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+        medicationDetails:
+          formData.type === 'medication'
+            ? {
+                name: formData.medicationName,
+                dosage: formData.dosage,
+                unit: formData.unit,
+                frequency: formData.frequency,
+                duration: formData.duration,
+              }
+            : undefined,
+      };
+
+      return instructionService.createInstruction(instructionPayload);
     },
-    onSuccess: () => {
+    onSuccess: (createdInstruction) => {
+      // Update cache immediately (mock backend doesn't persist new instructions yet)
+      queryClient.setQueryData(['provider-instructions', user?.id], (old: any) => {
+        const prev = Array.isArray(old) ? old : [];
+        return [createdInstruction, ...prev];
+      });
       queryClient.invalidateQueries({ queryKey: ['provider-instructions', user?.id] });
       toast.success('Instruction created successfully');
       navigate(ROUTES.PROVIDER.INSTRUCTIONS);

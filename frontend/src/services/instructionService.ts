@@ -46,17 +46,25 @@ export const instructionService = {
   /**
    * Create new instruction
    */
-  createInstruction: async (_instruction: Partial<CareInstruction>): Promise<CareInstruction> => {
-    // TODO: Implement with actual API call
-    throw new Error('Not implemented - will connect to backend');
+  createInstruction: async (instruction: Partial<CareInstruction>): Promise<CareInstruction> => {
+    try {
+      const response = await apiEndpoints.provider.createInstruction(instruction);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to create instruction');
+    }
   },
 
   /**
    * Update instruction
    */
-  updateInstruction: async (_id: string, _updates: Partial<CareInstruction>): Promise<CareInstruction> => {
-    // TODO: Implement with actual API call
-    throw new Error('Not implemented - will connect to backend');
+  updateInstruction: async (id: string, updates: Partial<CareInstruction>): Promise<CareInstruction> => {
+    try {
+      const response = await apiEndpoints.provider.updateInstruction(id, updates);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to update instruction');
+    }
   },
 
   /**

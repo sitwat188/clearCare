@@ -33,6 +33,41 @@ export const adminService = {
   },
 
   /**
+   * Create user
+   */
+  createUser: async (userData: Partial<User>): Promise<User> => {
+    try {
+      const response = await apiEndpoints.admin.createUser(userData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to create user');
+    }
+  },
+
+  /**
+   * Update user
+   */
+  updateUser: async (id: string, updates: Partial<User>): Promise<User> => {
+    try {
+      const response = await apiEndpoints.admin.updateUser(id, updates);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to update user');
+    }
+  },
+
+  /**
+   * Delete user
+   */
+  deleteUser: async (id: string): Promise<void> => {
+    try {
+      await apiEndpoints.admin.deleteUser(id);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to delete user');
+    }
+  },
+
+  /**
    * Get all roles
    */
   getRoles: async (): Promise<Role[]> => {
@@ -53,6 +88,41 @@ export const adminService = {
       return response.data;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch role');
+    }
+  },
+
+  /**
+   * Create role
+   */
+  createRole: async (roleData: Partial<Role>): Promise<Role> => {
+    try {
+      const response = await apiEndpoints.admin.createRole(roleData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to create role');
+    }
+  },
+
+  /**
+   * Update role
+   */
+  updateRole: async (id: string, updates: Partial<Role>): Promise<Role> => {
+    try {
+      const response = await apiEndpoints.admin.updateRole(id, updates);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to update role');
+    }
+  },
+
+  /**
+   * Delete role
+   */
+  deleteRole: async (id: string): Promise<void> => {
+    try {
+      await apiEndpoints.admin.deleteRole(id);
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to delete role');
     }
   },
 

@@ -3,8 +3,8 @@
  * Role and permission management
  */
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Card,
@@ -36,10 +36,28 @@ import { toast } from 'react-toastify';
 import { adminService } from '../../services/adminService';
 import PageHeader from '../../components/common/PageHeader';
 
+const ALL_PERMISSIONS = [
+  'read:patients',
+  'read:instructions',
+  'write:instructions',
+  'read:compliance',
+  'read:reports',
+  'write:templates',
+  'admin:users',
+  'admin:roles',
+  'admin:system',
+  'admin:audit',
+  'admin:reports',
+] as const;
+
 const AdminRoles = () => {
+  const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [roleName, setRoleName] = useState('');
+  const [roleDescription, setRoleDescription] = useState('');
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
   const { data: roles, isLoading } = useQuery({
     queryKey: ['admin-roles'],
@@ -48,11 +66,20 @@ const AdminRoles = () => {
 
   const handleCreateRole = () => {
     setSelectedRole(null);
+    setRoleName('');
+    setRoleDescription('');
+    setSelectedPermissions([]);
     setDialogOpen(true);
   };
 
   const handleEditRole = (roleId: string) => {
     setSelectedRole(roleId);
+    const role = roles?.find((r) => r.id === roleId);
+    if (role) {
+      setRoleName(role.name);
+      setRoleDescription(role.description || '');
+      setSelectedPermissions(role.permissions || []);
+    }
     setDialogOpen(true);
   };
 
@@ -61,15 +88,76 @@ const AdminRoles = () => {
     setDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (selectedRole) {
+  const selectedRoleData = useMemo(() => {
+    return selectedRole ? roles?.find((r) => r.id === selectedRole) : null;
+  }, [selectedRole, roles]);
+
+  const saveRoleMutation = useMutation({
+    mutationFn: async () => {
+      const name = roleName.trim();
+      const description = roleDescription.trim();
+      if (!name) throw new Error('Role name is required');
+      if (selectedPermissions.length === 0) throw new Error('Select at least one permission');
+
+      if (selectedRoleData) {
+        return adminService.updateRole(selectedRoleData.id, {
+          name,
+          description,
+          permissions: selectedPermissions,
+          updatedAt: new Date().toISOString(),
+        } as any);
+      }
+
+      return adminService.createRole({
+        name,
+        description,
+        permissions: selectedPermissions,
+        isSystemRole: false,
+        userCount: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as any);
+    },
+    onSuccess: async (savedRole) => {
+      // Update cache immediately (mock backend doesn't persist yet)
+      queryClient.setQueryData(['admin-roles'], (old: any) => {
+        const prev = Array.isArray(old) ? old : [];
+        const exists = prev.some((r: any) => r?.id === savedRole.id);
+        if (exists) return prev.map((r: any) => (r?.id === savedRole.id ? savedRole : r));
+        return [savedRole, ...prev];
+      });
+
+      toast.success(selectedRoleData ? 'Role updated (mock)' : 'Role created (mock)');
+      setDialogOpen(false);
+      setSelectedRole(null);
+      await queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to save role');
+    },
+  });
+
+  const deleteRoleMutation = useMutation({
+    mutationFn: async (roleId: string) => adminService.deleteRole(roleId),
+    onSuccess: async (_data, roleId) => {
+      queryClient.setQueryData(['admin-roles'], (old: any) => {
+        const prev = Array.isArray(old) ? old : [];
+        return prev.filter((r: any) => r?.id !== roleId);
+      });
+
       toast.success('Role deleted (mock)');
       setDeleteDialogOpen(false);
       setSelectedRole(null);
-    }
-  };
+      await queryClient.invalidateQueries({ queryKey: ['admin-roles'] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete role');
+    },
+  });
 
-  const selectedRoleData = selectedRole ? roles?.find((r) => r.id === selectedRole) : null;
+  const confirmDelete = () => {
+    if (selectedRole) deleteRoleMutation.mutate(selectedRole);
+  };
 
   if (isLoading) {
     return (
@@ -193,13 +281,15 @@ const AdminRoles = () => {
             <TextField
               fullWidth
               label="Role Name"
-              defaultValue={selectedRoleData?.name || ''}
+              value={roleName}
+              onChange={(e) => setRoleName(e.target.value)}
               placeholder="e.g., Nurse Practitioner"
             />
             <TextField
               fullWidth
               label="Description"
-              defaultValue={selectedRoleData?.description || ''}
+              value={roleDescription}
+              onChange={(e) => setRoleDescription(e.target.value)}
               multiline
               rows={3}
               placeholder="Describe the role and its purpose..."
@@ -209,17 +299,20 @@ const AdminRoles = () => {
                 Permissions
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 300, overflow: 'auto' }}>
-                {[
-                  'read:patients',
-                  'write:instructions',
-                  'read:compliance',
-                  'admin:users',
-                  'admin:roles',
-                  'admin:audit',
-                ].map((permission) => (
+                {ALL_PERMISSIONS.map((permission) => (
                   <FormControlLabel
                     key={permission}
-                    control={<Checkbox defaultChecked={selectedRoleData?.permissions.includes(permission)} />}
+                    control={
+                      <Checkbox
+                        checked={selectedPermissions.includes(permission)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedPermissions((prev) =>
+                            checked ? Array.from(new Set([...prev, permission])) : prev.filter((p) => p !== permission)
+                          );
+                        }}
+                      />
+                    }
                     label={permission}
                   />
                 ))}
@@ -231,12 +324,10 @@ const AdminRoles = () => {
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
-            onClick={() => {
-              toast.success(selectedRole ? 'Role updated (mock)' : 'Role created (mock)');
-              setDialogOpen(false);
-            }}
+            onClick={() => saveRoleMutation.mutate()}
+            disabled={saveRoleMutation.isPending || !!selectedRoleData?.isSystemRole}
           >
-            {selectedRole ? 'Update' : 'Create'}
+            {saveRoleMutation.isPending ? 'Saving...' : selectedRole ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -249,8 +340,8 @@ const AdminRoles = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={confirmDelete} color="error" variant="contained">
-            Delete
+          <Button onClick={confirmDelete} color="error" variant="contained" disabled={deleteRoleMutation.isPending}>
+            {deleteRoleMutation.isPending ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

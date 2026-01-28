@@ -3,7 +3,7 @@
  * Manage instruction templates
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Typography,
@@ -42,6 +42,8 @@ import { ROUTES } from '../../config/routes';
 import type { InstructionType } from '../../types/instruction.types';
 import PageHeader from '../../components/common/PageHeader';
 
+const TEMPLATES_STORAGE_KEY = 'clearcare_provider_templates';
+
 // Mock templates
 const mockTemplates = [
   {
@@ -70,11 +72,38 @@ const mockTemplates = [
   },
 ];
 
+type ProviderTemplate = (typeof mockTemplates)[number] & { updatedAt?: string };
+
 const ProviderTemplates = () => {
   const navigate = useNavigate();
-  const [templates] = useState(mockTemplates);
+  const [templates, setTemplates] = useState<ProviderTemplate[]>(() => {
+    try {
+      const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed as ProviderTemplate[];
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return mockTemplates as ProviderTemplate[];
+  });
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<typeof mockTemplates[0] | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<ProviderTemplate | null>(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: '',
+    type: 'medication' as InstructionType,
+    description: '',
+    content: '',
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates));
+    } catch {
+      // ignore storage errors
+    }
+  }, [templates]);
 
   const getTypeIcon = (type: InstructionType) => {
     switch (type) {
@@ -93,19 +122,32 @@ const ProviderTemplates = () => {
 
   const handleCreateTemplate = () => {
     setSelectedTemplate(null);
+    setTemplateForm({
+      name: '',
+      type: 'medication',
+      description: '',
+      content: '',
+    });
     setDialogOpen(true);
   };
 
-  const handleEditTemplate = (template: typeof mockTemplates[0]) => {
+  const handleEditTemplate = (template: ProviderTemplate) => {
     setSelectedTemplate(template);
+    setTemplateForm({
+      name: template.name,
+      type: template.type,
+      description: template.description,
+      content: template.content,
+    });
     setDialogOpen(true);
   };
 
-  const handleDeleteTemplate = (_id: string) => {
+  const handleDeleteTemplate = (id: string) => {
+    setTemplates((prev) => prev.filter((t) => t.id !== id));
     toast.success('Template deleted');
   };
 
-  const handleUseTemplate = (template: typeof mockTemplates[0]) => {
+  const handleUseTemplate = (template: ProviderTemplate) => {
     // Navigate to create instruction page with template data
     navigate(ROUTES.PROVIDER.CREATE_INSTRUCTION, {
       state: {
@@ -116,6 +158,52 @@ const ProviderTemplates = () => {
         },
       },
     });
+  };
+
+  const handleSaveTemplate = () => {
+    const name = templateForm.name.trim();
+    const description = templateForm.description.trim();
+    const content = templateForm.content.trim();
+
+    if (!name || !content) {
+      toast.error('Please provide at least a name and content');
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    if (selectedTemplate) {
+      setTemplates((prev) =>
+        prev.map((t) =>
+          t.id === selectedTemplate.id
+            ? {
+                ...t,
+                name,
+                type: templateForm.type,
+                description,
+                content,
+                updatedAt: now,
+              }
+            : t
+        )
+      );
+      toast.success('Template updated');
+    } else {
+      const newTemplate: ProviderTemplate = {
+        id: `template-${Date.now()}`,
+        name,
+        type: templateForm.type,
+        description,
+        content,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setTemplates((prev) => [newTemplate, ...prev]);
+      toast.success('Template created');
+    }
+
+    setDialogOpen(false);
+    setSelectedTemplate(null);
   };
 
   return (
@@ -217,14 +305,16 @@ const ProviderTemplates = () => {
             <TextField
               fullWidth
               label="Template Name"
-              defaultValue={selectedTemplate?.name || ''}
+              value={templateForm.name}
+              onChange={(e) => setTemplateForm((p) => ({ ...p, name: e.target.value }))}
               placeholder="e.g., Post-Surgery Antibiotic"
             />
             <FormControl fullWidth>
               <InputLabel>Instruction Type</InputLabel>
               <Select
-                defaultValue={selectedTemplate?.type || 'medication'}
+                value={templateForm.type}
                 label="Instruction Type"
+                onChange={(e) => setTemplateForm((p) => ({ ...p, type: e.target.value as InstructionType }))}
               >
                 {INSTRUCTION_TYPES.map((type) => (
                   <MenuItem key={type.value} value={type.value}>
@@ -236,13 +326,15 @@ const ProviderTemplates = () => {
             <TextField
               fullWidth
               label="Description"
-              defaultValue={selectedTemplate?.description || ''}
+              value={templateForm.description}
+              onChange={(e) => setTemplateForm((p) => ({ ...p, description: e.target.value }))}
               placeholder="Brief description of the template"
             />
             <TextField
               fullWidth
               label="Template Content"
-              defaultValue={selectedTemplate?.content || ''}
+              value={templateForm.content}
+              onChange={(e) => setTemplateForm((p) => ({ ...p, content: e.target.value }))}
               multiline
               rows={6}
               placeholder="Enter the instruction content..."
@@ -251,10 +343,7 @@ const ProviderTemplates = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => {
-            toast.success(selectedTemplate ? 'Template updated' : 'Template created');
-            setDialogOpen(false);
-          }}>
+          <Button variant="contained" onClick={handleSaveTemplate}>
             {selectedTemplate ? 'Update' : 'Create'}
           </Button>
         </DialogActions>

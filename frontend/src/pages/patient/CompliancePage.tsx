@@ -21,11 +21,14 @@ import {
   DialogContent,
   DialogActions,
   FormControl,
+  FormControlLabel,
   InputLabel,
   Select,
   MenuItem,
   Tabs,
   Tab,
+  TextField,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -74,6 +77,11 @@ const PatientCompliance = () => {
   const [selectedDose, setSelectedDose] = useState<{ date: string; time: string } | null>(null);
   const [doseStatus, setDoseStatus] = useState<'taken' | 'missed'>('taken');
   const [missedReason, setMissedReason] = useState('');
+  const [lifestyleDialogOpen, setLifestyleDialogOpen] = useState(false);
+  const [selectedLifestyleInstructionId, setSelectedLifestyleInstructionId] = useState<string | null>(null);
+  const [lifestyleProgress, setLifestyleProgress] = useState<number>(0);
+  const [lifestyleCompleted, setLifestyleCompleted] = useState<boolean>(true);
+  const [lifestyleNotes, setLifestyleNotes] = useState<string>('');
 
   const { data: instructions, isLoading: instructionsLoading } = useQuery({
     queryKey: ['patient-instructions', user?.id],
@@ -112,6 +120,74 @@ const PatientCompliance = () => {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Failed to update adherence');
+    },
+  });
+
+  const updateLifestyleMutation = useMutation({
+    mutationFn: async (payload: { instructionId: string; progress: number; completed: boolean; notes?: string }) => {
+      await complianceService.updateLifestyleCompliance(payload.instructionId, {
+        date: new Date().toISOString().split('T')[0] || new Date().toISOString().substring(0, 10),
+        completed: payload.completed,
+        notes: payload.notes,
+        metrics: { progress: payload.progress },
+      });
+      return payload;
+    },
+    onSuccess: (payload) => {
+      // Update compliance records cache immediately (mock backend doesn't persist yet)
+      queryClient.setQueryData(['patient-compliance', user?.id], (old: any) => {
+        const prev = Array.isArray(old) ? old : [];
+        return prev.map((r: any) => {
+          if (r?.instructionId !== payload.instructionId) return r;
+          const lifestyle = r.lifestyleCompliance || { instructionId: payload.instructionId, category: 'lifestyle', progress: 0, milestones: [], checkIns: [] };
+          const nextCheckIns = Array.isArray(lifestyle.checkIns)
+            ? [
+                ...lifestyle.checkIns,
+                {
+                  date: new Date().toISOString().split('T')[0],
+                  completed: payload.completed,
+                  notes: payload.notes,
+                  metrics: { progress: payload.progress },
+                },
+              ]
+            : [
+                {
+                  date: new Date().toISOString().split('T')[0],
+                  completed: payload.completed,
+                  notes: payload.notes,
+                  metrics: { progress: payload.progress },
+                },
+              ];
+
+          return {
+            ...r,
+            overallPercentage: payload.progress,
+            lifestyleCompliance: {
+              ...lifestyle,
+              progress: payload.progress,
+              checkIns: nextCheckIns,
+            },
+            updatedAt: new Date().toISOString(),
+          };
+        });
+      });
+
+      queryClient.setQueryData(['patient-compliance-metrics', user?.id], (old: any) => {
+        if (!old || typeof old !== 'object') return old;
+        const medication = typeof old.medicationAdherence === 'number' ? old.medicationAdherence : 0;
+        const appointment = typeof old.appointmentCompliance === 'number' ? old.appointmentCompliance : 0;
+        const lifestyle = payload.progress;
+        const overall = Math.round((medication + lifestyle + appointment) / 3);
+        return { ...old, lifestyleCompliance: lifestyle, overallScore: overall };
+      });
+
+      toast.success('Lifestyle progress updated');
+      setLifestyleDialogOpen(false);
+      setSelectedLifestyleInstructionId(null);
+      setLifestyleNotes('');
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to update lifestyle progress');
     },
   });
 
@@ -458,8 +534,15 @@ const PatientCompliance = () => {
                             variant="outlined"
                             startIcon={<EditIcon />}
                             onClick={() => {
-                              // TODO: Open lifestyle compliance update dialog
-                              toast.info('Lifestyle compliance update feature coming soon');
+                              if (!record) {
+                                toast.error('No compliance record found for this instruction');
+                                return;
+                              }
+                              setSelectedLifestyleInstructionId(instruction.id);
+                              setLifestyleProgress(lifestyle?.progress || 0);
+                              setLifestyleCompleted(true);
+                              setLifestyleNotes('');
+                              setLifestyleDialogOpen(true);
                             }}
                           >
                             Update Progress
@@ -521,6 +604,54 @@ const PatientCompliance = () => {
             disabled={updateMedicationMutation.isPending}
           >
             {updateMedicationMutation.isPending ? <CircularProgress size={20} /> : 'Update'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Update Lifestyle Progress Dialog */}
+      <Dialog open={lifestyleDialogOpen} onClose={() => setLifestyleDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Update Lifestyle Progress</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Progress (%)"
+              type="number"
+              value={lifestyleProgress}
+              onChange={(e) => setLifestyleProgress(Math.max(0, Math.min(100, Number(e.target.value))))}
+              inputProps={{ min: 0, max: 100 }}
+              fullWidth
+            />
+            <FormControlLabel
+              control={<Switch checked={lifestyleCompleted} onChange={(e) => setLifestyleCompleted(e.target.checked)} />}
+              label="Completed today"
+            />
+            <TextField
+              label="Notes (optional)"
+              value={lifestyleNotes}
+              onChange={(e) => setLifestyleNotes(e.target.value)}
+              fullWidth
+              multiline
+              rows={3}
+            />
+            <Alert severity="info">This is a mock update and will update the UI immediately.</Alert>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLifestyleDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (!selectedLifestyleInstructionId) return;
+              updateLifestyleMutation.mutate({
+                instructionId: selectedLifestyleInstructionId,
+                progress: lifestyleProgress,
+                completed: lifestyleCompleted,
+                notes: lifestyleNotes.trim() || undefined,
+              });
+            }}
+            disabled={!selectedLifestyleInstructionId || updateLifestyleMutation.isPending}
+          >
+            {updateLifestyleMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
