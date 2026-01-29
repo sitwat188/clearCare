@@ -12,13 +12,12 @@ export const complianceService = {
    */
   getComplianceRecords: async (patientId: string): Promise<ComplianceRecord[]> => {
     try {
-      // Try patient endpoint first (for patient role), fallback to provider endpoint
       try {
         const response = await apiEndpoints.patient.getMyCompliance();
-        return response.data;
+        return Array.isArray(response?.data) ? response.data : [];
       } catch {
         const response = await apiEndpoints.provider.getPatientCompliance(patientId);
-        return response.data;
+        return Array.isArray(response?.data) ? response.data : [];
       }
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch compliance records');
@@ -30,46 +29,63 @@ export const complianceService = {
    */
   getComplianceMetrics: async (patientId: string): Promise<ComplianceMetrics> => {
     try {
-      // Try patient endpoint first (for patient role), fallback to provider endpoint
       try {
         const response = await apiEndpoints.patient.getMyComplianceMetrics();
-        return response.data;
+        if (response?.data && typeof response.data === 'object') return response.data as ComplianceMetrics;
       } catch {
         const response = await apiEndpoints.provider.getPatientComplianceMetrics(patientId);
-        return response.data;
+        if (response?.data && typeof response.data === 'object') return response.data as ComplianceMetrics;
       }
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to fetch compliance metrics');
+    } catch (_e) {
+      // ignore
     }
+    return {
+      patientId: patientId || '',
+      overallScore: 0,
+      medicationAdherence: 0,
+      lifestyleCompliance: 0,
+      appointmentCompliance: 0,
+      activeInstructions: 0,
+      compliantInstructions: 0,
+      trends: [],
+    };
   },
 
   /**
-   * Update medication adherence
+   * Update medication adherence (by compliance record id)
    */
   updateMedicationAdherence: async (
-    _instructionId: string,
-    _date: string,
-    _time: string,
-    _status: 'taken' | 'missed',
-    _reason?: string
+    recordId: string,
+    date: string,
+    time: string,
+    status: 'taken' | 'missed',
+    reason?: string
   ): Promise<void> => {
-    // TODO: Implement with actual API call
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await apiEndpoints.patient.updateMedicationAdherence(recordId, {
+      date,
+      time,
+      status,
+      reason,
+    });
   },
 
   /**
-   * Update lifestyle compliance
+   * Update lifestyle compliance (by compliance record id)
    */
   updateLifestyleCompliance: async (
-    _instructionId: string,
-    _data: {
+    recordId: string,
+    data: {
       date: string;
       completed: boolean;
       notes?: string;
       metrics?: Record<string, number>;
     }
   ): Promise<void> => {
-    // TODO: Implement with actual API call
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await apiEndpoints.patient.updateLifestyleCompliance(recordId, {
+      date: data.date,
+      completed: data.completed,
+      notes: data.notes,
+      metrics: data.metrics,
+    });
   },
 };

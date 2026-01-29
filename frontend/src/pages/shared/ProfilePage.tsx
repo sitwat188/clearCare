@@ -3,8 +3,8 @@
  * User profile management - shared across all roles
  */
 
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -33,6 +33,7 @@ import type { RootState } from '../../store/store';
 import { updateUser } from '../../store/slices/authSlice';
 import { useDispatch } from 'react-redux';
 import PageHeader from '../../components/common/PageHeader';
+import { apiEndpoints } from '../../services/apiEndpoints';
 
 const ProfilePage = () => {
   const dispatch = useDispatch();
@@ -44,20 +45,39 @@ const ProfilePage = () => {
     lastName: user?.lastName || '',
   });
 
+  const { data: profileData } = useQuery({
+    queryKey: ['profile', user?.id],
+    queryFn: async () => {
+      const res = await apiEndpoints.auth.getMyProfile();
+      return res?.data;
+    },
+    enabled: !!user?.id,
+  });
+
+  const displayUser = profileData ?? user;
+
+  useEffect(() => {
+    if (displayUser) {
+      setFormData({
+        firstName: displayUser.firstName || '',
+        lastName: displayUser.lastName || '',
+      });
+    }
+  }, [displayUser?.firstName, displayUser?.lastName]);
+
   const updateMutation = useMutation({
     mutationFn: async (data: { firstName: string; lastName: string }) => {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      return data;
+      const res = await apiEndpoints.auth.updateMyProfile(data);
+      return res?.data ?? data;
     },
     onSuccess: (data) => {
-      dispatch(updateUser({ ...user, ...data }));
+      if (data) dispatch(updateUser({ ...user, ...data }));
       setIsEditing(false);
       toast.success('Profile updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['user', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['profile', user?.id] });
     },
-    onError: () => {
-      toast.error('Failed to update profile');
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : 'Failed to update profile');
     },
   });
 
@@ -71,8 +91,8 @@ const ProfilePage = () => {
 
   const handleCancel = () => {
     setFormData({
-      firstName: user?.firstName || '',
-      lastName: user?.lastName || '',
+      firstName: displayUser?.firstName || '',
+      lastName: displayUser?.lastName || '',
     });
     setIsEditing(false);
   };
@@ -119,14 +139,14 @@ const ProfilePage = () => {
                     boxShadow: '0 4px 20px rgba(37, 99, 235, 0.3)',
                   }}
                 >
-                  {user?.firstName?.[0] || <PersonIcon />}
+                  {displayUser?.firstName?.[0] || <PersonIcon />}
                 </Avatar>
                 <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
-                  {user?.firstName} {user?.lastName}
+                  {displayUser?.firstName} {displayUser?.lastName}
                 </Typography>
                 <Chip
-                  label={getRoleLabel(user?.role || '')}
-                  color={getRoleColor(user?.role || '') as 'primary' | 'success' | 'warning' | 'default'}
+                  label={getRoleLabel(displayUser?.role || '')}
+                  color={getRoleColor(displayUser?.role || '') as 'primary' | 'success' | 'warning' | 'default'}
                   sx={{ mb: 2, fontWeight: 600 }}
                 />
                 <Box sx={{ width: '100%', mt: 2 }}>
@@ -134,13 +154,13 @@ const ProfilePage = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                     <EmailIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
                     <Typography variant="body2" color="text.secondary">
-                      {user?.email}
+                      {displayUser?.email}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                     <BadgeIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
                     <Typography variant="body2" color="text.secondary">
-                      Member since {user?.createdAt ? format(new Date(user.createdAt), 'MMM yyyy') : 'N/A'}
+                      Member since {displayUser?.createdAt ? format(new Date(displayUser.createdAt), 'MMM yyyy') : 'N/A'}
                     </Typography>
                   </Box>
                 </Box>
@@ -198,7 +218,7 @@ const ProfilePage = () => {
                       <TextField
                         fullWidth
                         label="Email Address"
-                        value={user?.email || ''}
+                        value={displayUser?.email || ''}
                         disabled
                         helperText="Email address cannot be changed"
                       />
@@ -231,7 +251,7 @@ const ProfilePage = () => {
                       First Name
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {user?.firstName || 'N/A'}
+                      {displayUser?.firstName || 'N/A'}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -239,7 +259,7 @@ const ProfilePage = () => {
                       Last Name
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {user?.lastName || 'N/A'}
+                      {displayUser?.lastName || 'N/A'}
                     </Typography>
                   </Grid>
                   <Grid item xs={12}>
@@ -250,7 +270,7 @@ const ProfilePage = () => {
                       Email Address
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {user?.email || 'N/A'}
+                      {displayUser?.email || 'N/A'}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -258,8 +278,8 @@ const ProfilePage = () => {
                       Role
                     </Typography>
                     <Chip
-                      label={getRoleLabel(user?.role || '')}
-                      color={getRoleColor(user?.role || '') as 'primary' | 'success' | 'warning' | 'default'}
+                      label={getRoleLabel(displayUser?.role || '')}
+                      color={getRoleColor(displayUser?.role || '') as 'primary' | 'success' | 'warning' | 'default'}
                       size="small"
                     />
                   </Grid>
@@ -268,7 +288,7 @@ const ProfilePage = () => {
                       Account Created
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {user?.createdAt ? format(new Date(user.createdAt), 'MMMM dd, yyyy') : 'N/A'}
+                      {displayUser?.createdAt ? format(new Date(displayUser.createdAt), 'MMMM dd, yyyy') : 'N/A'}
                     </Typography>
                   </Grid>
                 </Grid>

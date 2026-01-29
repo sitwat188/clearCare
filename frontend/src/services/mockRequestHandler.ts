@@ -5,7 +5,7 @@
  */
 
 import type { InternalAxiosRequestConfig } from 'axios';
-import { mockApi, getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification } from './mockData';
+import { mockApi } from './mockData';
 import type { ApiResponse } from '../types/api.types';
 
 /**
@@ -33,24 +33,15 @@ export const handleMockRequest = async (
     const credentials = data;
     if (!credentials || !credentials.email || !credentials.password) {
       console.error('[MockHandler] Invalid login credentials:', credentials);
-      return { 
-        success: false, 
-        message: 'Email and password are required',
-        data: null as any
-      };
+      return null;
     }
     try {
       const response = await mockApi.login(credentials.email, credentials.password);
       console.log('[MockHandler] Login response:', response);
       return { data: response, success: true };
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Invalid credentials';
-      console.error('[MockHandler] Login error:', errorMessage);
-      return { 
-        success: false, 
-        message: errorMessage,
-        data: null as any
-      };
+    } catch (error) {
+      console.error('[MockHandler] Login error:', error);
+      return null;
     }
   }
 
@@ -69,12 +60,14 @@ export const handleMockRequest = async (
   }
 
   if (url.includes('/auth/forgot-password') && method === 'post') {
-    // Mock: accept any email and return success
+    const { forgotPassword } = await import('./authService');
+    await forgotPassword(data.email);
     return { success: true, data: undefined };
   }
 
   if (url.includes('/auth/reset-password') && method === 'post') {
-    // Mock: accept any token/reset and return success
+    const { resetPassword } = await import('./authService');
+    await resetPassword(data.token, data.newPassword);
     return { success: true, data: undefined };
   }
 
@@ -394,6 +387,7 @@ export const handleMockRequest = async (
       const match = url.match(/\/notifications\/([^/]+)\/read$/);
       const id = match?.[1];
       if (id) {
+        const { markNotificationAsRead, getNotifications } = await import('./mockData');
         const userId = 'user-1';
         markNotificationAsRead(userId, id);
         const notifications = getNotifications(userId);
@@ -404,6 +398,7 @@ export const handleMockRequest = async (
       }
     }
     if (url.includes('/read-all') && method === 'put') {
+      const { markAllNotificationsAsRead } = await import('./mockData');
       const userId = 'user-1';
       markAllNotificationsAsRead(userId);
       return { success: true, data: undefined };
@@ -412,12 +407,14 @@ export const handleMockRequest = async (
       const match = url.match(/\/notifications\/([^/]+)$/);
       const id = match?.[1];
       if (id) {
+        const { deleteNotification } = await import('./mockData');
         const userId = 'user-1';
         deleteNotification(userId, id);
         return { success: true, data: undefined };
       }
     }
     if (method === 'get') {
+      const { getNotifications } = await import('./mockData');
       const userId = 'user-1';
       const notifications = getNotifications(userId);
       return { data: notifications, success: true };

@@ -13,7 +13,8 @@ export const notificationService = {
   getNotifications: async (_userId: string): Promise<Notification[]> => {
     try {
       const response = await apiEndpoints.notifications.getNotifications();
-      return response.data;
+      const data = response?.data;
+      return Array.isArray(data) ? data : [];
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch notifications');
     }

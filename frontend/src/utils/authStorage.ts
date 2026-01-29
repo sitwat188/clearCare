@@ -62,11 +62,27 @@ export const loadAuthState = (): PersistedAuthState | null => {
 };
 
 /**
+ * Update only the access token in persisted auth state (e.g. after refresh).
+ */
+export const updateAccessToken = (token: string): void => {
+  try {
+    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!stored) return;
+    const state: PersistedAuthState = JSON.parse(stored);
+    state.accessToken = token;
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error('Failed to update access token:', error);
+  }
+};
+
+/**
  * Clear auth state from localStorage
  */
 export const clearAuthState = (): void => {
   try {
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem('refreshToken');
   } catch (error) {
     console.error('Failed to clear auth state:', error);
   }

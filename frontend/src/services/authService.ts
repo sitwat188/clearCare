@@ -37,17 +37,42 @@ const generateRandomString = (length: number): string => {
 export const login = async (credentials: LoginCredentials): Promise<{ user: User; token: string }> => {
   try {
     console.log('[AuthService] Attempting login with:', credentials.email);
-    const response = await apiEndpoints.auth.login(credentials);
-    console.log('[AuthService] Login response:', response);
-    if (response.success && response.data) {
-      setAccessToken(response.data.token);
-      return response.data;
+    
+    // Check if using mock data or real backend
+    const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+    
+    if (USE_MOCK_DATA) {
+      // Use existing mock endpoint
+      const response = await apiEndpoints.auth.login(credentials);
+      if (response.success && response.data) {
+        setAccessToken(response.data.token);
+        return response.data;
+      }
+      throw new Error('Login failed - invalid response');
     }
-    console.error('[AuthService] Login failed - invalid response:', response);
-    throw new Error('Login failed - invalid response');
-  } catch (error) {
+    
+    // Real backend - call directly with axios
+    const { api } = await import('./api');
+    const response = await api.post('/auth/login', credentials);
+    
+    // Backend may return { success, data: { user, accessToken, refreshToken } } or raw { user, accessToken, refreshToken }
+    const payload = response.data?.data ?? response.data;
+    const { user, accessToken, refreshToken } = payload ?? {};
+    
+    if (accessToken) {
+      setAccessToken(accessToken);
+      // Store refresh token if needed
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
+      return { user, token: accessToken };
+    }
+    
+    throw new Error('Login failed - no access token received');
+  } catch (error: any) {
     console.error('[AuthService] Login error:', error);
-    throw new Error(error instanceof Error ? error.message : 'Login failed');
+    const errorMessage = error.response?.data?.message || error.message || 'Login failed';
+    throw new Error(errorMessage);
   }
 };
 
@@ -82,9 +107,22 @@ export const logout = (): void => {
  * Get current user (from token or session)
  */
 export const getCurrentUser = async (): Promise<User | null> => {
-  // In production, decode JWT token or fetch from API
-  // For mock, return null and let components handle it
-  return null;
+  try {
+    const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+    
+    if (USE_MOCK_DATA) {
+      // Mock mode - return null and let components handle it
+      return null;
+    }
+    
+    // Real backend - fetch from /auth/me
+    const { api } = await import('./api');
+    const response = await api.get('/auth/me');
+    return response.data;
+  } catch (error) {
+    console.error('[AuthService] Get current user error:', error);
+    return null;
+  }
 };
 
 /**

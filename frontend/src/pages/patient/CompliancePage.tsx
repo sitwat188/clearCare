@@ -1,6 +1,14 @@
 /**
  * Patient Compliance Page
- * Track medication adherence and lifestyle compliance
+ * Track medication adherence and lifestyle compliance.
+ *
+ * Data mapping:
+ * - Instructions (from API) = care tasks (e.g. "Take Amoxicillin 3x daily").
+ * - Compliance records (from API) = one per instruction, hold logged doses/check-ins.
+ * - Match: record = complianceRecords.find(r => r.instructionId === instruction.id).
+ * - Medication: record.medicationAdherence has schedule (list of { date, time, status, reason }).
+ * - Lifestyle: record.lifestyleCompliance has checkIns (list of { date, completed, notes }).
+ * How to mark: Medication = "Log dose" (new) or Edit icon (existing row). Lifestyle = "Update Progress".
  */
 
 import { useState } from 'react';
@@ -45,6 +53,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Edit as EditIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'react-toastify';
@@ -69,16 +78,39 @@ const TabPanel = (props: TabPanelProps) => {
   );
 };
 
+/** Backend returns medicationAdherence as { schedule, overallProgress }; seed may have adherencePercentage/totalDoses. Normalize for display. */
+function normalizeMedicationAdherence(record: { medicationAdherence?: any } | null | undefined) {
+  const ma = record?.medicationAdherence;
+  if (!ma) return { schedule: [], adherencePercentage: 0, totalDoses: 0, takenDoses: 0, missedDoses: 0 };
+  const schedule = Array.isArray(ma.schedule) ? ma.schedule : [];
+  const takenDoses = schedule.filter((s: any) => s?.status === 'taken').length;
+  const missedDoses = schedule.filter((s: any) => s?.status === 'missed').length;
+  const totalDoses = schedule.length;
+  const adherencePercentage =
+    totalDoses > 0 ? Math.round((takenDoses / totalDoses) * 100) : (ma.overallProgress ?? ma.adherencePercentage ?? 0);
+  return {
+    schedule,
+    adherencePercentage: typeof adherencePercentage === 'number' ? adherencePercentage : ma.overallProgress ?? ma.adherencePercentage ?? 0,
+    totalDoses,
+    takenDoses,
+    missedDoses,
+  };
+}
+
 const PatientCompliance = () => {
   const user = useSelector((state: RootState) => state.auth.user);
   const queryClient = useQueryClient();
   const [tabValue, setTabValue] = useState(0);
   const [medicationDialogOpen, setMedicationDialogOpen] = useState(false);
   const [selectedDose, setSelectedDose] = useState<{ date: string; time: string } | null>(null);
+  const [newDoseDate, setNewDoseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newDoseTime, setNewDoseTime] = useState('08:00');
+  const [selectedMedicationRecordId, setSelectedMedicationRecordId] = useState<string | null>(null);
   const [doseStatus, setDoseStatus] = useState<'taken' | 'missed'>('taken');
   const [missedReason, setMissedReason] = useState('');
   const [lifestyleDialogOpen, setLifestyleDialogOpen] = useState(false);
   const [selectedLifestyleInstructionId, setSelectedLifestyleInstructionId] = useState<string | null>(null);
+  const [selectedLifestyleRecordId, setSelectedLifestyleRecordId] = useState<string | null>(null);
   const [lifestyleProgress, setLifestyleProgress] = useState<number>(0);
   const [lifestyleCompleted, setLifestyleCompleted] = useState<boolean>(true);
   const [lifestyleNotes, setLifestyleNotes] = useState<string>('');
@@ -102,21 +134,24 @@ const PatientCompliance = () => {
   });
 
   const updateMedicationMutation = useMutation({
-    mutationFn: async ({ instructionId, date, time, status, reason }: {
-      instructionId: string;
+    mutationFn: async ({ recordId, date, time, status, reason }: {
+      recordId: string;
       date: string;
       time: string;
       status: 'taken' | 'missed';
       reason?: string;
     }) => {
-      await complianceService.updateMedicationAdherence(instructionId, date, time, status, reason);
+      await complianceService.updateMedicationAdherence(recordId, date, time, status, reason);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patient-compliance', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['patient-compliance-metrics', user?.id] });
-      toast.success('Medication adherence updated');
+      toast.success('Medication dose logged');
       setMedicationDialogOpen(false);
       setSelectedDose(null);
+      setNewDoseDate(new Date().toISOString().slice(0, 10));
+      setNewDoseTime('08:00');
+      setSelectedMedicationRecordId(null);
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Failed to update adherence');
@@ -124,8 +159,8 @@ const PatientCompliance = () => {
   });
 
   const updateLifestyleMutation = useMutation({
-    mutationFn: async (payload: { instructionId: string; progress: number; completed: boolean; notes?: string }) => {
-      await complianceService.updateLifestyleCompliance(payload.instructionId, {
+    mutationFn: async (payload: { recordId: string; instructionId: string; progress: number; completed: boolean; notes?: string }) => {
+      await complianceService.updateLifestyleCompliance(payload.recordId, {
         date: new Date().toISOString().split('T')[0] || new Date().toISOString().substring(0, 10),
         completed: payload.completed,
         notes: payload.notes,
@@ -134,7 +169,7 @@ const PatientCompliance = () => {
       return payload;
     },
     onSuccess: (payload) => {
-      // Update compliance records cache immediately (mock backend doesn't persist yet)
+      // Update compliance records cache immediately
       queryClient.setQueryData(['patient-compliance', user?.id], (old: any) => {
         const prev = Array.isArray(old) ? old : [];
         return prev.map((r: any) => {
@@ -192,18 +227,18 @@ const PatientCompliance = () => {
   });
 
   const handleUpdateDose = () => {
-    if (!selectedDose) return;
-    // Find the instruction for this dose
-    const record = complianceRecords?.find((r) => r.medicationAdherence);
-    if (record) {
-      updateMedicationMutation.mutate({
-        instructionId: record.instructionId,
-        date: selectedDose.date,
-        time: selectedDose.time,
-        status: doseStatus,
-        reason: doseStatus === 'missed' ? missedReason : undefined,
-      });
-    }
+    if (!selectedMedicationRecordId) return;
+    const isNewDose = !selectedDose;
+    const date = isNewDose ? newDoseDate : selectedDose!.date;
+    const time = isNewDose ? newDoseTime : selectedDose!.time;
+    if (!date) return;
+    updateMedicationMutation.mutate({
+      recordId: selectedMedicationRecordId,
+      date,
+      time,
+      status: doseStatus,
+      reason: doseStatus === 'missed' ? missedReason : undefined,
+    });
   };
 
   const medicationInstructions = instructions?.filter((i) => i.type === 'medication' && i.complianceTrackingEnabled) || [];
@@ -223,6 +258,13 @@ const PatientCompliance = () => {
         title="Compliance Tracking"
         subtitle="Track your medication adherence and lifestyle compliance"
       />
+
+      <Alert severity="info" sx={{ mb: 3 }}>
+        Each card is a <strong>care instruction</strong> (what to do). The numbers and table come from its{' '}
+        <strong>compliance record</strong> (one per instruction). <strong>Medication:</strong> use &quot;Log dose&quot; to
+        add a dose, or the pencil icon to edit an existing row. <strong>Lifestyle:</strong> use &quot;Update
+        Progress&quot; to log a check-in.
+      </Alert>
 
       {/* Overall Compliance Score */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
@@ -365,7 +407,7 @@ const PatientCompliance = () => {
               <Grid container spacing={3}>
                 {medicationInstructions.map((instruction) => {
                   const record = complianceRecords?.find((r) => r.instructionId === instruction.id);
-                  const adherence = record?.medicationAdherence;
+                  const adherence = normalizeMedicationAdherence(record);
 
                   return (
                     <Grid item xs={12} key={instruction.id}>
@@ -382,7 +424,7 @@ const PatientCompliance = () => {
                             </Box>
                             <Box sx={{ textAlign: 'right' }}>
                               <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                                {adherence?.adherencePercentage || 0}%
+                                {adherence.adherencePercentage}%
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 Adherence Rate
@@ -392,29 +434,37 @@ const PatientCompliance = () => {
 
                           <LinearProgress
                             variant="determinate"
-                            value={adherence?.adherencePercentage || 0}
+                            value={adherence.adherencePercentage}
                             sx={{ height: 10, borderRadius: 5, mb: 2 }}
                           />
 
-                          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                            <Chip
-                              label={`${adherence?.takenDoses || 0} Taken`}
-                              color="success"
-                              size="small"
-                            />
-                            <Chip
-                              label={`${adherence?.missedDoses || 0} Missed`}
-                              color="error"
-                              size="small"
-                            />
-                            <Chip
-                              label={`${adherence?.totalDoses || 0} Total`}
-                              color="default"
-                              size="small"
-                            />
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1, flexWrap: 'wrap' }}>
+                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                              <Chip label={`${adherence.takenDoses} Taken`} color="success" size="small" />
+                              <Chip label={`${adherence.missedDoses} Missed`} color="error" size="small" />
+                              <Chip label={`${adherence.totalDoses} Total`} color="default" size="small" />
+                            </Box>
+                            {record?.id && (
+                              <Button
+                                variant="contained"
+                                size="small"
+                                startIcon={<AddIcon />}
+                                onClick={() => {
+                                  setSelectedMedicationRecordId(record.id);
+                                  setSelectedDose(null);
+                                  setNewDoseDate(new Date().toISOString().slice(0, 10));
+                                  setNewDoseTime('08:00');
+                                  setDoseStatus('taken');
+                                  setMissedReason('');
+                                  setMedicationDialogOpen(true);
+                                }}
+                              >
+                                Log dose
+                              </Button>
+                            )}
                           </Box>
 
-                          {adherence && adherence.schedule.length > 0 && (
+                          {adherence.schedule.length > 0 && (
                             <TableContainer component={Paper} variant="outlined">
                               <Table size="small">
                                 <TableHead>
@@ -427,9 +477,9 @@ const PatientCompliance = () => {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {adherence.schedule.map((dose, index) => (
+                                  {adherence.schedule.map((dose: { date?: string; time?: string; status?: string; reason?: string }, index: number) => (
                                     <TableRow key={index}>
-                                      <TableCell>{format(parseISO(dose.date), 'MMM dd, yyyy')}</TableCell>
+                                      <TableCell>{dose.date ? format(parseISO(dose.date as string), 'MMM dd, yyyy') : '-'}</TableCell>
                                       <TableCell>{dose.time}</TableCell>
                                       <TableCell>
                                         <Chip
@@ -444,7 +494,8 @@ const PatientCompliance = () => {
                                         <IconButton
                                           size="small"
                                           onClick={() => {
-                                            if (dose.date && dose.time) {
+                                            if (dose.date && dose.time && record?.id) {
+                                              setSelectedMedicationRecordId(record.id);
                                               setSelectedDose({ date: dose.date, time: dose.time });
                                               setDoseStatus(dose.status === 'taken' ? 'taken' : dose.status === 'missed' ? 'missed' : 'taken');
                                               setMissedReason(dose.reason || '');
@@ -539,6 +590,7 @@ const PatientCompliance = () => {
                                 return;
                               }
                               setSelectedLifestyleInstructionId(instruction.id);
+                              setSelectedLifestyleRecordId(record.id);
                               setLifestyleProgress(lifestyle?.progress || 0);
                               setLifestyleCompleted(true);
                               setLifestyleNotes('');
@@ -558,52 +610,85 @@ const PatientCompliance = () => {
         </CardContent>
       </Card>
 
-      {/* Update Medication Dose Dialog */}
-      <Dialog open={medicationDialogOpen} onClose={() => setMedicationDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Update Medication Dose</DialogTitle>
+      {/* Log / Update Medication Dose Dialog */}
+      <Dialog
+        open={medicationDialogOpen}
+        onClose={() => {
+          setMedicationDialogOpen(false);
+          setSelectedMedicationRecordId(null);
+          setSelectedDose(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{selectedDose ? 'Update Medication Dose' : 'Log Medication Dose'}</DialogTitle>
         <DialogContent>
-          {selectedDose && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            {selectedDose ? (
               <Typography variant="body2" color="text.secondary">
                 Date: {format(parseISO(selectedDose.date), 'MMM dd, yyyy')} at {selectedDose.time}
               </Typography>
+            ) : (
+              <>
+                <TextField
+                  label="Date"
+                  type="date"
+                  value={newDoseDate}
+                  onChange={(e) => setNewDoseDate(e.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  label="Time"
+                  type="time"
+                  value={newDoseTime}
+                  onChange={(e) => setNewDoseTime(e.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 300 }}
+                />
+              </>
+            )}
+            <FormControl fullWidth>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={doseStatus}
+                label="Status"
+                onChange={(e) => setDoseStatus(e.target.value as 'taken' | 'missed')}
+              >
+                <MenuItem value="taken">Taken</MenuItem>
+                <MenuItem value="missed">Missed</MenuItem>
+              </Select>
+            </FormControl>
+            {doseStatus === 'missed' && (
               <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
+                <InputLabel>Reason</InputLabel>
                 <Select
-                  value={doseStatus}
-                  label="Status"
-                  onChange={(e) => setDoseStatus(e.target.value as 'taken' | 'missed')}
+                  value={missedReason}
+                  label="Reason"
+                  onChange={(e) => setMissedReason(e.target.value)}
                 >
-                  <MenuItem value="taken">Taken</MenuItem>
-                  <MenuItem value="missed">Missed</MenuItem>
+                  <MenuItem value="Forgot">Forgot</MenuItem>
+                  <MenuItem value="Side effects">Side effects</MenuItem>
+                  <MenuItem value="Out of medication">Out of medication</MenuItem>
+                  <MenuItem value="Other">Other</MenuItem>
                 </Select>
               </FormControl>
-              {doseStatus === 'missed' && (
-                <FormControl fullWidth>
-                  <InputLabel>Reason</InputLabel>
-                  <Select
-                    value={missedReason}
-                    label="Reason"
-                    onChange={(e) => setMissedReason(e.target.value)}
-                  >
-                    <MenuItem value="Forgot">Forgot</MenuItem>
-                    <MenuItem value="Side effects">Side effects</MenuItem>
-                    <MenuItem value="Out of medication">Out of medication</MenuItem>
-                    <MenuItem value="Other">Other</MenuItem>
-                  </Select>
-                </FormControl>
-              )}
-            </Box>
-          )}
+            )}
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setMedicationDialogOpen(false)}>Cancel</Button>
           <Button
             onClick={handleUpdateDose}
             variant="contained"
-            disabled={updateMedicationMutation.isPending}
+            disabled={
+              !selectedMedicationRecordId ||
+              updateMedicationMutation.isPending ||
+              (!selectedDose && (!newDoseDate || !newDoseTime))
+            }
           >
-            {updateMedicationMutation.isPending ? <CircularProgress size={20} /> : 'Update'}
+            {updateMedicationMutation.isPending ? <CircularProgress size={20} /> : selectedDose ? 'Update' : 'Log dose'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -633,7 +718,7 @@ const PatientCompliance = () => {
               multiline
               rows={3}
             />
-            <Alert severity="info">This is a mock update and will update the UI immediately.</Alert>
+            <Alert severity="info">Saving will update your compliance record and refresh the metrics.</Alert>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -641,15 +726,16 @@ const PatientCompliance = () => {
           <Button
             variant="contained"
             onClick={() => {
-              if (!selectedLifestyleInstructionId) return;
+              if (!selectedLifestyleRecordId || !selectedLifestyleInstructionId) return;
               updateLifestyleMutation.mutate({
+                recordId: selectedLifestyleRecordId,
                 instructionId: selectedLifestyleInstructionId,
                 progress: lifestyleProgress,
                 completed: lifestyleCompleted,
                 notes: lifestyleNotes.trim() || undefined,
               });
             }}
-            disabled={!selectedLifestyleInstructionId || updateLifestyleMutation.isPending}
+            disabled={!selectedLifestyleRecordId || !selectedLifestyleInstructionId || updateLifestyleMutation.isPending}
           >
             {updateLifestyleMutation.isPending ? 'Saving...' : 'Save'}
           </Button>

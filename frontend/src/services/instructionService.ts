@@ -12,14 +12,17 @@ export const instructionService = {
    */
   getInstructions: async (_userId: string, role: string): Promise<CareInstruction[]> => {
     try {
+      let raw: unknown;
       if (role === 'patient') {
-        const response = await apiEndpoints.patient.getMyInstructions();
-        return response.data;
+        raw = await apiEndpoints.patient.getMyInstructions();
       } else if (role === 'provider') {
-        const response = await apiEndpoints.provider.getInstructions();
-        return response.data;
+        raw = await apiEndpoints.provider.getInstructions();
+      } else {
+        throw new Error('Invalid role');
       }
-      throw new Error('Invalid role');
+      // Backend may return { success, data: [...] } or the array directly
+      const list = Array.isArray(raw) ? raw : (Array.isArray((raw as any)?.data) ? (raw as any).data : []);
+      return list as CareInstruction[];
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch instructions');
     }

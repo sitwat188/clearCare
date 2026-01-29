@@ -32,7 +32,7 @@ const makeApiRequest = async <T>(
   // This keeps the implementation simple and avoids complex axios interceptor logic.
   if (USE_MOCK_DATA) {
     try {
-      const { handleMockRequest } = await import('./mockRequestHandler');
+      const { handleMockRequest } = await import('../services/mockRequestHandler.ts');
       const mockResponse = await handleMockRequest({ url, method, data } as any);
       if (mockResponse && typeof mockResponse === 'object' && 'success' in mockResponse) {
         return mockResponse as ApiResponse<T>;
@@ -104,6 +104,22 @@ export const authEndpoints = {
   getCurrentUser: async (): Promise<ApiResponse<User>> => {
     return makeApiRequest('get', '/auth/me');
   },
+
+  /**
+   * GET /api/v1/users/me/profile
+   * Get current user profile (shared across roles)
+   */
+  getMyProfile: async (): Promise<ApiResponse<User>> => {
+    return makeApiRequest('get', '/users/me/profile');
+  },
+
+  /**
+   * PUT /api/v1/users/me/profile
+   * Update current user profile (shared across roles)
+   */
+  updateMyProfile: async (updates: Partial<User>): Promise<ApiResponse<User>> => {
+    return makeApiRequest('put', '/users/me/profile', updates);
+  },
 };
 
 // ============================================================================
@@ -160,6 +176,28 @@ export const patientEndpoints = {
    */
   updateCompliance: async (recordId: string, updates: Partial<ComplianceRecord>): Promise<ApiResponse<ComplianceRecord>> => {
     return makeApiRequest('put', `/patients/me/compliance/${recordId}`, updates);
+  },
+
+  /**
+   * PUT /api/v1/compliance/:recordId/medication
+   * Update medication adherence (dose log)
+   */
+  updateMedicationAdherence: async (
+    recordId: string,
+    body: { date: string; time?: string; status?: 'taken' | 'missed' | 'pending'; reason?: string; progress?: number }
+  ): Promise<ApiResponse<ComplianceRecord>> => {
+    return makeApiRequest('put', `/compliance/${recordId}/medication`, body);
+  },
+
+  /**
+   * PUT /api/v1/compliance/:recordId/lifestyle
+   * Update lifestyle compliance (check-in)
+   */
+  updateLifestyleCompliance: async (
+    recordId: string,
+    body: { date: string; completed?: boolean; notes?: string; progress?: number; metrics?: Record<string, number> }
+  ): Promise<ApiResponse<ComplianceRecord>> => {
+    return makeApiRequest('put', `/compliance/${recordId}/lifestyle`, body);
   },
 
   /**

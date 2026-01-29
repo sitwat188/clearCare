@@ -672,7 +672,9 @@ export const mockApi = {
   login: async (email: string, password: string): Promise<{ user: User; token: string }> => {
     await delay(500);
     const user = mockUsers.find(u => u.email === email);
-    if (!user || password !== 'password123') {
+    // Accept both mock default and seed password so same creds work with mock or real backend
+    const validPassword = password === 'password123' || password === 'Password123!';
+    if (!user || !validPassword) {
       throw new Error('Invalid credentials');
     }
     return {
