@@ -1,0 +1,12 @@
+# Use .renderignore so Render does NOT use .gitignore (which excludes dist/)
+# Exclude only what we don't need at runtime:
+.git
+.env
+.env.*
+!.env.example
+*.md
+coverage
+.vscode
+.idea
+*.log
+node_modules/.cache
