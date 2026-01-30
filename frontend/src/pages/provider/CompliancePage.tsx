@@ -60,7 +60,7 @@ const ProviderCompliance = () => {
   // Get compliance data for each patient
   const patientComplianceData = useMemo(() => {
     if (!patients) return [];
-
+    
     return patients.map((patient) => {
       const patientInstructions = instructions?.filter((inst) => inst.patientId === patient.id) || [];
       const acknowledgedCount = patientInstructions.filter((inst) => inst.acknowledgedDate).length;

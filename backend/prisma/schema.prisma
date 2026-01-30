@@ -1,0 +1,315 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CORE MODELS WITH HIPAA COMPLIANCE FEATURES
+// ============================================================================
+
+// User model with soft delete, timestamps, and 2FA support
+model User {
+  id           String @id @default(uuid())
+  email        String @unique
+  passwordHash String @map("password_hash")
+  firstName    String @map("first_name")
+  lastName     String @map("last_name")
+  role         String // 'patient' | 'provider' | 'administrator'
+
+  // 2FA fields
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String? @map("two_factor_secret") // Encrypted TOTP secret
+  backupCodes      String? // JSON array of encrypted backup codes
+
+  // Soft delete
+  deletedAt DateTime? @map("deleted_at")
+
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  lastLoginAt DateTime? @map("last_login_at")
+
+  // Relations
+  auditLogs   AuditLog[]
+  userHistory UserHistory[]
+  patient     Patient?
+
+  @@index([email])
+  @@index([deletedAt]) // For efficient soft delete queries
+  @@map("users")
+}
+
+// History table for User changes (audit trail)
+model UserHistory {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  action    String // 'create', 'update', 'delete', 'login', 'logout', 'password_change', '2fa_enabled', etc.
+  changedBy String?  @map("changed_by") // User ID who made the change
+  oldValues Json?    @map("old_values") // Encrypted previous values
+  newValues Json?    @map("new_values") // Encrypted new values
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("user_history")
+}
+
+// Audit Log table for all PHI access and actions
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  userEmail    String   @map("user_email")
+  userName     String   @map("user_name")
+  action       String // 'read', 'write', 'delete', 'export', 'login', 'logout', etc.
+  resourceType String   @map("resource_type") // 'patient', 'instruction', 'compliance', 'user', etc.
+  resourceId   String?  @map("resource_id")
+  resourceName String?  @map("resource_name")
+  ipAddress    String   @map("ip_address")
+  userAgent    String   @map("user_agent")
+  status       String // 'success', 'failure', 'denied'
+  details      Json? // Additional encrypted context
+  timestamp    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([resourceType, resourceId])
+  @@index([timestamp])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// Patient model with encrypted PHI fields
+model Patient {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
+  // PHI fields (will be encrypted at application level)
+  dateOfBirth                  String  @map("date_of_birth") // Encrypted
+  medicalRecordNumber          String  @unique @map("medical_record_number") // Encrypted
+  phone                        String? // Encrypted
+  addressStreet                String? @map("address_street") // Encrypted
+  addressCity                  String? @map("address_city") // Encrypted
+  addressState                 String? @map("address_state") // Encrypted
+  addressZipCode               String? @map("address_zip_code") // Encrypted
+  emergencyContactName         String? @map("emergency_contact_name") // Encrypted
+  emergencyContactRelationship String? @map("emergency_contact_relationship") // Encrypted
+  emergencyContactPhone        String? @map("emergency_contact_phone") // Encrypted
+
+  assignedProviderIds String[] @map("assigned_provider_ids") // Array of provider user IDs
+
+  // Soft delete
+  deletedAt DateTime? @map("deleted_at")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user               User     @relation(fields: [userId], references: [id])
+  patientHistory     PatientHistory[]
+  instructions       CareInstruction[]
+  complianceRecords  ComplianceRecord[]
+
+  @@index([userId])
+  @@index([deletedAt])
+  @@map("patients")
+}
+
+// History table for Patient changes
+model PatientHistory {
+  id        String   @id @default(uuid())
+  patientId String   @map("patient_id")
+  action    String // 'create', 'update', 'delete', 'view', 'export'
+  changedBy String   @map("changed_by") // User ID who accessed/changed
+  oldValues Json?    @map("old_values") // Encrypted previous PHI values
+  newValues Json?    @map("new_values") // Encrypted new PHI values
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([createdAt])
+  @@index([changedBy])
+  @@map("patient_history")
+}
+
+// Care Instruction model
+model CareInstruction {
+  id           String @id @default(uuid())
+  providerId   String @map("provider_id")
+  providerName String @map("provider_name")
+  patientId    String @map("patient_id")
+  patientName  String @map("patient_name")
+  title        String
+  type         String // 'medication' | 'lifestyle' | 'follow-up' | 'warning'
+  status       String // 'draft' | 'active' | 'acknowledged' | 'completed' | 'expired' | 'cancelled'
+  priority     String // 'low' | 'medium' | 'high' | 'urgent'
+  content      String // Encrypted if contains PHI
+
+  // Medication details (JSON, encrypted if contains PHI)
+  medicationDetails Json? @map("medication_details")
+  lifestyleDetails  Json? @map("lifestyle_details")
+  followUpDetails   Json? @map("follow_up_details")
+  warningDetails    Json? @map("warning_details")
+
+  assignedDate           DateTime  @map("assigned_date")
+  acknowledgmentDeadline DateTime? @map("acknowledgment_deadline")
+  acknowledgedDate       DateTime? @map("acknowledged_date")
+  expirationDate         DateTime? @map("expiration_date")
+
+  complianceTrackingEnabled Boolean @default(false) @map("compliance_tracking_enabled")
+  lifestyleTrackingEnabled  Boolean @default(false) @map("lifestyle_tracking_enabled")
+  version                   Int     @default(1)
+
+  // Soft delete
+  deletedAt DateTime? @map("deleted_at")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  patient            Patient              @relation(fields: [patientId], references: [id])
+  acknowledgments    Acknowledgment[]
+  instructionHistory InstructionHistory[]
+  complianceRecords  ComplianceRecord[]
+
+  @@index([providerId])
+  @@index([patientId])
+  @@index([deletedAt])
+  @@index([status])
+  @@map("care_instructions")
+}
+
+// History table for Instruction changes
+model InstructionHistory {
+  id            String   @id @default(uuid())
+  instructionId String   @map("instruction_id")
+  action        String // 'create', 'update', 'delete', 'acknowledge', 'view'
+  changedBy     String   @map("changed_by")
+  oldValues     Json?    @map("old_values")
+  newValues     Json?    @map("new_values")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  instruction CareInstruction @relation(fields: [instructionId], references: [id])
+
+  @@index([instructionId])
+  @@index([createdAt])
+  @@map("instruction_history")
+}
+
+// Acknowledgment model
+model Acknowledgment {
+  id                 String   @id @default(uuid())
+  instructionId      String   @map("instruction_id")
+  patientId          String   @map("patient_id")
+  acknowledgmentType String   @map("acknowledgment_type") // 'receipt' | 'understanding' | 'commitment'
+  ipAddress          String   @map("ip_address")
+  userAgent          String   @map("user_agent")
+  timestamp          DateTime @default(now())
+
+  instruction CareInstruction @relation(fields: [instructionId], references: [id])
+
+  @@index([instructionId])
+  @@index([patientId])
+  @@map("acknowledgments")
+}
+
+// Compliance Record model
+model ComplianceRecord {
+  id                String @id @default(uuid())
+  instructionId     String @map("instruction_id")
+  patientId         String @map("patient_id")
+  type              String // 'medication' | 'lifestyle' | 'appointment'
+  status            String // 'compliant' | 'non-compliant' | 'partial' | 'not-started'
+  overallPercentage Float  @map("overall_percentage")
+
+  // Compliance data (JSON, encrypted if contains PHI)
+  medicationAdherence   Json? @map("medication_adherence")
+  lifestyleCompliance   Json? @map("lifestyle_compliance")
+  appointmentCompliance Json? @map("appointment_compliance")
+
+  lastUpdatedBy String @map("last_updated_by")
+
+  // Timestamps
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  instruction CareInstruction @relation(fields: [instructionId], references: [id])
+  patient     Patient         @relation(fields: [patientId], references: [id])
+
+  @@index([instructionId])
+  @@index([patientId])
+  @@map("compliance_records")
+}
+
+// Notification model
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  type        String // 'instruction_assigned', 'acknowledgment_required', etc.
+  title       String
+  message     String
+  priority    String // 'low' | 'medium' | 'high' | 'urgent'
+  read        Boolean  @default(false)
+  actionUrl   String?  @map("action_url")
+  actionLabel String?  @map("action_label")
+  metadata    Json? // Additional context
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// Password reset token (for forgot/reset password flow)
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// Instruction template (provider-created reusable templates)
+model InstructionTemplate {
+  id          String   @id @default(uuid())
+  providerId  String   @map("provider_id")
+  name        String
+  type        String // 'medication' | 'lifestyle' | 'follow-up' | 'warning'
+  description String?
+  content     String
+  details     Json? // type-specific: medicationDetails, lifestyleDetails, etc.
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([providerId])
+  @@map("instruction_templates")
+}

@@ -309,6 +309,20 @@ export const providerEndpoints = {
   createTemplate: async (template: any): Promise<ApiResponse<any>> => {
     return makeApiRequest('post', '/providers/templates', template);
   },
+
+  /**
+   * PUT /api/v1/providers/templates/:id
+   */
+  updateTemplate: async (id: string, template: any): Promise<ApiResponse<any>> => {
+    return makeApiRequest('put', `/providers/templates/${id}`, template);
+  },
+
+  /**
+   * DELETE /api/v1/providers/templates/:id
+   */
+  deleteTemplate: async (id: string): Promise<ApiResponse<void>> => {
+    return makeApiRequest('delete', `/providers/templates/${id}`);
+  },
 };
 
 // ============================================================================
