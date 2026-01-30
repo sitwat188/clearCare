@@ -52,7 +52,9 @@ export const instructionService = {
   createInstruction: async (instruction: Partial<CareInstruction>): Promise<CareInstruction> => {
     try {
       const response = await apiEndpoints.provider.createInstruction(instruction);
-      return response.data;
+      const data = (response as any)?.data ?? response;
+      if (!data || typeof data !== 'object') throw new Error('Invalid create instruction response');
+      return data as CareInstruction;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to create instruction');
     }

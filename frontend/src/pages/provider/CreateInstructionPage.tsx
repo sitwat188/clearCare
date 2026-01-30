@@ -3,7 +3,7 @@
  * Form to create new care instructions
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -43,11 +43,16 @@ const CreateInstruction = () => {
   const user = useSelector((state: RootState) => state.auth.user);
   const queryClient = useQueryClient();
 
-  // Check if template data was passed via navigation state
-  const templateData = (location.state as { template?: { title: string; type: InstructionType; content: string } })?.template;
+  // Check if template or preselected patient was passed via navigation state
+  const locationState = location.state as {
+    template?: { title: string; type: InstructionType; content: string };
+    preselectedPatientId?: string;
+  };
+  const templateData = locationState?.template;
+  const preselectedPatientId = locationState?.preselectedPatientId;
 
   const [formData, setFormData] = useState({
-    patientId: '',
+    patientId: preselectedPatientId || '',
     title: templateData?.title || '',
     type: (templateData?.type || 'medication') as InstructionType,
     priority: 'medium' as InstructionPriority,
@@ -67,6 +72,12 @@ const CreateInstruction = () => {
     enabled: !!user?.id,
   });
 
+  useEffect(() => {
+    if (preselectedPatientId && formData.patientId !== preselectedPatientId) {
+      setFormData((prev) => ({ ...prev, patientId: preselectedPatientId }));
+    }
+  }, [preselectedPatientId]);
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const selectedPatient = patients?.find((p) => p.id === formData.patientId);
@@ -74,22 +85,16 @@ const CreateInstruction = () => {
       if (!selectedPatient) throw new Error('Please select a patient');
 
       const now = new Date().toISOString();
+      // Backend CreateInstructionDto: only these fields (forbidNonWhitelisted)
       const instructionPayload: any = {
-        providerId: user.id,
-        providerName: `${user.firstName} ${user.lastName}`,
         patientId: selectedPatient.id,
-        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
         title: formData.title,
         type: formData.type,
-        status: 'active',
         priority: formData.priority,
         content: formData.content,
         assignedDate: now,
         complianceTrackingEnabled: formData.complianceTrackingEnabled,
         lifestyleTrackingEnabled: formData.type === 'lifestyle',
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
         medicationDetails:
           formData.type === 'medication'
             ? {

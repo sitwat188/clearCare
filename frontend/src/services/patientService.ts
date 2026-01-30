@@ -1,22 +1,26 @@
 /**
  * Patient service
- * Handles patient data operations with PHI encryption
+ * Handles patient data operations. With real API, backend returns plain data; with mock, PHI may be "decrypted" for display.
  */
 
 import { apiEndpoints } from './apiEndpoints';
 import { getDecryptedPatient } from './mockData';
 import type { Patient } from '../types/patient.types';
 
+const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+
 export const patientService = {
   /**
    * Get patients assigned to provider
-   * Returns decrypted patient data for display
    */
   getPatients: async (_providerId: string): Promise<Patient[]> => {
     try {
       const response = await apiEndpoints.provider.getPatients();
-      // Decrypt PHI fields for display
-      return response.data.map(patient => getDecryptedPatient(patient));
+      const data = Array.isArray(response?.data) ? response.data : [];
+      if (USE_MOCK_DATA) {
+        return data.map((patient: Patient) => getDecryptedPatient(patient));
+      }
+      return data as Patient[];
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch patients');
     }
@@ -24,13 +28,18 @@ export const patientService = {
 
   /**
    * Get patient by ID
-   * Returns decrypted patient data
    */
   getPatient: async (id: string): Promise<Patient> => {
     try {
       const response = await apiEndpoints.provider.getPatient(id);
-      // Decrypt PHI fields for display
-      return getDecryptedPatient(response.data);
+      const data = response?.data;
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid patient response');
+      }
+      if (USE_MOCK_DATA) {
+        return getDecryptedPatient(data as Patient);
+      }
+      return data as Patient;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch patient');
     }

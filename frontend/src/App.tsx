@@ -24,6 +24,7 @@ import SettingsPage from './pages/shared/SettingsPage';
 // Provider pages
 import ProviderDashboard from './pages/provider/DashboardPage';
 import ProviderPatients from './pages/provider/PatientsPage';
+import ProviderPatientDetail from './pages/provider/PatientDetailPage';
 import CreateInstruction from './pages/provider/CreateInstructionPage';
 import ProviderInstructions from './pages/provider/InstructionsPage';
 import ProviderCompliance from './pages/provider/CompliancePage';
@@ -82,6 +83,7 @@ function App() {
                     <>
                       <Route path="/provider/dashboard" element={<ProviderDashboard />} />
                       <Route path="/provider/patients" element={<ProviderPatients />} />
+                      <Route path="/provider/patients/:id" element={<ProviderPatientDetail />} />
                       <Route path="/provider/instructions/create" element={<CreateInstruction />} />
                       <Route path="/provider/instructions" element={<ProviderInstructions />} />
                       <Route path="/provider/instructions/:id" element={<ProviderInstructions />} />
