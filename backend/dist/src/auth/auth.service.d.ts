@@ -49,6 +49,7 @@ export declare class AuthService {
     forgotPassword(dto: ForgotPasswordDto): Promise<{
         message: string;
     }>;
+    private sendPasswordResetEmail;
     resetPassword(dto: ResetPasswordDto): Promise<{
         message: string;
     }>;

@@ -47,6 +47,7 @@ const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const bcrypt = __importStar(require("bcrypt"));
 const crypto_1 = require("crypto");
+const nodemailer = __importStar(require("nodemailer"));
 const prisma_service_1 = require("../prisma/prisma.service");
 const RESET_TOKEN_EXPIRY_HOURS = 1;
 const SALT_ROUNDS = 12;
@@ -218,17 +219,57 @@ let AuthService = class AuthService {
             where: { email, deletedAt: null },
         });
         if (!user) {
-            return { message: 'If an account exists for this email, you will receive a password reset link.' };
+            throw new common_1.NotFoundException('No account found with this email address.');
         }
         const token = (0, crypto_1.randomBytes)(32).toString('hex');
         const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
         await this.prisma.passwordResetToken.create({
             data: { email, token, expiresAt },
         });
-        if (process.env.NODE_ENV !== 'production') {
-            console.log(`[Password reset] Token for ${email}: ${token} (expires ${expiresAt.toISOString()})`);
+        const resetEmailTo = process.env.PASSWORD_RESET_REDIRECT_EMAIL || '';
+        const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+        await this.sendPasswordResetEmail(resetEmailTo, resetLink, expiresAt, email);
+        return {
+            message: 'A password reset link has been sent. Please check your inbox.',
+        };
+    }
+    async sendPasswordResetEmail(to, resetLink, expiresAt, requestedForEmail) {
+        const host = process.env.SMTP_HOST?.trim();
+        const port = process.env.SMTP_PORT?.trim();
+        const user = process.env.SMTP_USER?.trim();
+        const pass = process.env.SMTP_PASS?.trim();
+        if (host && port && user && pass) {
+            const cleanPass = pass.replace(/^["']|["']$/g, '');
+            const cleanUser = user.replace(/^["']|["']$/g, '');
+            console.log(`[Password reset] Attempting to send email to ${to} via ${host}:${port} (SMTP_USER=${cleanUser}, pass length=${cleanPass.length})`);
+            try {
+                const transporter = nodemailer.createTransport({
+                    host,
+                    port: parseInt(port, 10),
+                    secure: process.env.SMTP_SECURE?.trim() === 'true',
+                    auth: { user: cleanUser, pass: cleanPass },
+                });
+                const from = process.env.MAIL_FROM?.trim() || `ClearCare <${cleanUser}>`;
+                await transporter.sendMail({
+                    from,
+                    to,
+                    subject: 'Reset your password - ClearCare',
+                    text: `A password reset was requested for ${requestedForEmail}. Use this link to reset your password (expires ${expiresAt.toISOString()}): ${resetLink}`,
+                    html: `<p>A password reset was requested for <strong>${requestedForEmail}</strong>.</p><p>Use this link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you did not request this, you can ignore this email.</p>`,
+                });
+                console.log(`[Password reset] Email sent successfully to ${to}`);
+            }
+            catch (err) {
+                const msg = err?.message ?? String(err);
+                console.error('[Password reset] Failed to send email:', msg);
+                if (err?.response)
+                    console.error('[Password reset] SMTP response:', err.response);
+                console.log(`[Password reset] Fallback link for ${requestedForEmail} → ${to}: ${resetLink} (expires ${expiresAt.toISOString()})`);
+            }
         }
-        return { message: 'If an account exists for this email, you will receive a password reset link.' };
+        else {
+            console.log(`[Password reset] SMTP not configured (need SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS). Link for ${requestedForEmail} → ${to}: ${resetLink} (expires ${expiresAt.toISOString()})`);
+        }
     }
     async resetPassword(dto) {
         const record = await this.prisma.passwordResetToken.findFirst({
@@ -258,7 +299,9 @@ let AuthService = class AuthService {
                 data: { usedAt: new Date() },
             }),
         ]);
-        return { message: 'Password has been reset successfully. You can now log in.' };
+        return {
+            message: 'Password has been reset successfully. You can now log in.',
+        };
     }
     async generateTokens(userId, email, role) {
         const payload = {
