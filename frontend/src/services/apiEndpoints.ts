@@ -98,6 +98,46 @@ export const authEndpoints = {
   },
 
   /**
+   * POST /api/v1/auth/verify-2fa
+   * Complete login with 2FA code (TOTP or backup code)
+   */
+  verifyTwoFactor: async (
+    twoFactorToken: string,
+    code: string,
+  ): Promise<ApiResponse<{ user: User; accessToken: string; refreshToken: string }>> => {
+    return makeApiRequest('post', '/auth/verify-2fa', { twoFactorToken, code });
+  },
+
+  /**
+   * POST /api/v1/auth/2fa/setup
+   * Start 2FA setup (returns QR code and setupToken)
+   */
+  setupTwoFactor: async (): Promise<
+    ApiResponse<{ secret: string; qrCodeDataUrl: string; setupToken: string; message: string }>
+  > => {
+    return makeApiRequest('post', '/auth/2fa/setup');
+  },
+
+  /**
+   * POST /api/v1/auth/2fa/verify-setup
+   * Complete 2FA setup with 6-digit code from authenticator app
+   */
+  verifySetupTwoFactor: async (
+    setupToken: string,
+    code: string,
+  ): Promise<ApiResponse<{ backupCodes: string[]; message: string }>> => {
+    return makeApiRequest('post', '/auth/2fa/verify-setup', { setupToken, code });
+  },
+
+  /**
+   * POST /api/v1/auth/2fa/disable
+   * Disable 2FA (requires current password)
+   */
+  disableTwoFactor: async (password: string): Promise<ApiResponse<{ message: string }>> => {
+    return makeApiRequest('post', '/auth/2fa/disable', { password });
+  },
+
+  /**
    * GET /api/v1/auth/me
    * Get current user
    */

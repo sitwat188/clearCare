@@ -3,7 +3,7 @@
  * User settings and preferences - shared across all roles
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import {
   Box,
@@ -20,6 +20,11 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
@@ -31,6 +36,12 @@ import {
 import { toast } from 'react-toastify';
 import type { RootState } from '../../store/store';
 import PageHeader from '../../components/common/PageHeader';
+import { apiEndpoints } from '../../services/apiEndpoints';
+import {
+  setupTwoFactor,
+  verifySetupTwoFactor,
+  disableTwoFactor,
+} from '../../services/authService';
 
 interface SettingsState {
   emailNotifications: boolean;
@@ -57,8 +68,36 @@ const SettingsPage = () => {
     sessionTimeout: 30,
     twoFactorAuth: false,
   });
-
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean>(false);
+  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [disableDialogOpen, setDisableDialogOpen] = useState(false);
+  const [setupStep, setSetupStep] = useState<'qr' | 'verify'>('qr');
+  const [setupData, setSetupData] = useState<{
+    qrCodeDataUrl: string;
+    setupToken: string;
+  } | null>(null);
+  const [setupCode, setSetupCode] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const res = await apiEndpoints.auth.getMyProfile();
+        const profile = res?.data ?? res;
+        if (profile && typeof profile === 'object' && 'twoFactorEnabled' in profile) {
+          setTwoFactorEnabled(Boolean(profile.twoFactorEnabled));
+          setSettings((prev) => ({ ...prev, twoFactorAuth: Boolean(profile.twoFactorEnabled) }));
+        }
+      } catch {
+        // use Redux user or default
+        setTwoFactorEnabled(Boolean(user?.twoFactorEnabled));
+      }
+    };
+    loadProfile();
+  }, [user?.twoFactorEnabled]);
 
   const handleToggle = (key: keyof SettingsState) => {
     setSettings((prev) => ({
@@ -76,10 +115,71 @@ const SettingsPage = () => {
 
   const handleSave = async () => {
     setIsSaving(true);
-    // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1000));
     setIsSaving(false);
     toast.success('Settings saved successfully');
+  };
+
+  const handleEnable2FAClick = async () => {
+    setSetupDialogOpen(true);
+    setSetupStep('qr');
+    setSetupData(null);
+    setSetupCode('');
+    setBackupCodes(null);
+    setTwoFactorLoading(true);
+    try {
+      const data = await setupTwoFactor();
+      setSetupData({
+        qrCodeDataUrl: data.qrCodeDataUrl,
+        setupToken: data.setupToken,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start 2FA setup');
+      setSetupDialogOpen(false);
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const handleVerifySetup = async () => {
+    if (!setupData?.setupToken || setupCode.trim().length < 6) return;
+    setTwoFactorLoading(true);
+    try {
+      const result = await verifySetupTwoFactor(setupData.setupToken, setupCode.trim());
+      setBackupCodes(result.backupCodes);
+      setTwoFactorEnabled(true);
+      setSettings((prev) => ({ ...prev, twoFactorAuth: true }));
+      toast.success('2FA enabled successfully');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Invalid code');
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!disablePassword.trim()) return;
+    setTwoFactorLoading(true);
+    try {
+      await disableTwoFactor(disablePassword);
+      setTwoFactorEnabled(false);
+      setSettings((prev) => ({ ...prev, twoFactorAuth: false }));
+      setDisableDialogOpen(false);
+      setDisablePassword('');
+      toast.success('2FA disabled');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to disable 2FA');
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const closeSetupDialog = () => {
+    setSetupDialogOpen(false);
+    setSetupData(null);
+    setSetupCode('');
+    setBackupCodes(null);
+    setSetupStep('qr');
   };
 
   return (
@@ -191,17 +291,44 @@ const SettingsPage = () => {
                 </Typography>
               </Box>
               <List>
-                <ListItem>
+                <ListItem
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <ListItemText
                     primary="Two-Factor Authentication"
-                    secondary="Add an extra layer of security to your account"
+                    secondary={
+                      twoFactorEnabled
+                        ? 'Enabled — use authenticator app or backup codes at login'
+                        : 'Add an extra layer of security to your account'
+                    }
+                    sx={{ flex: '1 1 0', minWidth: 0 }}
                   />
-                  <ListItemSecondaryAction>
-                    <Switch
-                      checked={settings.twoFactorAuth}
-                      onChange={() => handleToggle('twoFactorAuth')}
-                    />
-                  </ListItemSecondaryAction>
+                  <Box sx={{ flexShrink: 0 }}>
+                    {twoFactorEnabled ? (
+                      <Button
+                        variant="outlined"
+                        color="secondary"
+                        size="small"
+                        onClick={() => setDisableDialogOpen(true)}
+                      >
+                        Disable 2FA
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={handleEnable2FAClick}
+                        disabled={twoFactorLoading}
+                      >
+                        Enable 2FA
+                      </Button>
+                    )}
+                  </Box>
                 </ListItem>
                 <Divider />
                 <ListItem>
@@ -310,6 +437,100 @@ const SettingsPage = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* 2FA Setup Dialog */}
+      <Dialog open={setupDialogOpen} onClose={closeSetupDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {backupCodes ? 'Save your backup codes' : setupStep === 'qr' ? 'Set up 2FA' : 'Verify code'}
+        </DialogTitle>
+        <DialogContent>
+          {twoFactorLoading && !setupData && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress />
+            </Box>
+          )}
+          {backupCodes && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              Save these backup codes in a secure place. Each can be used once if you lose access to your authenticator app.
+            </Alert>
+          )}
+          {backupCodes && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+              {backupCodes.map((code, i) => (
+                <Typography key={i} variant="body2" fontFamily="monospace" sx={{ p: 0.5, bgcolor: 'grey.100' }}>
+                  {code}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          {setupData && !backupCodes && setupStep === 'qr' && (
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code below.
+              </Typography>
+              <Box component="img" src={setupData.qrCodeDataUrl} alt="QR Code" sx={{ maxWidth: 256, mx: 'auto' }} />
+            </Box>
+          )}
+          {setupData && !backupCodes && (
+            <TextField
+              fullWidth
+              label="6-digit code"
+              placeholder="000000"
+              value={setupCode}
+              onChange={(e) => setSetupCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputProps={{ maxLength: 6 }}
+              sx={{ mt: 2 }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          {backupCodes ? (
+            <Button onClick={closeSetupDialog} color="primary">
+              Done
+            </Button>
+          ) : setupData ? (
+            <>
+              <Button onClick={closeSetupDialog}>Cancel</Button>
+              <Button
+                variant="contained"
+                onClick={handleVerifySetup}
+                disabled={setupCode.length !== 6 || twoFactorLoading}
+              >
+                {twoFactorLoading ? <CircularProgress size={24} /> : 'Verify & enable'}
+              </Button>
+            </>
+          ) : null}
+        </DialogActions>
+      </Dialog>
+
+      {/* Disable 2FA Dialog */}
+      <Dialog open={disableDialogOpen} onClose={() => setDisableDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Disable Two-Factor Authentication</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Enter your current password to disable 2FA.
+          </Typography>
+          <TextField
+            fullWidth
+            type="password"
+            label="Password"
+            value={disablePassword}
+            onChange={(e) => setDisablePassword(e.target.value)}
+            autoComplete="current-password"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDisableDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleDisable2FA}
+            disabled={!disablePassword.trim() || twoFactorLoading}
+          >
+            {twoFactorLoading ? <CircularProgress size={24} /> : 'Disable 2FA'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

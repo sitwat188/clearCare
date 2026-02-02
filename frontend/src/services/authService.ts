@@ -5,7 +5,7 @@
 
 import { setAccessToken } from './api';
 import { apiEndpoints } from './apiEndpoints';
-import type { User, LoginCredentials, OAuthTokenResponse } from '../types/auth.types';
+import type { User, LoginCredentials, LoginResult, OAuthTokenResponse } from '../types/auth.types';
 
 /**
  * Simulates OAuth PKCE flow
@@ -34,7 +34,7 @@ const generateRandomString = (length: number): string => {
 /**
  * Login with credentials
  */
-export const login = async (credentials: LoginCredentials): Promise<{ user: User; token: string }> => {
+export const login = async (credentials: LoginCredentials): Promise<LoginResult> => {
   try {
     console.log('[AuthService] Attempting login with:', credentials.email);
     
@@ -54,25 +54,120 @@ export const login = async (credentials: LoginCredentials): Promise<{ user: User
     // Real backend - call directly with axios
     const { api } = await import('./api');
     const response = await api.post('/auth/login', credentials);
-    
-    // Backend may return { success, data: { user, accessToken, refreshToken } } or raw { user, accessToken, refreshToken }
+
+    // Backend may return { success, data } or raw; data may be login result or 2FA required
     const payload = response.data?.data ?? response.data;
+    const { requiresTwoFactor, twoFactorToken, message } = payload ?? {};
+
+    if (requiresTwoFactor && twoFactorToken) {
+      return { requiresTwoFactor: true, twoFactorToken, message };
+    }
+
     const { user, accessToken, refreshToken } = payload ?? {};
-    
     if (accessToken) {
       setAccessToken(accessToken);
-      // Store refresh token if needed
       if (refreshToken) {
         localStorage.setItem('refreshToken', refreshToken);
       }
       return { user, token: accessToken };
     }
-    
+
     throw new Error('Login failed - no access token received');
   } catch (error: any) {
     console.error('[AuthService] Login error:', error);
     const errorMessage = error.response?.data?.message || error.message || 'Login failed';
     throw new Error(errorMessage);
+  }
+};
+
+/**
+ * Complete login with 2FA code (TOTP from authenticator app or backup code)
+ */
+export const verifyTwoFactor = async (
+  twoFactorToken: string,
+  code: string,
+): Promise<{ user: User; token: string }> => {
+  try {
+    const { api } = await import('./api');
+    const response = await api.post('/auth/verify-2fa', { twoFactorToken, code });
+    const payload = response.data?.data ?? response.data;
+    const { user, accessToken, refreshToken } = payload ?? {};
+    if (!accessToken || !user) {
+      throw new Error('Invalid response from 2FA verification');
+    }
+    setAccessToken(accessToken);
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
+    return { user, token: accessToken };
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      (error instanceof Error ? error.message : '2FA verification failed');
+    throw new Error(message);
+  }
+};
+
+/**
+ * Start 2FA setup; returns QR code data URL and setupToken for verifySetupTwoFactor
+ */
+export const setupTwoFactor = async (): Promise<{
+  secret: string;
+  qrCodeDataUrl: string;
+  setupToken: string;
+  message: string;
+}> => {
+  try {
+    const { api } = await import('./api');
+    const response = await api.post('/auth/2fa/setup');
+    const payload = response.data?.data ?? response.data;
+    if (!payload?.setupToken || !payload?.qrCodeDataUrl) {
+      throw new Error('Invalid 2FA setup response');
+    }
+    return payload;
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      (error instanceof Error ? error.message : 'Failed to start 2FA setup');
+    throw new Error(message);
+  }
+};
+
+/**
+ * Complete 2FA setup with 6-digit code from authenticator app; returns backup codes
+ */
+export const verifySetupTwoFactor = async (
+  setupToken: string,
+  code: string,
+): Promise<{ backupCodes: string[]; message: string }> => {
+  try {
+    const { api } = await import('./api');
+    const response = await api.post('/auth/2fa/verify-setup', { setupToken, code });
+    const payload = response.data?.data ?? response.data;
+    if (!payload?.backupCodes) {
+      throw new Error('Invalid 2FA verify response');
+    }
+    return payload;
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      (error instanceof Error ? error.message : 'Invalid code. Please try again.');
+    throw new Error(message);
+  }
+};
+
+/**
+ * Disable 2FA (requires current password)
+ */
+export const disableTwoFactor = async (password: string): Promise<void> => {
+  try {
+    const { api } = await import('./api');
+    await api.post('/auth/2fa/disable', { password });
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      (error instanceof Error ? error.message : 'Failed to disable 2FA');
+    throw new Error(message);
   }
 };
 
@@ -139,8 +234,11 @@ export const refreshToken = async (): Promise<string | null> => {
 export const forgotPassword = async (email: string): Promise<void> => {
   try {
     await apiEndpoints.auth.forgotPassword(email);
-  } catch (error) {
-    throw new Error(error instanceof Error ? error.message : 'Failed to request password reset');
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      (error instanceof Error ? error.message : 'Failed to request password reset');
+    throw new Error(message);
   }
 };
 

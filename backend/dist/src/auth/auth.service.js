@@ -48,7 +48,13 @@ const jwt_1 = require("@nestjs/jwt");
 const bcrypt = __importStar(require("bcrypt"));
 const crypto_1 = require("crypto");
 const nodemailer = __importStar(require("nodemailer"));
+const speakeasy = __importStar(require("speakeasy"));
+const QRCode = __importStar(require("qrcode"));
 const prisma_service_1 = require("../prisma/prisma.service");
+const users_service_1 = require("../users/users.service");
+const TWO_FACTOR_APP_NAME = 'ClearCare';
+const BACKUP_CODES_COUNT = 8;
+const BACKUP_CODE_LENGTH = 8;
 const RESET_TOKEN_EXPIRY_HOURS = 1;
 const SALT_ROUNDS = 12;
 const ROLE_PERMISSIONS = {
@@ -78,9 +84,11 @@ const ROLE_PERMISSIONS = {
 let AuthService = class AuthService {
     prisma;
     jwtService;
-    constructor(prisma, jwtService) {
+    usersService;
+    constructor(prisma, jwtService, usersService) {
         this.prisma = prisma;
         this.jwtService = jwtService;
+        this.usersService = usersService;
     }
     async register(registerDto, ipAddress, userAgent) {
         const existingUser = await this.prisma.user.findUnique({
@@ -146,6 +154,17 @@ let AuthService = class AuthService {
         if (!isPasswordValid) {
             throw new common_1.UnauthorizedException('Invalid credentials');
         }
+        if (user.twoFactorEnabled) {
+            const twoFactorToken = this.jwtService.sign({ sub: user.id, purpose: '2fa-login' }, {
+                secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+                expiresIn: '5m',
+            });
+            return {
+                requiresTwoFactor: true,
+                twoFactorToken,
+                message: 'Enter your authenticator or backup code to complete login.',
+            };
+        }
         await this.prisma.user.update({
             where: { id: user.id },
             data: { lastLoginAt: new Date() },
@@ -173,6 +192,187 @@ let AuthService = class AuthService {
             ...tokens,
         };
     }
+    async verifyTwoFactorLogin(twoFactorToken, code, ipAddress, userAgent) {
+        let payload;
+        try {
+            payload = this.jwtService.verify(twoFactorToken, {
+                secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+            });
+        }
+        catch {
+            throw new common_1.UnauthorizedException('Invalid or expired 2FA session. Please log in again.');
+        }
+        if (payload.purpose !== '2fa-login') {
+            throw new common_1.UnauthorizedException('Invalid token.');
+        }
+        const userId = payload.sub;
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, deletedAt: null },
+        });
+        if (!user) {
+            throw new common_1.UnauthorizedException('User not found.');
+        }
+        const codeTrimmed = code.trim();
+        const is6Digits = /^\d{6}$/.test(codeTrimmed);
+        if (is6Digits) {
+            const secret = await this.usersService.getTwoFactorSecret(userId);
+            if (!secret) {
+                throw new common_1.BadRequestException('2FA is not properly configured.');
+            }
+            const valid = speakeasy.totp.verify({
+                secret,
+                encoding: 'base32',
+                token: codeTrimmed,
+                window: 1,
+            });
+            if (!valid) {
+                throw new common_1.UnauthorizedException('Invalid authenticator code.');
+            }
+        }
+        else {
+            const backupCodesJson = await this.usersService.getBackupCodes(userId);
+            if (!backupCodesJson) {
+                throw new common_1.UnauthorizedException('Invalid backup code.');
+            }
+            let codes;
+            try {
+                codes = JSON.parse(backupCodesJson);
+            }
+            catch {
+                throw new common_1.BadRequestException('Invalid backup codes data.');
+            }
+            const index = codes.findIndex((c) => c.trim().toLowerCase() === codeTrimmed.toLowerCase());
+            if (index === -1) {
+                throw new common_1.UnauthorizedException('Invalid backup code.');
+            }
+            codes.splice(index, 1);
+            await this.usersService.setBackupCodes(userId, JSON.stringify(codes));
+        }
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { lastLoginAt: new Date() },
+        });
+        await this.prisma.userHistory.create({
+            data: {
+                userId: user.id,
+                action: 'login',
+                changedBy: user.id,
+                ipAddress,
+                userAgent,
+            },
+        });
+        const tokens = await this.generateTokens(user.id, user.email, user.role);
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                permissions: ROLE_PERMISSIONS[user.role] || [],
+                lastLoginAt: user.lastLoginAt,
+            },
+            ...tokens,
+        };
+    }
+    async setupTwoFactor(userId) {
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, deletedAt: null },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('User not found.');
+        }
+        if (user.twoFactorEnabled) {
+            throw new common_1.BadRequestException('2FA is already enabled.');
+        }
+        const secret = speakeasy.generateSecret({
+            name: `${TWO_FACTOR_APP_NAME} (${user.email})`,
+            length: 20,
+        });
+        if (!secret.base32) {
+            throw new common_1.BadRequestException('Failed to generate 2FA secret.');
+        }
+        const otpauthUrl = secret.otpauth_url;
+        if (!otpauthUrl) {
+            throw new common_1.BadRequestException('Failed to generate OTP URL.');
+        }
+        let qrCodeDataUrl;
+        try {
+            qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+        }
+        catch {
+            throw new common_1.BadRequestException('Failed to generate QR code.');
+        }
+        const setupToken = this.jwtService.sign({ sub: userId, twoFactorSecret: secret.base32, purpose: '2fa-setup' }, {
+            secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+            expiresIn: '10m',
+        });
+        return {
+            secret: secret.base32,
+            qrCodeDataUrl,
+            setupToken,
+            message: 'Scan the QR code with your authenticator app, then enter the 6-digit code to verify.',
+        };
+    }
+    async verifySetupTwoFactor(setupToken, code, userId) {
+        let payload;
+        try {
+            payload = this.jwtService.verify(setupToken, {
+                secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+            });
+        }
+        catch {
+            throw new common_1.UnauthorizedException('Setup link expired. Please start 2FA setup again.');
+        }
+        if (payload.purpose !== '2fa-setup' || payload.sub !== userId) {
+            throw new common_1.UnauthorizedException('Invalid setup token.');
+        }
+        const valid = speakeasy.totp.verify({
+            secret: payload.twoFactorSecret,
+            encoding: 'base32',
+            token: code.trim(),
+            window: 1,
+        });
+        if (!valid) {
+            throw new common_1.UnauthorizedException('Invalid code. Please try again.');
+        }
+        await this.usersService.setTwoFactorSecret(payload.sub, payload.twoFactorSecret);
+        const backupCodes = this.generateBackupCodes();
+        await this.usersService.setBackupCodes(payload.sub, JSON.stringify(backupCodes));
+        return {
+            backupCodes,
+            message: '2FA has been enabled. Save your backup codes in a secure place.',
+        };
+    }
+    async disableTwoFactor(userId, password) {
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, deletedAt: null },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException('User not found.');
+        }
+        if (!user.twoFactorEnabled) {
+            throw new common_1.BadRequestException('2FA is not enabled.');
+        }
+        const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+        if (!isPasswordValid) {
+            throw new common_1.UnauthorizedException('Invalid password.');
+        }
+        await this.usersService.clearTwoFactor(userId);
+        return { message: '2FA has been disabled.' };
+    }
+    generateBackupCodes() {
+        const codes = [];
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        for (let i = 0; i < BACKUP_CODES_COUNT; i++) {
+            let code = '';
+            for (let j = 0; j < BACKUP_CODE_LENGTH; j++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            codes.push(code);
+        }
+        return codes;
+    }
     async validateUser(userId) {
         const user = await this.prisma.user.findFirst({
             where: {
@@ -190,6 +390,7 @@ let AuthService = class AuthService {
             lastName: user.lastName,
             role: user.role,
             permissions: ROLE_PERMISSIONS[user.role] || [],
+            twoFactorEnabled: user.twoFactorEnabled,
         };
     }
     async refreshToken(refreshToken) {
@@ -328,6 +529,7 @@ exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        jwt_1.JwtService])
+        jwt_1.JwtService,
+        users_service_1.UsersService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

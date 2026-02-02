@@ -14,6 +14,7 @@ export interface User {
   organizationId?: string;
   createdAt: string;
   lastLoginAt?: string;
+  twoFactorEnabled?: boolean;
 }
 
 export interface AuthState {
@@ -37,3 +38,8 @@ export interface LoginCredentials {
   email: string;
   password: string;
 }
+
+/** Result of login: either full success or 2FA required */
+export type LoginResult =
+  | { user: User; token: string }
+  | { requiresTwoFactor: true; twoFactorToken: string; message?: string };

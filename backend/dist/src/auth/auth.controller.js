@@ -20,6 +20,9 @@ const register_dto_1 = require("./dto/register.dto");
 const forgot_password_dto_1 = require("./dto/forgot-password.dto");
 const reset_password_dto_1 = require("./dto/reset-password.dto");
 const refresh_token_dto_1 = require("./dto/refresh-token.dto");
+const verify_two_factor_dto_1 = require("./dto/verify-two-factor.dto");
+const verify_setup_two_factor_dto_1 = require("./dto/verify-setup-two-factor.dto");
+const disable_two_factor_dto_1 = require("./dto/disable-two-factor.dto");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
 const current_user_decorator_1 = require("./decorators/current-user.decorator");
 let AuthController = class AuthController {
@@ -45,6 +48,20 @@ let AuthController = class AuthController {
     }
     async resetPassword(dto) {
         return this.authService.resetPassword(dto);
+    }
+    async verifyTwoFactor(dto, req) {
+        const ipAddress = req.ip || req.connection?.remoteAddress;
+        const userAgent = req.headers['user-agent'];
+        return this.authService.verifyTwoFactorLogin(dto.twoFactorToken, dto.code, ipAddress, userAgent);
+    }
+    async setupTwoFactor(user) {
+        return this.authService.setupTwoFactor(user.id);
+    }
+    async verifySetupTwoFactor(dto, user) {
+        return this.authService.verifySetupTwoFactor(dto.setupToken, dto.code, user.id);
+    }
+    async disableTwoFactor(dto, user) {
+        return this.authService.disableTwoFactor(user.id, dto.password);
     }
     async getCurrentUser(user) {
         return this.authService.validateUser(user.id);
@@ -100,6 +117,44 @@ __decorate([
     __metadata("design:paramtypes", [reset_password_dto_1.ResetPasswordDto]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "resetPassword", null);
+__decorate([
+    (0, common_1.Post)('verify-2fa'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [verify_two_factor_dto_1.VerifyTwoFactorDto, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyTwoFactor", null);
+__decorate([
+    (0, common_1.Post)('2fa/setup'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "setupTwoFactor", null);
+__decorate([
+    (0, common_1.Post)('2fa/verify-setup'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [verify_setup_two_factor_dto_1.VerifySetupTwoFactorDto, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifySetupTwoFactor", null);
+__decorate([
+    (0, common_1.Post)('2fa/disable'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [disable_two_factor_dto_1.DisableTwoFactorDto, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "disableTwoFactor", null);
 __decorate([
     (0, common_1.Get)('me'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
