@@ -11,11 +11,14 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
+const encryption_service_1 = require("../common/encryption/encryption.service");
 const prisma_service_1 = require("../prisma/prisma.service");
 let UsersService = class UsersService {
     prisma;
-    constructor(prisma) {
+    encryption;
+    constructor(prisma, encryption) {
         this.prisma = prisma;
+        this.encryption = encryption;
     }
     async getProfile(userId, requestingUserId, requestingUserRole) {
         if (requestingUserRole !== 'administrator' && userId !== requestingUserId) {
@@ -92,10 +95,56 @@ let UsersService = class UsersService {
         });
         return updatedUser;
     }
+    async setTwoFactorSecret(userId, secret) {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                twoFactorSecret: this.encryption.encrypt(secret),
+                twoFactorEnabled: true,
+            },
+        });
+    }
+    async setBackupCodes(userId, codesJson) {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { backupCodes: this.encryption.encrypt(codesJson) },
+        });
+    }
+    async getTwoFactorSecret(userId) {
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, deletedAt: null },
+            select: { twoFactorSecret: true },
+        });
+        if (!user?.twoFactorSecret)
+            return null;
+        const decrypted = this.encryption.decrypt(user.twoFactorSecret);
+        return decrypted || null;
+    }
+    async getBackupCodes(userId) {
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, deletedAt: null },
+            select: { backupCodes: true },
+        });
+        if (!user?.backupCodes)
+            return null;
+        const decrypted = this.encryption.decrypt(user.backupCodes);
+        return decrypted || null;
+    }
+    async clearTwoFactor(userId) {
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: {
+                twoFactorEnabled: false,
+                twoFactorSecret: null,
+                backupCodes: null,
+            },
+        });
+    }
 };
 exports.UsersService = UsersService;
 exports.UsersService = UsersService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        encryption_service_1.EncryptionService])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

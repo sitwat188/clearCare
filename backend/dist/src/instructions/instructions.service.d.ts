@@ -1,10 +1,13 @@
+import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInstructionDto } from './dto/create-instruction.dto';
 import { UpdateInstructionDto } from './dto/update-instruction.dto';
 import { AcknowledgeInstructionDto } from './dto/acknowledge-instruction.dto';
 export declare class InstructionsService {
     private prisma;
-    constructor(prisma: PrismaService);
+    private encryption;
+    constructor(prisma: PrismaService, encryption: EncryptionService);
+    private decryptInstruction;
     createInstruction(createDto: CreateInstructionDto, requestingUserId: string, requestingUserRole: string, ipAddress?: string, userAgent?: string): Promise<{
         id: string;
         deletedAt: Date | null;

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInstructionDto } from './dto/create-instruction.dto';
 import { UpdateInstructionDto } from './dto/update-instruction.dto';
@@ -10,7 +11,21 @@ import { AcknowledgeInstructionDto } from './dto/acknowledge-instruction.dto';
 
 @Injectable()
 export class InstructionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private encryption: EncryptionService,
+  ) {}
+
+  /** Decrypt instruction content for API response (backward compatible with plaintext). */
+  private decryptInstruction<T extends { content?: string | null }>(
+    instruction: T,
+  ): T {
+    if (!instruction?.content) return instruction;
+    return {
+      ...instruction,
+      content: this.encryption.decrypt(instruction.content),
+    };
+  }
 
   /**
    * Create a new care instruction
@@ -59,7 +74,7 @@ export class InstructionsService {
       throw new NotFoundException('Provider or patient user not found');
     }
 
-    // Create instruction
+    // Create instruction (encrypt content at rest)
     const instruction = await this.prisma.careInstruction.create({
       data: {
         providerId: requestingUserId,
@@ -69,7 +84,7 @@ export class InstructionsService {
         title: createDto.title,
         type: createDto.type,
         priority: createDto.priority || 'medium',
-        content: createDto.content,
+        content: this.encryption.encrypt(createDto.content),
         medicationDetails: createDto.medicationDetails || null,
         lifestyleDetails: createDto.lifestyleDetails || null,
         followUpDetails: createDto.followUpDetails || null,
@@ -106,7 +121,7 @@ export class InstructionsService {
       },
     });
 
-    return instruction;
+    return this.decryptInstruction(instruction);
   }
 
   /**
@@ -166,7 +181,7 @@ export class InstructionsService {
     }
     // Administrators can access all instructions
 
-    return instruction;
+    return this.decryptInstruction(instruction);
   }
 
   /**
@@ -212,7 +227,7 @@ export class InstructionsService {
         where.type = filters.type;
       }
 
-      return this.prisma.careInstruction.findMany({
+      const list = await this.prisma.careInstruction.findMany({
         where,
         include: {
           acknowledgments: {
@@ -222,6 +237,7 @@ export class InstructionsService {
         },
         orderBy: { createdAt: 'desc' },
       });
+      return list.map((i) => this.decryptInstruction(i));
     } else if (requestingUserRole === 'provider') {
       // Providers see instructions for assigned patients
       const where: any = {
@@ -241,7 +257,7 @@ export class InstructionsService {
         where.type = filters.type;
       }
 
-      return this.prisma.careInstruction.findMany({
+      const list = await this.prisma.careInstruction.findMany({
         where,
         include: {
           acknowledgments: {
@@ -257,6 +273,7 @@ export class InstructionsService {
         },
         orderBy: { createdAt: 'desc' },
       });
+      return list.map((i) => this.decryptInstruction(i));
     } else if (requestingUserRole === 'administrator') {
       // Administrators see all instructions
       const where: any = {
@@ -273,7 +290,7 @@ export class InstructionsService {
         where.type = filters.type;
       }
 
-      return this.prisma.careInstruction.findMany({
+      const list = await this.prisma.careInstruction.findMany({
         where,
         include: {
           acknowledgments: {
@@ -289,6 +306,7 @@ export class InstructionsService {
         },
         orderBy: { createdAt: 'desc' },
       });
+      return list.map((i) => this.decryptInstruction(i));
     }
 
     return [];
@@ -344,7 +362,9 @@ export class InstructionsService {
         ...(updateDto.title && { title: updateDto.title }),
         ...(updateDto.type && { type: updateDto.type }),
         ...(updateDto.priority && { priority: updateDto.priority }),
-        ...(updateDto.content && { content: updateDto.content }),
+        ...(updateDto.content && {
+          content: this.encryption.encrypt(updateDto.content),
+        }),
         ...(updateDto.medicationDetails && {
           medicationDetails: updateDto.medicationDetails,
         }),
@@ -395,7 +415,7 @@ export class InstructionsService {
       },
     });
 
-    return updatedInstruction;
+    return this.decryptInstruction(updatedInstruction);
   }
 
   /**
@@ -561,6 +581,6 @@ export class InstructionsService {
       },
     });
 
-    return updatedInstruction;
+    return this.decryptInstruction(updatedInstruction);
   }
 }

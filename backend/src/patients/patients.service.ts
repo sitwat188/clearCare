@@ -4,13 +4,17 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 
 @Injectable()
 export class PatientsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private encryption: EncryptionService,
+  ) {}
 
   /**
    * Create a patient record
@@ -50,22 +54,26 @@ export class PatientsService {
       );
     }
 
-    // Create patient record
+    // Create patient record (encrypt PHI at rest)
     const patient = await this.prisma.patient.create({
       data: {
         userId: createDto.userId,
-        dateOfBirth: createDto.dateOfBirth ?? '',
-        medicalRecordNumber: createDto.medicalRecordNumber ?? '',
-        phone: createDto.phone ?? null,
-        addressStreet: createDto.addressStreet ?? null,
-        addressCity: createDto.addressCity ?? null,
-        addressState: createDto.addressState ?? null,
-        addressZipCode: createDto.addressZipCode ?? null,
-        emergencyContactName:
-          createDto.emergencyContactName ?? createDto.emergencyContact ?? null,
-        emergencyContactRelationship:
-          createDto.emergencyContactRelationship ?? null,
-        emergencyContactPhone: createDto.emergencyContactPhone ?? null,
+        dateOfBirth: this.encryption.encrypt(createDto.dateOfBirth ?? '') || '',
+        medicalRecordNumber: this.encryption.encrypt(createDto.medicalRecordNumber ?? '') || '',
+        phone: createDto.phone ? this.encryption.encrypt(createDto.phone) : null,
+        addressStreet: createDto.addressStreet ? this.encryption.encrypt(createDto.addressStreet) : null,
+        addressCity: createDto.addressCity ? this.encryption.encrypt(createDto.addressCity) : null,
+        addressState: createDto.addressState ? this.encryption.encrypt(createDto.addressState) : null,
+        addressZipCode: createDto.addressZipCode ? this.encryption.encrypt(createDto.addressZipCode) : null,
+        emergencyContactName: (createDto.emergencyContactName ?? createDto.emergencyContact)
+          ? this.encryption.encrypt(createDto.emergencyContactName ?? createDto.emergencyContact ?? '')
+          : null,
+        emergencyContactRelationship: createDto.emergencyContactRelationship
+          ? this.encryption.encrypt(createDto.emergencyContactRelationship)
+          : null,
+        emergencyContactPhone: createDto.emergencyContactPhone
+          ? this.encryption.encrypt(createDto.emergencyContactPhone)
+          : null,
         assignedProviderIds: createDto.assignedProviderIds ?? [],
       },
     });
@@ -136,29 +144,46 @@ export class PatientsService {
     return this.toPatientResponse(patient);
   }
 
-  /** Map DB patient (with user) to frontend-friendly shape; omit user to avoid leaking sensitive fields */
+  /** Map DB patient (with user) to frontend-friendly shape; decrypt PHI for API response */
   private toPatientResponse(patient: any) {
     const { user: u, ...rest } = patient;
+    const street = this.encryption.decrypt(patient.addressStreet);
+    const city = this.encryption.decrypt(patient.addressCity);
+    const state = this.encryption.decrypt(patient.addressState);
+    const zipCode = this.encryption.decrypt(patient.addressZipCode);
+    const emergencyName = this.encryption.decrypt(patient.emergencyContactName);
+    const emergencyRel = this.encryption.decrypt(patient.emergencyContactRelationship);
+    const emergencyPhone = this.encryption.decrypt(patient.emergencyContactPhone);
     return {
       ...rest,
+      dateOfBirth: this.encryption.decrypt(patient.dateOfBirth),
+      medicalRecordNumber: this.encryption.decrypt(patient.medicalRecordNumber),
+      phone: this.encryption.decrypt(patient.phone) || undefined,
+      addressStreet: street || undefined,
+      addressCity: city || undefined,
+      addressState: state || undefined,
+      addressZipCode: zipCode || undefined,
+      emergencyContactName: emergencyName || undefined,
+      emergencyContactRelationship: emergencyRel || undefined,
+      emergencyContactPhone: emergencyPhone || undefined,
       firstName: u?.firstName ?? '',
       lastName: u?.lastName ?? '',
       email: u?.email ?? '',
       address:
-        patient.addressStreet || patient.addressCity
+        street || city
           ? {
-              street: patient.addressStreet ?? '',
-              city: patient.addressCity ?? '',
-              state: patient.addressState ?? '',
-              zipCode: patient.addressZipCode ?? '',
+              street: street ?? '',
+              city: city ?? '',
+              state: state ?? '',
+              zipCode: zipCode ?? '',
             }
           : undefined,
       emergencyContact:
-        patient.emergencyContactName || patient.emergencyContactPhone
+        emergencyName || emergencyPhone
           ? {
-              name: patient.emergencyContactName ?? '',
-              relationship: patient.emergencyContactRelationship ?? '',
-              phone: patient.emergencyContactPhone ?? '',
+              name: emergencyName ?? '',
+              relationship: emergencyRel ?? '',
+              phone: emergencyPhone ?? '',
             }
           : undefined,
       createdAt: patient.createdAt?.toISOString?.() ?? patient.createdAt,
@@ -258,34 +283,33 @@ export class PatientsService {
       }
     }
 
-    // Get old values for history
+    // Get old values for history (stored as-is from DB, may be encrypted)
     const oldValues = {
       dateOfBirth: patient.dateOfBirth,
       medicalRecordNumber: patient.medicalRecordNumber,
       emergencyContactName: patient.emergencyContactName,
     };
 
-    const data: any = {};
-    if (updateDto.dateOfBirth != null) data.dateOfBirth = updateDto.dateOfBirth;
+    const data: Record<string, unknown> = {};
+    if (updateDto.dateOfBirth != null) data.dateOfBirth = this.encryption.encrypt(updateDto.dateOfBirth);
     if (updateDto.medicalRecordNumber != null)
-      data.medicalRecordNumber = updateDto.medicalRecordNumber;
-    if (updateDto.phone != null) data.phone = updateDto.phone;
+      data.medicalRecordNumber = this.encryption.encrypt(updateDto.medicalRecordNumber);
+    if (updateDto.phone != null) data.phone = this.encryption.encrypt(updateDto.phone);
     if (updateDto.addressStreet != null)
-      data.addressStreet = updateDto.addressStreet;
-    if (updateDto.addressCity != null) data.addressCity = updateDto.addressCity;
+      data.addressStreet = this.encryption.encrypt(updateDto.addressStreet);
+    if (updateDto.addressCity != null) data.addressCity = this.encryption.encrypt(updateDto.addressCity);
     if (updateDto.addressState != null)
-      data.addressState = updateDto.addressState;
+      data.addressState = this.encryption.encrypt(updateDto.addressState);
     if (updateDto.addressZipCode != null)
-      data.addressZipCode = updateDto.addressZipCode;
+      data.addressZipCode = this.encryption.encrypt(updateDto.addressZipCode);
     if (updateDto.emergencyContact != null)
-      data.emergencyContactName = updateDto.emergencyContact;
+      data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContact);
     if (updateDto.emergencyContactName != null)
-      data.emergencyContactName = updateDto.emergencyContactName;
+      data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContactName);
     if (updateDto.emergencyContactRelationship != null)
-      data.emergencyContactRelationship =
-        updateDto.emergencyContactRelationship;
+      data.emergencyContactRelationship = this.encryption.encrypt(updateDto.emergencyContactRelationship);
     if (updateDto.emergencyContactPhone != null)
-      data.emergencyContactPhone = updateDto.emergencyContactPhone;
+      data.emergencyContactPhone = this.encryption.encrypt(updateDto.emergencyContactPhone);
     if (updateDto.assignedProviderIds != null)
       data.assignedProviderIds = updateDto.assignedProviderIds;
 

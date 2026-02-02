@@ -9,6 +9,7 @@
     "build": "nest build",
     "build:deploy": "prisma generate && prisma migrate deploy && npx nest build",
     "db:seed": "prisma db seed",
+    "db:encrypt": "ts-node --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\",\\\"moduleResolution\\\":\\\"node\\\"}\" scripts/encrypt-existing-data.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

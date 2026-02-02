@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const prisma_module_1 = require("./prisma/prisma.module");
+const encryption_module_1 = require("./common/encryption/encryption.module");
 const auth_module_1 = require("./auth/auth.module");
 const users_module_1 = require("./users/users.module");
 const patients_module_1 = require("./patients/patients.module");
@@ -27,6 +28,7 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             prisma_module_1.PrismaModule,
+            encryption_module_1.EncryptionModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             patients_module_1.PatientsModule,

@@ -11,11 +11,22 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InstructionsService = void 0;
 const common_1 = require("@nestjs/common");
+const encryption_service_1 = require("../common/encryption/encryption.service");
 const prisma_service_1 = require("../prisma/prisma.service");
 let InstructionsService = class InstructionsService {
     prisma;
-    constructor(prisma) {
+    encryption;
+    constructor(prisma, encryption) {
         this.prisma = prisma;
+        this.encryption = encryption;
+    }
+    decryptInstruction(instruction) {
+        if (!instruction?.content)
+            return instruction;
+        return {
+            ...instruction,
+            content: this.encryption.decrypt(instruction.content),
+        };
     }
     async createInstruction(createDto, requestingUserId, requestingUserRole, ipAddress, userAgent) {
         if (requestingUserRole !== 'provider') {
@@ -48,7 +59,7 @@ let InstructionsService = class InstructionsService {
                 title: createDto.title,
                 type: createDto.type,
                 priority: createDto.priority || 'medium',
-                content: createDto.content,
+                content: this.encryption.encrypt(createDto.content),
                 medicationDetails: createDto.medicationDetails || null,
                 lifestyleDetails: createDto.lifestyleDetails || null,
                 followUpDetails: createDto.followUpDetails || null,
@@ -82,7 +93,7 @@ let InstructionsService = class InstructionsService {
                 userAgent,
             },
         });
-        return instruction;
+        return this.decryptInstruction(instruction);
     }
     async getInstruction(instructionId, requestingUserId, requestingUserRole) {
         const instruction = await this.prisma.careInstruction.findFirst({
@@ -121,7 +132,7 @@ let InstructionsService = class InstructionsService {
                 throw new common_1.ForbiddenException('You can only access instructions for patients assigned to you');
             }
         }
-        return instruction;
+        return this.decryptInstruction(instruction);
     }
     async getInstructions(requestingUserId, requestingUserRole, filters) {
         if (requestingUserRole === 'patient') {
@@ -153,7 +164,7 @@ let InstructionsService = class InstructionsService {
             if (filters?.type) {
                 where.type = filters.type;
             }
-            return this.prisma.careInstruction.findMany({
+            const list = await this.prisma.careInstruction.findMany({
                 where,
                 include: {
                     acknowledgments: {
@@ -163,6 +174,7 @@ let InstructionsService = class InstructionsService {
                 },
                 orderBy: { createdAt: 'desc' },
             });
+            return list.map((i) => this.decryptInstruction(i));
         }
         else if (requestingUserRole === 'provider') {
             const where = {
@@ -180,7 +192,7 @@ let InstructionsService = class InstructionsService {
             if (filters?.type) {
                 where.type = filters.type;
             }
-            return this.prisma.careInstruction.findMany({
+            const list = await this.prisma.careInstruction.findMany({
                 where,
                 include: {
                     acknowledgments: {
@@ -196,6 +208,7 @@ let InstructionsService = class InstructionsService {
                 },
                 orderBy: { createdAt: 'desc' },
             });
+            return list.map((i) => this.decryptInstruction(i));
         }
         else if (requestingUserRole === 'administrator') {
             const where = {
@@ -210,7 +223,7 @@ let InstructionsService = class InstructionsService {
             if (filters?.type) {
                 where.type = filters.type;
             }
-            return this.prisma.careInstruction.findMany({
+            const list = await this.prisma.careInstruction.findMany({
                 where,
                 include: {
                     acknowledgments: {
@@ -226,6 +239,7 @@ let InstructionsService = class InstructionsService {
                 },
                 orderBy: { createdAt: 'desc' },
             });
+            return list.map((i) => this.decryptInstruction(i));
         }
         return [];
     }
@@ -257,7 +271,9 @@ let InstructionsService = class InstructionsService {
                 ...(updateDto.title && { title: updateDto.title }),
                 ...(updateDto.type && { type: updateDto.type }),
                 ...(updateDto.priority && { priority: updateDto.priority }),
-                ...(updateDto.content && { content: updateDto.content }),
+                ...(updateDto.content && {
+                    content: this.encryption.encrypt(updateDto.content),
+                }),
                 ...(updateDto.medicationDetails && {
                     medicationDetails: updateDto.medicationDetails,
                 }),
@@ -305,7 +321,7 @@ let InstructionsService = class InstructionsService {
                 userAgent,
             },
         });
-        return updatedInstruction;
+        return this.decryptInstruction(updatedInstruction);
     }
     async deleteInstruction(instructionId, requestingUserId, requestingUserRole, ipAddress, userAgent) {
         const instruction = await this.prisma.careInstruction.findFirst({
@@ -406,12 +422,13 @@ let InstructionsService = class InstructionsService {
                 userAgent,
             },
         });
-        return updatedInstruction;
+        return this.decryptInstruction(updatedInstruction);
     }
 };
 exports.InstructionsService = InstructionsService;
 exports.InstructionsService = InstructionsService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        encryption_service_1.EncryptionService])
 ], InstructionsService);
 //# sourceMappingURL=instructions.service.js.map

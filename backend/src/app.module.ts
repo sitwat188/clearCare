@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { EncryptionModule } from './common/encryption/encryption.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { PatientsModule } from './patients/patients.module';
@@ -15,6 +16,7 @@ import { AuditModule } from './audit/audit.module';
 @Module({
   imports: [
     PrismaModule,
+    EncryptionModule,
     AuthModule,
     UsersModule,
     PatientsModule,

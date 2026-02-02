@@ -11,11 +11,14 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PatientsService = void 0;
 const common_1 = require("@nestjs/common");
+const encryption_service_1 = require("../common/encryption/encryption.service");
 const prisma_service_1 = require("../prisma/prisma.service");
 let PatientsService = class PatientsService {
     prisma;
-    constructor(prisma) {
+    encryption;
+    constructor(prisma, encryption) {
         this.prisma = prisma;
+        this.encryption = encryption;
     }
     async createPatient(createDto, requestingUserId, requestingUserRole, ipAddress, userAgent) {
         if (requestingUserRole !== 'administrator') {
@@ -36,16 +39,22 @@ let PatientsService = class PatientsService {
         const patient = await this.prisma.patient.create({
             data: {
                 userId: createDto.userId,
-                dateOfBirth: createDto.dateOfBirth ?? '',
-                medicalRecordNumber: createDto.medicalRecordNumber ?? '',
-                phone: createDto.phone ?? null,
-                addressStreet: createDto.addressStreet ?? null,
-                addressCity: createDto.addressCity ?? null,
-                addressState: createDto.addressState ?? null,
-                addressZipCode: createDto.addressZipCode ?? null,
-                emergencyContactName: createDto.emergencyContactName ?? createDto.emergencyContact ?? null,
-                emergencyContactRelationship: createDto.emergencyContactRelationship ?? null,
-                emergencyContactPhone: createDto.emergencyContactPhone ?? null,
+                dateOfBirth: this.encryption.encrypt(createDto.dateOfBirth ?? '') || '',
+                medicalRecordNumber: this.encryption.encrypt(createDto.medicalRecordNumber ?? '') || '',
+                phone: createDto.phone ? this.encryption.encrypt(createDto.phone) : null,
+                addressStreet: createDto.addressStreet ? this.encryption.encrypt(createDto.addressStreet) : null,
+                addressCity: createDto.addressCity ? this.encryption.encrypt(createDto.addressCity) : null,
+                addressState: createDto.addressState ? this.encryption.encrypt(createDto.addressState) : null,
+                addressZipCode: createDto.addressZipCode ? this.encryption.encrypt(createDto.addressZipCode) : null,
+                emergencyContactName: (createDto.emergencyContactName ?? createDto.emergencyContact)
+                    ? this.encryption.encrypt(createDto.emergencyContactName ?? createDto.emergencyContact ?? '')
+                    : null,
+                emergencyContactRelationship: createDto.emergencyContactRelationship
+                    ? this.encryption.encrypt(createDto.emergencyContactRelationship)
+                    : null,
+                emergencyContactPhone: createDto.emergencyContactPhone
+                    ? this.encryption.encrypt(createDto.emergencyContactPhone)
+                    : null,
                 assignedProviderIds: createDto.assignedProviderIds ?? [],
             },
         });
@@ -98,24 +107,41 @@ let PatientsService = class PatientsService {
     }
     toPatientResponse(patient) {
         const { user: u, ...rest } = patient;
+        const street = this.encryption.decrypt(patient.addressStreet);
+        const city = this.encryption.decrypt(patient.addressCity);
+        const state = this.encryption.decrypt(patient.addressState);
+        const zipCode = this.encryption.decrypt(patient.addressZipCode);
+        const emergencyName = this.encryption.decrypt(patient.emergencyContactName);
+        const emergencyRel = this.encryption.decrypt(patient.emergencyContactRelationship);
+        const emergencyPhone = this.encryption.decrypt(patient.emergencyContactPhone);
         return {
             ...rest,
+            dateOfBirth: this.encryption.decrypt(patient.dateOfBirth),
+            medicalRecordNumber: this.encryption.decrypt(patient.medicalRecordNumber),
+            phone: this.encryption.decrypt(patient.phone) || undefined,
+            addressStreet: street || undefined,
+            addressCity: city || undefined,
+            addressState: state || undefined,
+            addressZipCode: zipCode || undefined,
+            emergencyContactName: emergencyName || undefined,
+            emergencyContactRelationship: emergencyRel || undefined,
+            emergencyContactPhone: emergencyPhone || undefined,
             firstName: u?.firstName ?? '',
             lastName: u?.lastName ?? '',
             email: u?.email ?? '',
-            address: patient.addressStreet || patient.addressCity
+            address: street || city
                 ? {
-                    street: patient.addressStreet ?? '',
-                    city: patient.addressCity ?? '',
-                    state: patient.addressState ?? '',
-                    zipCode: patient.addressZipCode ?? '',
+                    street: street ?? '',
+                    city: city ?? '',
+                    state: state ?? '',
+                    zipCode: zipCode ?? '',
                 }
                 : undefined,
-            emergencyContact: patient.emergencyContactName || patient.emergencyContactPhone
+            emergencyContact: emergencyName || emergencyPhone
                 ? {
-                    name: patient.emergencyContactName ?? '',
-                    relationship: patient.emergencyContactRelationship ?? '',
-                    phone: patient.emergencyContactPhone ?? '',
+                    name: emergencyName ?? '',
+                    relationship: emergencyRel ?? '',
+                    phone: emergencyPhone ?? '',
                 }
                 : undefined,
             createdAt: patient.createdAt?.toISOString?.() ?? patient.createdAt,
@@ -196,28 +222,27 @@ let PatientsService = class PatientsService {
         };
         const data = {};
         if (updateDto.dateOfBirth != null)
-            data.dateOfBirth = updateDto.dateOfBirth;
+            data.dateOfBirth = this.encryption.encrypt(updateDto.dateOfBirth);
         if (updateDto.medicalRecordNumber != null)
-            data.medicalRecordNumber = updateDto.medicalRecordNumber;
+            data.medicalRecordNumber = this.encryption.encrypt(updateDto.medicalRecordNumber);
         if (updateDto.phone != null)
-            data.phone = updateDto.phone;
+            data.phone = this.encryption.encrypt(updateDto.phone);
         if (updateDto.addressStreet != null)
-            data.addressStreet = updateDto.addressStreet;
+            data.addressStreet = this.encryption.encrypt(updateDto.addressStreet);
         if (updateDto.addressCity != null)
-            data.addressCity = updateDto.addressCity;
+            data.addressCity = this.encryption.encrypt(updateDto.addressCity);
         if (updateDto.addressState != null)
-            data.addressState = updateDto.addressState;
+            data.addressState = this.encryption.encrypt(updateDto.addressState);
         if (updateDto.addressZipCode != null)
-            data.addressZipCode = updateDto.addressZipCode;
+            data.addressZipCode = this.encryption.encrypt(updateDto.addressZipCode);
         if (updateDto.emergencyContact != null)
-            data.emergencyContactName = updateDto.emergencyContact;
+            data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContact);
         if (updateDto.emergencyContactName != null)
-            data.emergencyContactName = updateDto.emergencyContactName;
+            data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContactName);
         if (updateDto.emergencyContactRelationship != null)
-            data.emergencyContactRelationship =
-                updateDto.emergencyContactRelationship;
+            data.emergencyContactRelationship = this.encryption.encrypt(updateDto.emergencyContactRelationship);
         if (updateDto.emergencyContactPhone != null)
-            data.emergencyContactPhone = updateDto.emergencyContactPhone;
+            data.emergencyContactPhone = this.encryption.encrypt(updateDto.emergencyContactPhone);
         if (updateDto.assignedProviderIds != null)
             data.assignedProviderIds = updateDto.assignedProviderIds;
         await this.prisma.patient.update({
@@ -253,6 +278,7 @@ let PatientsService = class PatientsService {
 exports.PatientsService = PatientsService;
 exports.PatientsService = PatientsService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        encryption_service_1.EncryptionService])
 ], PatientsService);
 //# sourceMappingURL=patients.service.js.map

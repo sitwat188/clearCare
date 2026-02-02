@@ -1,16 +1,28 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private encryption: EncryptionService,
+  ) {}
 
   /**
    * Get user profile by ID
    * HIPAA: Users can only view their own profile, admins can view any
    */
-  async getProfile(userId: string, requestingUserId: string, requestingUserRole: string) {
+  async getProfile(
+    userId: string,
+    requestingUserId: string,
+    requestingUserRole: string,
+  ) {
     // HIPAA: Row-level access control - users can only access their own data
     if (requestingUserRole !== 'administrator' && userId !== requestingUserId) {
       throw new ForbiddenException('You can only access your own profile');
@@ -110,5 +122,68 @@ export class UsersService {
     });
 
     return updatedUser;
+  }
+
+  /**
+   * Set 2FA secret (encrypted at rest). Use when enabling 2FA.
+   */
+  async setTwoFactorSecret(userId: string, secret: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorSecret: this.encryption.encrypt(secret),
+        twoFactorEnabled: true,
+      },
+    });
+  }
+
+  /**
+   * Set backup codes (encrypted at rest). Use when enabling 2FA.
+   */
+  async setBackupCodes(userId: string, codesJson: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { backupCodes: this.encryption.encrypt(codesJson) },
+    });
+  }
+
+  /**
+   * Get 2FA secret (decrypted). Use for TOTP verification only; do not expose to API response.
+   */
+  async getTwoFactorSecret(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: { twoFactorSecret: true },
+    });
+    if (!user?.twoFactorSecret) return null;
+    const decrypted = this.encryption.decrypt(user.twoFactorSecret);
+    return decrypted || null;
+  }
+
+  /**
+   * Get backup codes (decrypted). Use when verifying backup code only; do not expose to API response.
+   */
+  async getBackupCodes(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: { backupCodes: true },
+    });
+    if (!user?.backupCodes) return null;
+    const decrypted = this.encryption.decrypt(user.backupCodes);
+    return decrypted || null;
+  }
+
+  /**
+   * Clear 2FA (disable 2FA for user). Removes secret and backup codes.
+   */
+  async clearTwoFactor(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+        backupCodes: null,
+      },
+    });
   }
 }
