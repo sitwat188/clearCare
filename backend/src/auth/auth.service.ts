@@ -155,7 +155,8 @@ export class AuthService {
       const twoFactorToken = this.jwtService.sign(
         { sub: user.id, purpose: '2fa-login' },
         {
-          secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+          secret:
+            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
           expiresIn: '5m',
         },
       );
@@ -214,11 +215,14 @@ export class AuthService {
       payload = this.jwtService.verify<{ sub: string; purpose: string }>(
         twoFactorToken,
         {
-          secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+          secret:
+            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
         },
       );
     } catch {
-      throw new UnauthorizedException('Invalid or expired 2FA session. Please log in again.');
+      throw new UnauthorizedException(
+        'Invalid or expired 2FA session. Please log in again.',
+      );
     }
     if (payload.purpose !== '2fa-login') {
       throw new UnauthorizedException('Invalid token.');
@@ -339,7 +343,8 @@ export class AuthService {
     const setupToken = this.jwtService.sign(
       { sub: userId, twoFactorSecret: secret.base32, purpose: '2fa-setup' },
       {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret:
+          process.env.JWT_SECRET || 'your-secret-key-change-in-production',
         expiresIn: '10m',
       },
     );
@@ -348,7 +353,8 @@ export class AuthService {
       secret: secret.base32,
       qrCodeDataUrl,
       setupToken,
-      message: 'Scan the QR code with your authenticator app, then enter the 6-digit code to verify.',
+      message:
+        'Scan the QR code with your authenticator app, then enter the 6-digit code to verify.',
     };
   }
 
@@ -363,10 +369,13 @@ export class AuthService {
         twoFactorSecret: string;
         purpose: string;
       }>(setupToken, {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret:
+          process.env.JWT_SECRET || 'your-secret-key-change-in-production',
       });
     } catch {
-      throw new UnauthorizedException('Setup link expired. Please start 2FA setup again.');
+      throw new UnauthorizedException(
+        'Setup link expired. Please start 2FA setup again.',
+      );
     }
     if (payload.purpose !== '2fa-setup' || payload.sub !== userId) {
       throw new UnauthorizedException('Invalid setup token.');
@@ -382,7 +391,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid code. Please try again.');
     }
 
-    await this.usersService.setTwoFactorSecret(payload.sub, payload.twoFactorSecret);
+    await this.usersService.setTwoFactorSecret(
+      payload.sub,
+      payload.twoFactorSecret,
+    );
 
     const backupCodes = this.generateBackupCodes();
     await this.usersService.setBackupCodes(
@@ -392,7 +404,8 @@ export class AuthService {
 
     return {
       backupCodes,
-      message: '2FA has been enabled. Save your backup codes in a secure place.',
+      message:
+        '2FA has been enabled. Save your backup codes in a secure place.',
     };
   }
 
