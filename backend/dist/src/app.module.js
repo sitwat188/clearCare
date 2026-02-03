@@ -24,6 +24,7 @@ const providers_module_1 = require("./providers/providers.module");
 const notifications_module_1 = require("./notifications/notifications.module");
 const admin_module_1 = require("./admin/admin.module");
 const audit_module_1 = require("./audit/audit.module");
+const audit_log_interceptor_1 = require("./audit/audit-log.interceptor");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -51,6 +52,7 @@ exports.AppModule = AppModule = __decorate([
         providers: [
             app_service_1.AppService,
             { provide: core_1.APP_GUARD, useClass: throttler_1.ThrottlerGuard },
+            { provide: core_1.APP_INTERCEPTOR, useClass: audit_log_interceptor_1.AuditLogInterceptor },
         ],
     })
 ], AppModule);

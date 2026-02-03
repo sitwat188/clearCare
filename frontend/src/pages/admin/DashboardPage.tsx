@@ -35,10 +35,11 @@ const AdminDashboard = () => {
     queryFn: () => adminService.getRoles(),
   });
 
-  const { data: auditLogs, isLoading: auditLoading } = useQuery({
-    queryKey: ['admin-audit-logs'],
-    queryFn: () => adminService.getAuditLogs(),
+  const { data: auditLogsResult, isLoading: auditLoading } = useQuery({
+    queryKey: ['admin-audit-logs-dashboard'],
+    queryFn: () => adminService.getAuditLogs({ page: 1, limit: 100 }),
   });
+  const auditLogs = auditLogsResult?.data ?? [];
 
   const { data: reports, isLoading: reportsLoading } = useQuery({
     queryKey: ['admin-reports'],
@@ -51,7 +52,7 @@ const AdminDashboard = () => {
   const stats = {
     totalUsers: users?.length || 0,
     totalRoles: roles?.length || 0,
-    totalAuditLogs: auditLogs?.length || 0,
+    totalAuditLogs: auditLogsResult?.total ?? auditLogs.length,
     recentReports: reports?.filter(r => {
       const reportDate = new Date(r.generatedAt);
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -63,7 +64,7 @@ const AdminDashboard = () => {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       return lastLogin >= thirtyDaysAgo;
     }).length || 0,
-    failedLogins: auditLogs?.filter(log => log.status === 'failure').length || 0,
+    failedLogins: auditLogs.filter(log => log.status === 'failure').length,
   };
 
   const statCards = [

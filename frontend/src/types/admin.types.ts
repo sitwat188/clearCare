@@ -20,12 +20,12 @@ export interface AuditLog {
   userName: string;
   action: string;
   resourceType: string;
-  resourceId: string;
-  resourceName?: string;
+  resourceId: string | null;
+  resourceName?: string | null;
   ipAddress: string;
   userAgent: string;
   timestamp: string;
-  status: 'success' | 'failure';
+  status: 'success' | 'failure' | 'denied';
   details?: Record<string, unknown>;
 }
 

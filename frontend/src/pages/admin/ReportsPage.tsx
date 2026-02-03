@@ -68,10 +68,13 @@ const AdminReports = () => {
 
       // Fetch data based on report type
       if (reportType === 'audit') {
-        const logs = await adminService.getAuditLogs({
+        const result = await adminService.getAuditLogs({
           startDate: new Date(dateRange.start).toISOString(),
           endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+          page: 1,
+          limit: 5000,
         });
+        const logs = result.data;
         reportData = logs.map((log) => ({
           'Timestamp': format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
           'User': log.userName,
@@ -97,10 +100,13 @@ const AdminReports = () => {
         reportTitle = `User Activity Report - ${startDateFormatted} to ${endDateFormatted}`;
       } else if (reportType === 'compliance') {
         // For compliance, we'll create a summary report
-        const logs = await adminService.getAuditLogs({
+        const result = await adminService.getAuditLogs({
           startDate: new Date(dateRange.start).toISOString(),
           endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+          page: 1,
+          limit: 5000,
         });
+        const logs = result.data;
         const complianceActions = logs.filter((log) => log.action.includes('compliance') || log.action.includes('acknowledge'));
         reportData = complianceActions.map((log) => ({
           'Timestamp': format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
@@ -112,10 +118,13 @@ const AdminReports = () => {
         reportTitle = `Compliance Report - ${startDateFormatted} to ${endDateFormatted}`;
       } else if (reportType === 'system') {
         // System report - combine multiple data sources
-        const logs = await adminService.getAuditLogs({
+        const result = await adminService.getAuditLogs({
           startDate: new Date(dateRange.start).toISOString(),
           endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+          page: 1,
+          limit: 5000,
         });
+        const logs = result.data;
         const allUsers = await adminService.getAllUsers();
         
         reportData = [

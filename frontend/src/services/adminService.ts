@@ -127,17 +127,33 @@ export const adminService = {
   },
 
   /**
-   * Get audit logs with optional filters
+   * Get audit logs with optional filters and pagination
    */
   getAuditLogs: async (filters?: {
     userId?: string;
     action?: string;
     startDate?: string;
     endDate?: string;
-  }): Promise<AuditLog[]> => {
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: AuditLog[]; total: number; page: number; limit: number }> => {
     try {
       const response = await apiEndpoints.admin.getAuditLogs(filters);
-      return response.data.data;
+      const payload = response.data as {
+        data?: AuditLog[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        meta?: { total: number; page: number; limit: number };
+      };
+      const data = payload.data ?? [];
+      const meta = payload.meta;
+      return {
+        data,
+        total: payload.total ?? meta?.total ?? data.length,
+        page: payload.page ?? meta?.page ?? 1,
+        limit: payload.limit ?? meta?.limit ?? 20,
+      };
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch audit logs');
     }

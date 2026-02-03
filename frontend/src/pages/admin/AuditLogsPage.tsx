@@ -16,6 +16,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   Chip,
   TextField,
   InputAdornment,
@@ -37,24 +38,33 @@ import { adminService } from '../../services/adminService';
 import PageHeader from '../../components/common/PageHeader';
 import { exportAuditLogs } from '../../utils/exportUtils';
 
+const ROWS_PER_PAGE_OPTIONS = [10, 20, 50, 100];
+
 const AdminAuditLogs = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
-  const { data: auditLogs, isLoading } = useQuery({
-    queryKey: ['admin-audit-logs', actionFilter, statusFilter, dateRange],
+  const { data: auditLogsResult, isLoading } = useQuery({
+    queryKey: ['admin-audit-logs', actionFilter, statusFilter, dateRange, page, rowsPerPage],
     queryFn: () =>
       adminService.getAuditLogs({
         action: actionFilter !== 'all' ? actionFilter : undefined,
         startDate: dateRange.start || undefined,
         endDate: dateRange.end || undefined,
+        page: page + 1,
+        limit: rowsPerPage,
       }),
   });
 
-  // Filter logs by search term and status
-  const filteredLogs = auditLogs?.filter((log) => {
+  const auditLogs = auditLogsResult?.data ?? [];
+  const totalCount = auditLogsResult?.total ?? 0;
+
+  // Filter logs by search term and status (client-side on current page)
+  const filteredLogs = auditLogs.filter((log) => {
     const matchesSearch =
       log.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -65,7 +75,16 @@ const AdminAuditLogs = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const uniqueActions = Array.from(new Set(auditLogs?.map((log) => log.action) || []));
+  const uniqueActions = Array.from(new Set(auditLogs.map((log) => log.action)));
+
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
 
   const handleExport = () => {
     try {
@@ -124,7 +143,7 @@ const AdminAuditLogs = () => {
             />
             <FormControl sx={{ minWidth: 180 }}>
               <InputLabel>Action</InputLabel>
-              <Select value={actionFilter} label="Action" onChange={(e) => setActionFilter(e.target.value)}>
+              <Select value={actionFilter} label="Action" onChange={(e) => { setActionFilter(e.target.value); setPage(0); }}>
                 <MenuItem value="all">All Actions</MenuItem>
                 {uniqueActions.map((action) => (
                   <MenuItem key={action} value={action}>
@@ -135,17 +154,18 @@ const AdminAuditLogs = () => {
             </FormControl>
             <FormControl sx={{ minWidth: 150 }}>
               <InputLabel>Status</InputLabel>
-              <Select value={statusFilter} label="Status" onChange={(e) => setStatusFilter(e.target.value)}>
+              <Select value={statusFilter} label="Status" onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}>
                 <MenuItem value="all">All Status</MenuItem>
                 <MenuItem value="success">Success</MenuItem>
                 <MenuItem value="failure">Failure</MenuItem>
+                <MenuItem value="denied">Denied</MenuItem>
               </Select>
             </FormControl>
             <TextField
               type="date"
               label="Start Date"
               value={dateRange.start}
-              onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+              onChange={(e) => { setDateRange({ ...dateRange, start: e.target.value }); setPage(0); }}
               InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 150 }}
             />
@@ -153,7 +173,7 @@ const AdminAuditLogs = () => {
               type="date"
               label="End Date"
               value={dateRange.end}
-              onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+              onChange={(e) => { setDateRange({ ...dateRange, end: e.target.value }); setPage(0); }}
               InputLabelProps={{ shrink: true }}
               sx={{ minWidth: 150 }}
             />
@@ -177,7 +197,7 @@ const AdminAuditLogs = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredLogs && filteredLogs.length > 0 ? (
+                {filteredLogs.length > 0 ? (
                   filteredLogs.map((log) => (
                     <TableRow key={log.id} hover>
                       <TableCell>
@@ -200,10 +220,12 @@ const AdminAuditLogs = () => {
                       </TableCell>
                       <TableCell>
                         <Box>
-                          <Typography variant="body2">{log.resourceName || log.resourceId}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {log.resourceType}
-                          </Typography>
+                          <Typography variant="body2">{log.resourceName || log.resourceId || log.resourceType}</Typography>
+                          {log.details?.path != null && (
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
+                              {String(log.details.method ?? 'GET')} {String(log.details.path)}
+                            </Typography>
+                          )}
                         </Box>
                       </TableCell>
                       <TableCell>
@@ -215,7 +237,7 @@ const AdminAuditLogs = () => {
                         <Chip
                           label={log.status}
                           size="small"
-                          color={log.status === 'success' ? 'success' : 'error'}
+                          color={log.status === 'success' ? 'success' : log.status === 'denied' ? 'warning' : 'error'}
                           sx={{
                             fontWeight: 600,
                           }}
@@ -233,6 +255,17 @@ const AdminAuditLogs = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          <TablePagination
+            component="div"
+            count={totalCount}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
+            showFirstButton
+            showLastButton
+          />
         </CardContent>
       </Card>
     </>

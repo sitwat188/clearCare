@@ -16,8 +16,11 @@ import type { ComplianceRecord, ComplianceMetrics } from '../types/compliance.ty
 import type { Notification } from '../types/notification.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
 
-// Check if we're in mock mode (development without backend)
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+// Use real API when backend URL is set, or when mock is explicitly disabled.
+// Use mock only when VITE_USE_MOCK_DATA is 'true', or when unset and no API URL (dev without backend).
+const USE_MOCK_DATA =
+  import.meta.env.VITE_USE_MOCK_DATA === 'true' ||
+  (import.meta.env.VITE_USE_MOCK_DATA !== 'false' && !import.meta.env.VITE_API_BASE_URL);
 
 /**
  * Helper to make API calls that show in network tab but return mock data
