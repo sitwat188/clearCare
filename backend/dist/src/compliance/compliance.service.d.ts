@@ -70,9 +70,9 @@ export declare class ComplianceService {
             deletedAt: Date | null;
             createdAt: Date;
             updatedAt: Date;
+            patientId: string;
             providerId: string;
             providerName: string;
-            patientId: string;
             patientName: string;
             title: string;
             type: string;

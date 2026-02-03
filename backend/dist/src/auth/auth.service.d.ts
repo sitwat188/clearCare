@@ -5,6 +5,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 export declare class AuthService {
     private prisma;
     private jwtService;
@@ -88,6 +89,9 @@ export declare class AuthService {
     }>;
     private sendPasswordResetEmail;
     resetPassword(dto: ResetPasswordDto): Promise<{
+        message: string;
+    }>;
+    changePassword(userId: string, dto: ChangePasswordDto): Promise<{
         message: string;
     }>;
     private generateTokens;

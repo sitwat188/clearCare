@@ -7,6 +7,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { VerifySetupTwoFactorDto } from './dto/verify-setup-two-factor.dto';
 import { DisableTwoFactorDto } from './dto/disable-two-factor.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
@@ -81,6 +82,11 @@ export declare class AuthController {
         message: string;
     }>;
     disableTwoFactor(dto: DisableTwoFactorDto, user: {
+        id: string;
+    }): Promise<{
+        message: string;
+    }>;
+    changePassword(dto: ChangePasswordDto, user: {
         id: string;
     }): Promise<{
         message: string;

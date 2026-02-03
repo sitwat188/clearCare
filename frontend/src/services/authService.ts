@@ -3,7 +3,7 @@
  * Handles OAuth flow and authentication
  */
 
-import { setAccessToken } from './api';
+import { setAccessToken, refreshAccessToken } from './api';
 import { apiEndpoints } from './apiEndpoints';
 import type { User, LoginCredentials, LoginResult, OAuthTokenResponse } from '../types/auth.types';
 
@@ -221,11 +221,11 @@ export const getCurrentUser = async (): Promise<User | null> => {
 };
 
 /**
- * Refresh access token
+ * Refresh access token using stored refresh token.
+ * Uses the same logic as the api interceptor (no Bearer sent).
  */
 export const refreshToken = async (): Promise<string | null> => {
-  // TODO: Implement actual token refresh
-  return null;
+  return refreshAccessToken();
 };
 
 /**
@@ -250,5 +250,22 @@ export const resetPassword = async (token: string, newPassword: string): Promise
     await apiEndpoints.auth.resetPassword(token, newPassword);
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : 'Failed to reset password');
+  }
+};
+
+/**
+ * Change password while logged in (requires current password)
+ */
+export const changePassword = async (
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> => {
+  try {
+    await apiEndpoints.auth.changePassword(currentPassword, newPassword);
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      (error instanceof Error ? error.message : 'Failed to change password');
+    throw new Error(message);
   }
 };

@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Container,
   Box,
@@ -31,7 +32,10 @@ import { ROUTES } from '../../config/routes';
 import { APP_NAME } from '../../utils/constants';
 import { resetPassword } from '../../services/authService';
 
+const PASSWORD_RESET_SUCCESS_KEY = 'passwordResetSuccess';
+
 const ResetPasswordPage = () => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
@@ -46,28 +50,28 @@ const ResetPasswordPage = () => {
   useEffect(() => {
     const tokenParam = searchParams.get('token');
     if (!tokenParam) {
-      setError('Invalid or missing reset token. Please request a new password reset.');
+      setError(t('auth.invalidResetToken'));
     } else {
       setToken(tokenParam);
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('auth.passwordsDoNotMatch'));
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
+      setError(t('auth.passwordMinLength'));
       return;
     }
 
     if (!token) {
-      setError('Invalid reset token');
+      setError(t('auth.invalidResetToken'));
       return;
     }
 
@@ -76,11 +80,12 @@ const ResetPasswordPage = () => {
     try {
       await resetPassword(token, password);
       setSuccess(true);
+      sessionStorage.setItem(PASSWORD_RESET_SUCCESS_KEY, '1');
       setTimeout(() => {
         navigate(ROUTES.LOGIN);
       }, 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset password. Please try again.');
+      setError(err instanceof Error ? err.message : t('auth.failedToResetPassword'));
     } finally {
       setLoading(false);
     }
@@ -121,7 +126,7 @@ const ResetPasswordPage = () => {
             {APP_NAME}
           </Typography>
           <Typography variant="body1" sx={{ color: alpha('#ffffff', 0.9), textAlign: 'center' }}>
-            Create New Password
+            {t('auth.createNewPassword')}
           </Typography>
         </Box>
 
@@ -141,10 +146,10 @@ const ResetPasswordPage = () => {
             }}
           >
             <Typography component="h2" variant="h5" sx={{ fontWeight: 700, color: 'white' }}>
-              Reset Password
+              {t('auth.resetPasswordPageTitle')}
             </Typography>
             <Typography variant="body2" sx={{ color: alpha('#ffffff', 0.9), mt: 1 }}>
-              Enter your new password below
+              {t('auth.enterNewPasswordBelow')}
             </Typography>
           </Box>
           <CardContent sx={{ p: 4 }}>
@@ -172,11 +177,10 @@ const ResetPasswordPage = () => {
                 </Box>
                 <Alert severity="success" sx={{ mb: 3 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                    Password Reset Successful
+                    {t('auth.passwordResetSuccessful')}
                   </Typography>
                   <Typography variant="body2">
-                    Your password has been successfully reset. You will be redirected to the login page in a few
-                    seconds.
+                    {t('auth.resetPasswordSuccessMessage')}
                   </Typography>
                 </Alert>
                 <Button
@@ -191,7 +195,7 @@ const ResetPasswordPage = () => {
                     },
                   }}
                 >
-                  Go to Login
+                  {t('auth.goToLogin')}
                 </Button>
               </Box>
             ) : (
@@ -204,7 +208,7 @@ const ResetPasswordPage = () => {
 
                 {!token && (
                   <Alert severity="warning" sx={{ mb: 2 }}>
-                    Invalid or expired reset token. Please request a new password reset link.
+                    {t('auth.invalidResetToken')}
                   </Alert>
                 )}
 
@@ -214,13 +218,13 @@ const ResetPasswordPage = () => {
                     required
                     fullWidth
                     name="password"
-                    label="New Password"
+                    label={t('auth.newPassword')}
                     type={showPassword ? 'text' : 'password'}
                     id="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={loading || !token}
-                    helperText="Must be at least 8 characters long"
+                    helperText={t('auth.passwordMinLength')}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
@@ -240,7 +244,7 @@ const ResetPasswordPage = () => {
                     required
                     fullWidth
                     name="confirmPassword"
-                    label="Confirm New Password"
+                    label={t('auth.confirmPassword')}
                     type={showConfirmPassword ? 'text' : 'password'}
                     id="confirmPassword"
                     value={confirmPassword}
@@ -280,7 +284,7 @@ const ResetPasswordPage = () => {
                     }}
                     disabled={loading || !token}
                   >
-                    {loading ? <CircularProgress size={24} color="inherit" /> : 'Reset Password'}
+                    {loading ? <CircularProgress size={24} color="inherit" /> : t('auth.resetPassword')}
                   </Button>
                 </Box>
 
@@ -301,7 +305,7 @@ const ResetPasswordPage = () => {
                     }}
                   >
                     <ArrowBackIcon sx={{ fontSize: 16 }} />
-                    Back to Login
+                    {t('auth.backToLogin')}
                   </Link>
                 </Box>
               </>

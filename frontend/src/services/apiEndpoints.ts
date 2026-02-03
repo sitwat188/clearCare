@@ -98,6 +98,20 @@ export const authEndpoints = {
   },
 
   /**
+   * POST /api/v1/auth/change-password
+   * Change password while logged in (requires current password)
+   */
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<ApiResponse<{ message: string }>> => {
+    return makeApiRequest('post', '/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+  },
+
+  /**
    * POST /api/v1/auth/verify-2fa
    * Complete login with 2FA code (TOTP or backup code)
    */

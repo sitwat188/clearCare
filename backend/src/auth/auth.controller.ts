@@ -17,8 +17,10 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { VerifySetupTwoFactorDto } from './dto/verify-setup-two-factor.dto';
 import { DisableTwoFactorDto } from './dto/disable-two-factor.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 export class AuthController {
@@ -48,6 +50,7 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
@@ -100,6 +103,16 @@ export class AuthController {
     @CurrentUser() user: { id: string },
   ) {
     return this.authService.disableTwoFactor(user.id, dto.password);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.authService.changePassword(user.id, dto);
   }
 
   @Get('me')

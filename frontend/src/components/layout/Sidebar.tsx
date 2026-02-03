@@ -48,6 +48,7 @@ import {
   Logout as LogoutIcon,
   Edit as EditIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import type { RootState } from '../../store/store';
 import { ROUTES } from '../../config/routes';
 import { logout } from '../../store/slices/authSlice';
@@ -58,6 +59,7 @@ const drawerWidth = 240;
 const collapsedWidth = 64;
 
 const Sidebar = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
@@ -95,41 +97,37 @@ const Sidebar = () => {
   };
 
   const getRoleLabel = (role: string) => {
-    const labels: Record<string, string> = {
-      patient: 'Patient',
-      provider: 'Provider',
-      administrator: 'Administrator',
-    };
-    return labels[role] || role;
+    const key = role === 'administrator' ? 'administrator' : role;
+    return t(`nav.${key}` as const) || role;
   };
 
   const getPatientMenuItems = () => [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: ROUTES.PATIENT.DASHBOARD },
-    { text: 'My Instructions', icon: <InstructionsIcon />, path: ROUTES.PATIENT.INSTRUCTIONS },
-    { text: 'Compliance', icon: <ComplianceIcon />, path: ROUTES.PATIENT.COMPLIANCE },
-    { text: 'History', icon: <HistoryIcon />, path: ROUTES.PATIENT.HISTORY },
-    { text: 'Notifications', icon: <NotificationsIcon />, path: ROUTES.PATIENT.NOTIFICATIONS },
+    { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.PATIENT.DASHBOARD },
+    { text: t('nav.myInstructions'), icon: <InstructionsIcon />, path: ROUTES.PATIENT.INSTRUCTIONS },
+    { text: t('nav.compliance'), icon: <ComplianceIcon />, path: ROUTES.PATIENT.COMPLIANCE },
+    { text: t('nav.history'), icon: <HistoryIcon />, path: ROUTES.PATIENT.HISTORY },
+    { text: t('nav.notifications'), icon: <NotificationsIcon />, path: ROUTES.PATIENT.NOTIFICATIONS },
   ];
 
   const getProviderMenuItems = () => [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: ROUTES.PROVIDER.DASHBOARD },
-    { text: 'My Patients', icon: <PatientsIcon />, path: ROUTES.PROVIDER.PATIENTS },
-    { text: 'Instructions', icon: <InstructionsIcon />, path: ROUTES.PROVIDER.INSTRUCTIONS },
-    { text: 'Create Instruction', icon: <CreateIcon />, path: ROUTES.PROVIDER.CREATE_INSTRUCTION },
-    { text: 'Compliance', icon: <ComplianceIcon />, path: ROUTES.PROVIDER.COMPLIANCE },
-    { text: 'Reports', icon: <ReportsIcon />, path: ROUTES.PROVIDER.REPORTS },
-    { text: 'Templates', icon: <TemplatesIcon />, path: ROUTES.PROVIDER.TEMPLATES },
-    { text: 'Notifications', icon: <NotificationsIcon />, path: ROUTES.PROVIDER.NOTIFICATIONS },
+    { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.PROVIDER.DASHBOARD },
+    { text: t('nav.myPatients'), icon: <PatientsIcon />, path: ROUTES.PROVIDER.PATIENTS },
+    { text: t('nav.instructions'), icon: <InstructionsIcon />, path: ROUTES.PROVIDER.INSTRUCTIONS },
+    { text: t('nav.createInstruction'), icon: <CreateIcon />, path: ROUTES.PROVIDER.CREATE_INSTRUCTION },
+    { text: t('nav.compliance'), icon: <ComplianceIcon />, path: ROUTES.PROVIDER.COMPLIANCE },
+    { text: t('nav.reports'), icon: <ReportsIcon />, path: ROUTES.PROVIDER.REPORTS },
+    { text: t('nav.templates'), icon: <TemplatesIcon />, path: ROUTES.PROVIDER.TEMPLATES },
+    { text: t('nav.notifications'), icon: <NotificationsIcon />, path: ROUTES.PROVIDER.NOTIFICATIONS },
   ];
 
   const getAdminMenuItems = () => [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: ROUTES.ADMIN.DASHBOARD },
-    { text: 'Users', icon: <UsersIcon />, path: ROUTES.ADMIN.USERS },
-    { text: 'Roles & Permissions', icon: <RolesIcon />, path: ROUTES.ADMIN.ROLES },
-    { text: 'Audit Logs', icon: <AuditIcon />, path: ROUTES.ADMIN.AUDIT_LOGS },
-    { text: 'Reports', icon: <ReportsIcon />, path: ROUTES.ADMIN.REPORTS },
-    { text: 'Settings', icon: <SettingsIcon />, path: ROUTES.ADMIN.SETTINGS },
-    { text: 'Notifications', icon: <NotificationsIcon />, path: ROUTES.ADMIN.NOTIFICATIONS },
+    { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.ADMIN.DASHBOARD },
+    { text: t('nav.users'), icon: <UsersIcon />, path: ROUTES.ADMIN.USERS },
+    { text: t('nav.roles'), icon: <RolesIcon />, path: ROUTES.ADMIN.ROLES },
+    { text: t('nav.auditLogs'), icon: <AuditIcon />, path: ROUTES.ADMIN.AUDIT_LOGS },
+    { text: t('nav.reports'), icon: <ReportsIcon />, path: ROUTES.ADMIN.REPORTS },
+    { text: t('nav.settings'), icon: <SettingsIcon />, path: ROUTES.ADMIN.SETTINGS },
+    { text: t('nav.notifications'), icon: <NotificationsIcon />, path: ROUTES.ADMIN.NOTIFICATIONS },
   ];
 
   const getMenuItems = () => {
@@ -267,7 +265,7 @@ const Sidebar = () => {
       {/* Navigation menu */}
       <List sx={{ flexGrow: 1, overflow: 'auto', py: 2 }}>
         {menuItems.map((item) => {
-          const isNotifications = item.text === 'Notifications';
+          const isNotifications = item.path?.includes('notifications');
           const showBadge = isNotifications && unreadCount > 0;
           const isSelected = location.pathname === item.path;
 
@@ -543,7 +541,7 @@ const Sidebar = () => {
             }}
           >
             <PersonIcon sx={{ mr: 1.5, fontSize: 20, color: 'text.secondary' }} />
-            Profile
+            {t('nav.profile')}
           </MenuItem>
           <MenuItem
             onClick={() => {
@@ -565,7 +563,7 @@ const Sidebar = () => {
             }}
           >
             <EditIcon sx={{ mr: 1.5, fontSize: 20, color: 'text.secondary' }} />
-            Settings
+            {t('nav.settings')}
           </MenuItem>
           <Divider sx={{ my: 0.5 }} />
           <MenuItem
@@ -580,7 +578,7 @@ const Sidebar = () => {
             }}
           >
             <LogoutIcon sx={{ mr: 1.5, fontSize: 20 }} />
-            Logout
+            {t('common.logout')}
           </MenuItem>
         </Menu>
       </Box>

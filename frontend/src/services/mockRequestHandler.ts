@@ -71,6 +71,10 @@ export const handleMockRequest = async (
     return { success: true, data: undefined };
   }
 
+  if (url.includes('/auth/change-password') && method === 'post') {
+    return { success: true, data: { message: 'Password has been changed successfully.' } };
+  }
+
   if (url.includes('/auth/me') && method === 'get') {
     const users = await mockApi.getAllUsers();
     return { data: users[0], success: true };

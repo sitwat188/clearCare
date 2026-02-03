@@ -33,7 +33,7 @@ api.interceptors.request.use(
 );
 
 /** Call backend POST /auth/refresh with refresh token; return new access token or null. */
-const refreshAccessToken = async (): Promise<string | null> => {
+export const refreshAccessToken = async (): Promise<string | null> => {
   const refreshToken = localStorage.getItem('refreshToken');
   if (!refreshToken) return null;
   try {

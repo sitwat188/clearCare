@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Container,
   Box,
@@ -24,6 +25,7 @@ import { APP_NAME } from '../../utils/constants';
 import { forgotPassword } from '../../services/authService';
 
 const ForgotPasswordPage = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -38,7 +40,7 @@ const ForgotPasswordPage = () => {
       await forgotPassword(email);
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset email. Please try again.');
+      setError(err instanceof Error ? err.message : t('auth.failedToSendReset'));
     } finally {
       setLoading(false);
     }
@@ -79,7 +81,7 @@ const ForgotPasswordPage = () => {
             {APP_NAME}
           </Typography>
           <Typography variant="body1" sx={{ color: alpha('#ffffff', 0.9), textAlign: 'center' }}>
-            Reset Your Password
+            {t('auth.resetYourPassword')}
           </Typography>
         </Box>
 
@@ -99,10 +101,10 @@ const ForgotPasswordPage = () => {
             }}
           >
             <Typography component="h2" variant="h5" sx={{ fontWeight: 700, color: 'white' }}>
-              Forgot Password?
+              {t('auth.forgotPasswordTitle')}
             </Typography>
             <Typography variant="body2" sx={{ color: alpha('#ffffff', 0.9), mt: 1 }}>
-              Enter your email to receive a password reset link
+              {t('auth.resetPasswordSubtitle')}
             </Typography>
           </Box>
           <CardContent sx={{ p: 4 }}>
@@ -130,15 +132,14 @@ const ForgotPasswordPage = () => {
                 </Box>
                 <Alert severity="success" sx={{ mb: 3 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                    Check your email
+                    {t('auth.checkYourEmail')}
                   </Typography>
-                  <Typography variant="body2">
-                    We've sent a password reset link to <strong>{email}</strong>. Please check your inbox and follow the
-                    instructions to reset your password.
+                  <Typography variant="body2" component="span">
+                    {t('auth.resetLinkSent', { email })}
                   </Typography>
                 </Alert>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2, textAlign: 'center' }}>
-                  Didn't receive the email? Check your spam folder or try again.
+                  {t('auth.didntReceiveEmail')}
                 </Typography>
                 <Button
                   fullWidth
@@ -149,7 +150,7 @@ const ForgotPasswordPage = () => {
                   }}
                   sx={{ mb: 2 }}
                 >
-                  Try Another Email
+                  {t('auth.tryAnotherEmail')}
                 </Button>
                 <Button
                   fullWidth
@@ -158,7 +159,7 @@ const ForgotPasswordPage = () => {
                   variant="text"
                   startIcon={<ArrowBackIcon />}
                 >
-                  Back to Login
+                  {t('auth.backToLogin')}
                 </Button>
               </Box>
             ) : (
@@ -175,7 +176,7 @@ const ForgotPasswordPage = () => {
                     required
                     fullWidth
                     id="email"
-                    label="Email Address"
+                    label={t('auth.emailLabel')}
                     name="email"
                     autoComplete="email"
                     autoFocus
@@ -183,7 +184,7 @@ const ForgotPasswordPage = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={loading}
-                    helperText="Enter the email address associated with your account"
+                    helperText={t('auth.enterEmailAssociated')}
                   />
                   <Button
                     type="submit"
@@ -205,7 +206,7 @@ const ForgotPasswordPage = () => {
                     }}
                     disabled={loading}
                   >
-                    {loading ? <CircularProgress size={24} color="inherit" /> : 'Send Reset Link'}
+                    {loading ? <CircularProgress size={24} color="inherit" /> : t('auth.sendResetLink')}
                   </Button>
                 </Box>
 
@@ -226,7 +227,7 @@ const ForgotPasswordPage = () => {
                     }}
                   >
                     <ArrowBackIcon sx={{ fontSize: 16 }} />
-                    Back to Login
+                    {t('auth.backToLogin')}
                   </Link>
                 </Box>
               </>

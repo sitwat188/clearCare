@@ -33,14 +33,17 @@ import {
   Language as LanguageIcon,
   Save as SaveIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import type { RootState } from '../../store/store';
 import PageHeader from '../../components/common/PageHeader';
+import i18n from '../../i18n';
 import { apiEndpoints } from '../../services/apiEndpoints';
 import {
   setupTwoFactor,
   verifySetupTwoFactor,
   disableTwoFactor,
+  changePassword as changePasswordService,
 } from '../../services/authService';
 
 interface SettingsState {
@@ -56,6 +59,7 @@ interface SettingsState {
 }
 
 const SettingsPage = () => {
+  const { t } = useTranslation();
   const user = useSelector((state: RootState) => state.auth.user);
   const [settings, setSettings] = useState<SettingsState>({
     emailNotifications: true,
@@ -63,7 +67,7 @@ const SettingsPage = () => {
     complianceReminders: true,
     instructionAlerts: true,
     appointmentReminders: true,
-    language: 'en',
+    language: i18n.language || 'en',
     theme: 'light',
     sessionTimeout: 30,
     twoFactorAuth: false,
@@ -81,6 +85,12 @@ const SettingsPage = () => {
   const [disablePassword, setDisablePassword] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [changePasswordDialogOpen, setChangePasswordDialogOpen] = useState(false);
+  const [changeCurrentPassword, setChangeCurrentPassword] = useState('');
+  const [changeNewPassword, setChangeNewPassword] = useState('');
+  const [changeConfirmPassword, setChangeConfirmPassword] = useState('');
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -111,13 +121,17 @@ const SettingsPage = () => {
       ...prev,
       [key]: value,
     }));
+    if (key === 'language' && typeof value === 'string') {
+      i18n.changeLanguage(value);
+      localStorage.setItem('language', value);
+    }
   };
 
   const handleSave = async () => {
     setIsSaving(true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     setIsSaving(false);
-    toast.success('Settings saved successfully');
+    toast.success(t('settings.settingsSaved'));
   };
 
   const handleEnable2FAClick = async () => {
@@ -134,7 +148,7 @@ const SettingsPage = () => {
         setupToken: data.setupToken,
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to start 2FA setup');
+      toast.error(err instanceof Error ? err.message : t('settings.twoFactorSetupFailed'));
       setSetupDialogOpen(false);
     } finally {
       setTwoFactorLoading(false);
@@ -149,7 +163,7 @@ const SettingsPage = () => {
       setBackupCodes(result.backupCodes);
       setTwoFactorEnabled(true);
       setSettings((prev) => ({ ...prev, twoFactorAuth: true }));
-      toast.success('2FA enabled successfully');
+      toast.success(t('settings.twoFactorEnabled'));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Invalid code');
     } finally {
@@ -168,7 +182,7 @@ const SettingsPage = () => {
       setDisablePassword('');
       toast.success('2FA disabled');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to disable 2FA');
+      toast.error(err instanceof Error ? err.message : t('settings.disable2FA'));
     } finally {
       setTwoFactorLoading(false);
     }
@@ -182,11 +196,48 @@ const SettingsPage = () => {
     setSetupStep('qr');
   };
 
+  const handleChangePasswordSubmit = async () => {
+    setChangePasswordError(null);
+    if (changeNewPassword !== changeConfirmPassword) {
+      setChangePasswordError(t('auth.passwordsDoNotMatch'));
+      return;
+    }
+    if (changeNewPassword.length < 8) {
+      setChangePasswordError(t('auth.passwordMinLength'));
+      return;
+    }
+    if (!changeCurrentPassword.trim()) {
+      setChangePasswordError(t('settings.currentPassword'));
+      return;
+    }
+    setChangePasswordLoading(true);
+    try {
+      await changePasswordService(changeCurrentPassword, changeNewPassword);
+      toast.success(t('settings.passwordChanged'));
+      setChangePasswordDialogOpen(false);
+      setChangeCurrentPassword('');
+      setChangeNewPassword('');
+      setChangeConfirmPassword('');
+    } catch (err) {
+      setChangePasswordError(err instanceof Error ? err.message : t('common.error'));
+    } finally {
+      setChangePasswordLoading(false);
+    }
+  };
+
+  const closeChangePasswordDialog = () => {
+    setChangePasswordDialogOpen(false);
+    setChangeCurrentPassword('');
+    setChangeNewPassword('');
+    setChangeConfirmPassword('');
+    setChangePasswordError(null);
+  };
+
   return (
     <>
       <PageHeader
-        title="Settings"
-        subtitle="Manage your account preferences and notification settings"
+        title={t('settings.title')}
+        subtitle={t('settings.subtitle')}
         action={
           <Button
             variant="contained"
@@ -194,7 +245,7 @@ const SettingsPage = () => {
             onClick={handleSave}
             disabled={isSaving}
           >
-            {isSaving ? 'Saving...' : 'Save Settings'}
+            {isSaving ? t('settings.saving') : t('settings.saveSettings')}
           </Button>
         }
       />
@@ -207,14 +258,14 @@ const SettingsPage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
                 <NotificationsIcon color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Notification Preferences
+                  {t('settings.notificationPreferences')}
                 </Typography>
               </Box>
               <List>
                 <ListItem>
                   <ListItemText
-                    primary="Email Notifications"
-                    secondary="Receive notifications via email"
+                    primary={t('settings.emailNotifications')}
+                    secondary={t('settings.emailNotificationsDesc')}
                   />
                   <ListItemSecondaryAction>
                     <Switch
@@ -226,8 +277,8 @@ const SettingsPage = () => {
                 <Divider />
                 <ListItem>
                   <ListItemText
-                    primary="Push Notifications"
-                    secondary="Receive browser push notifications"
+                    primary={t('settings.pushNotifications')}
+                    secondary={t('settings.pushNotificationsDesc')}
                   />
                   <ListItemSecondaryAction>
                     <Switch
@@ -239,8 +290,8 @@ const SettingsPage = () => {
                 <Divider />
                 <ListItem>
                   <ListItemText
-                    primary="Compliance Reminders"
-                    secondary="Get reminders for compliance tracking"
+                    primary={t('settings.complianceReminders')}
+                    secondary={t('settings.complianceRemindersDesc')}
                   />
                   <ListItemSecondaryAction>
                     <Switch
@@ -265,8 +316,8 @@ const SettingsPage = () => {
                 <Divider />
                 <ListItem>
                   <ListItemText
-                    primary="Appointment Reminders"
-                    secondary="Remind about upcoming appointments"
+                    primary={t('settings.appointmentReminders')}
+                    secondary={t('settings.appointmentRemindersDesc')}
                   />
                   <ListItemSecondaryAction>
                     <Switch
@@ -287,7 +338,7 @@ const SettingsPage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
                 <SecurityIcon color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Security Settings
+                  {t('settings.securitySettings')}
                 </Typography>
               </Box>
               <List>
@@ -300,11 +351,11 @@ const SettingsPage = () => {
                   }}
                 >
                   <ListItemText
-                    primary="Two-Factor Authentication"
+                    primary={t('settings.twoFactorAuth')}
                     secondary={
                       twoFactorEnabled
-                        ? 'Enabled — use authenticator app or backup codes at login'
-                        : 'Add an extra layer of security to your account'
+                        ? t('settings.twoFactorAuthEnabledDesc')
+                        : t('settings.twoFactorAuthDesc')
                     }
                     sx={{ flex: '1 1 0', minWidth: 0 }}
                   />
@@ -334,7 +385,7 @@ const SettingsPage = () => {
                 <ListItem>
                   <Box sx={{ width: '100%' }}>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Session Timeout (minutes)
+                      {t('settings.sessionTimeout')}
                     </Typography>
                     <TextField
                       type="number"
@@ -348,7 +399,7 @@ const SettingsPage = () => {
                 </ListItem>
               </List>
               <Alert severity="info" sx={{ mt: 2 }}>
-                For security reasons, changing your password requires email verification.
+                {t('settings.passwordChangeNote')}
               </Alert>
             </CardContent>
           </Card>
@@ -361,12 +412,12 @@ const SettingsPage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
                 <LanguageIcon color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  General Settings
+                  {t('settings.generalSettings')}
                 </Typography>
               </Box>
               <Box sx={{ mb: 3 }}>
                 <Typography variant="body2" sx={{ mb: 1.5 }}>
-                  Language
+                  {t('settings.language')}
                 </Typography>
                 <TextField
                   select
@@ -379,15 +430,15 @@ const SettingsPage = () => {
                   size="small"
                 >
                   <option value="en">English</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
-                  <option value="de">German</option>
+                  <option value="es">Español</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
                 </TextField>
               </Box>
               <Divider sx={{ my: 2 }} />
               <Box>
                 <Typography variant="body2" sx={{ mb: 1.5 }}>
-                  Theme
+                  {t('settings.theme')}
                 </Typography>
                 <TextField
                   select
@@ -399,9 +450,9 @@ const SettingsPage = () => {
                   }}
                   size="small"
                 >
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                  <option value="auto">Auto (System)</option>
+                  <option value="light">{t('settings.themeLight')}</option>
+                  <option value="dark">{t('settings.themeDark')}</option>
+                  <option value="auto">{t('settings.themeAuto')}</option>
                 </TextField>
               </Box>
             </CardContent>
@@ -415,12 +466,12 @@ const SettingsPage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
                 <EmailIcon color="primary" />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Account Information
+                  {t('settings.accountInformation')}
                 </Typography>
               </Box>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-                  Email Address
+                  {t('settings.emailAddress')}
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 500 }}>
                   {user?.email || 'N/A'}
@@ -428,15 +479,70 @@ const SettingsPage = () => {
               </Box>
               <Divider sx={{ my: 2 }} />
               <Alert severity="warning" sx={{ mb: 2 }}>
-                To change your email address or password, please contact your administrator or use the password reset feature.
+                {t('settings.changeEmailNote')}
               </Alert>
-              <Button variant="outlined" fullWidth>
-                Change Password
+              <Button variant="outlined" fullWidth onClick={() => setChangePasswordDialogOpen(true)}>
+                {t('nav.changePassword')}
               </Button>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
+
+      {/* Change Password Dialog */}
+      <Dialog open={changePasswordDialogOpen} onClose={closeChangePasswordDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>{t('settings.changePasswordTitle')}</DialogTitle>
+        <DialogContent>
+          {changePasswordError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setChangePasswordError(null)}>
+              {changePasswordError}
+            </Alert>
+          )}
+          <TextField
+            fullWidth
+            type="password"
+            label={t('settings.currentPassword')}
+            value={changeCurrentPassword}
+            onChange={(e) => setChangeCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+            sx={{ mt: 1, mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            type="password"
+            label={t('settings.newPasswordLabel')}
+            value={changeNewPassword}
+            onChange={(e) => setChangeNewPassword(e.target.value)}
+            autoComplete="new-password"
+            helperText={t('auth.passwordMinLength')}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            type="password"
+            label={t('settings.confirmNewPassword')}
+            value={changeConfirmPassword}
+            onChange={(e) => setChangeConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+            sx={{ mb: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeChangePasswordDialog}>{t('common.cancel')}</Button>
+          <Button
+            variant="contained"
+            onClick={handleChangePasswordSubmit}
+            disabled={
+              !changeCurrentPassword.trim() ||
+              !changeNewPassword.trim() ||
+              !changeConfirmPassword.trim() ||
+              changePasswordLoading
+            }
+          >
+            {changePasswordLoading ? <CircularProgress size={24} /> : t('common.save')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 2FA Setup Dialog */}
       <Dialog open={setupDialogOpen} onClose={closeSetupDialog} maxWidth="sm" fullWidth>
@@ -466,7 +572,7 @@ const SettingsPage = () => {
           {setupData && !backupCodes && setupStep === 'qr' && (
             <Box sx={{ textAlign: 'center', py: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code below.
+                {t('settings.twoFactorScanQR')}
               </Typography>
               <Box component="img" src={setupData.qrCodeDataUrl} alt="QR Code" sx={{ maxWidth: 256, mx: 'auto' }} />
             </Box>
@@ -486,17 +592,17 @@ const SettingsPage = () => {
         <DialogActions>
           {backupCodes ? (
             <Button onClick={closeSetupDialog} color="primary">
-              Done
+              {t('common.done')}
             </Button>
           ) : setupData ? (
             <>
-              <Button onClick={closeSetupDialog}>Cancel</Button>
+              <Button onClick={closeSetupDialog}>{t('common.cancel')}</Button>
               <Button
                 variant="contained"
                 onClick={handleVerifySetup}
                 disabled={setupCode.length !== 6 || twoFactorLoading}
               >
-                {twoFactorLoading ? <CircularProgress size={24} /> : 'Verify & enable'}
+                {twoFactorLoading ? <CircularProgress size={24} /> : t('settings.twoFactorVerifyEnable')}
               </Button>
             </>
           ) : null}
@@ -505,29 +611,29 @@ const SettingsPage = () => {
 
       {/* Disable 2FA Dialog */}
       <Dialog open={disableDialogOpen} onClose={() => setDisableDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Disable Two-Factor Authentication</DialogTitle>
+        <DialogTitle>{t('settings.twoFactorDisableTitle')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Enter your current password to disable 2FA.
+            {t('settings.twoFactorDisableMessage')}
           </Typography>
           <TextField
             fullWidth
             type="password"
-            label="Password"
+            label={t('common.password')}
             value={disablePassword}
             onChange={(e) => setDisablePassword(e.target.value)}
             autoComplete="current-password"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDisableDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setDisableDialogOpen(false)}>{t('common.cancel')}</Button>
           <Button
             variant="contained"
             color="secondary"
             onClick={handleDisable2FA}
             disabled={!disablePassword.trim() || twoFactorLoading}
           >
-            {twoFactorLoading ? <CircularProgress size={24} /> : 'Disable 2FA'}
+            {twoFactorLoading ? <CircularProgress size={24} /> : t('settings.disable2FA')}
           </Button>
         </DialogActions>
       </Dialog>

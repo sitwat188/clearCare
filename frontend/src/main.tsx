@@ -7,6 +7,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+import './i18n';
 import App from './App';
 import { store } from './store/store';
 import { theme } from './config/theme';

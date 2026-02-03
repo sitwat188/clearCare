@@ -3,9 +3,11 @@
  * Handles user authentication
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'react-toastify';
 import {
   Container,
   Box,
@@ -25,7 +27,10 @@ import { login as loginService, verifyTwoFactor } from '../../services/authServi
 import { ROUTES } from '../../config/routes';
 import { APP_NAME } from '../../utils/constants';
 
+const PASSWORD_RESET_SUCCESS_KEY = 'passwordResetSuccess';
+
 const LoginPage = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
@@ -34,6 +39,13 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (sessionStorage.getItem(PASSWORD_RESET_SUCCESS_KEY)) {
+      sessionStorage.removeItem(PASSWORD_RESET_SUCCESS_KEY);
+      toast.success(t('auth.resetPasswordSuccess'));
+    }
+  }, [t]);
 
   const step = twoFactorToken ? '2fa' : 'credentials';
 
@@ -62,7 +74,7 @@ const LoginPage = () => {
         navigate(redirectPath);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+      setError(err instanceof Error ? err.message : t('auth.loginFailed'));
     } finally {
       setLoading(false);
     }
@@ -84,7 +96,7 @@ const LoginPage = () => {
           : ROUTES.ADMIN.DASHBOARD;
       navigate(redirectPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '2FA verification failed.');
+      setError(err instanceof Error ? err.message : t('auth.twoFactorVerifyFailed'));
     } finally {
       setLoading(false);
     }
@@ -131,7 +143,7 @@ const LoginPage = () => {
             {APP_NAME}
           </Typography>
           <Typography variant="body1" sx={{ color: alpha('#ffffff', 0.9), textAlign: 'center' }}>
-            Post-Visit Care & Follow-Up Compliance Platform
+            {t('common.appDescription')}
           </Typography>
         </Box>
 
@@ -151,12 +163,10 @@ const LoginPage = () => {
             }}
           >
             <Typography component="h2" variant="h5" sx={{ fontWeight: 700, color: 'white' }}>
-              {step === '2fa' ? 'Two-Factor Authentication' : 'Welcome Back'}
+              {step === '2fa' ? t('auth.twoFactorTitle') : t('auth.welcomeBack')}
             </Typography>
             <Typography variant="body2" sx={{ color: alpha('#ffffff', 0.9), mt: 1 }}>
-              {step === '2fa'
-                ? 'Enter the 6-digit code from your authenticator app or a backup code'
-                : 'Sign in to access your care instructions'}
+              {step === '2fa' ? t('auth.twoFactorSubtitle') : t('auth.signInSubtitle')}
             </Typography>
           </Box>
           <CardContent sx={{ p: 4 }}>
@@ -173,9 +183,9 @@ const LoginPage = () => {
                   required
                   fullWidth
                   id="twoFactorCode"
-                  label="Authentication code"
+                  label={t('auth.authCodeLabel')}
                   name="code"
-                  placeholder="000000 or backup code"
+                  placeholder={t('auth.authCodePlaceholder')}
                   autoComplete="one-time-code"
                   autoFocus
                   value={twoFactorCode}
@@ -192,7 +202,7 @@ const LoginPage = () => {
                   onClick={handleBackToCredentials}
                   disabled={loading}
                 >
-                  Back to sign in
+                  {t('auth.backToSignIn')}
                 </Button>
                 <Button
                   type="submit"
@@ -214,7 +224,7 @@ const LoginPage = () => {
                   }}
                   disabled={loading || !twoFactorCode.trim()}
                 >
-                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Verify'}
+                  {loading ? <CircularProgress size={24} color="inherit" /> : t('common.verify')}
                 </Button>
               </Box>
             ) : (
@@ -224,7 +234,7 @@ const LoginPage = () => {
                   required
                   fullWidth
                   id="email"
-                  label="Email Address"
+                  label={t('auth.emailLabel')}
                   name="email"
                   autoComplete="email"
                   autoFocus
@@ -237,7 +247,7 @@ const LoginPage = () => {
                   required
                   fullWidth
                   name="password"
-                  label="Password"
+                  label={t('auth.passwordLabel')}
                   type="password"
                   id="password"
                   autoComplete="current-password"
@@ -259,7 +269,7 @@ const LoginPage = () => {
                       },
                     }}
                   >
-                    Forgot password?
+                    {t('auth.forgotPassword')}
                   </Link>
                 </Box>
                 <Button
@@ -282,7 +292,7 @@ const LoginPage = () => {
                   }}
                   disabled={loading}
                 >
-                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
+                  {loading ? <CircularProgress size={24} color="inherit" /> : t('common.signIn')}
                 </Button>
               </Box>
             )}
@@ -298,17 +308,17 @@ const LoginPage = () => {
               }}
             >
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: 'primary.main' }}>
-                Demo Credentials:
+                {t('auth.demoCredentials')}
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  👤 Patient: <strong>patient1@example.com</strong> / password123
+                  👤 {t('auth.patientDemo', { email: 'patient1@example.com' })}
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  👨‍⚕️ Provider: <strong>provider1@example.com</strong> / password123
+                  👨‍⚕️ {t('auth.providerDemo', { email: 'provider1@example.com' })}
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  ⚙️ Admin: <strong>admin@example.com</strong> / password123
+                  ⚙️ {t('auth.adminDemo', { email: 'admin@example.com' })}
                 </Typography>
               </Box>
             </Box>

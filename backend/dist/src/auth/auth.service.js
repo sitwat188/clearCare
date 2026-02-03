@@ -504,6 +504,26 @@ let AuthService = class AuthService {
             message: 'Password has been reset successfully. You can now log in.',
         };
     }
+    async changePassword(userId, dto) {
+        const user = await this.prisma.user.findFirst({
+            where: { id: userId, deletedAt: null },
+        });
+        if (!user || !user.passwordHash) {
+            throw new common_1.UnauthorizedException('User not found');
+        }
+        const isCurrentValid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+        if (!isCurrentValid) {
+            throw new common_1.UnauthorizedException('Current password is incorrect');
+        }
+        const passwordHash = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash },
+        });
+        return {
+            message: 'Password has been changed successfully.',
+        };
+    }
     async generateTokens(userId, email, role) {
         const payload = {
             sub: userId,

@@ -23,8 +23,10 @@ const refresh_token_dto_1 = require("./dto/refresh-token.dto");
 const verify_two_factor_dto_1 = require("./dto/verify-two-factor.dto");
 const verify_setup_two_factor_dto_1 = require("./dto/verify-setup-two-factor.dto");
 const disable_two_factor_dto_1 = require("./dto/disable-two-factor.dto");
+const change_password_dto_1 = require("./dto/change-password.dto");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
 const current_user_decorator_1 = require("./decorators/current-user.decorator");
+const throttler_1 = require("@nestjs/throttler");
 let AuthController = class AuthController {
     authService;
     constructor(authService) {
@@ -62,6 +64,9 @@ let AuthController = class AuthController {
     }
     async disableTwoFactor(dto, user) {
         return this.authService.disableTwoFactor(user.id, dto.password);
+    }
+    async changePassword(dto, user) {
+        return this.authService.changePassword(user.id, dto);
     }
     async getCurrentUser(user) {
         return this.authService.validateUser(user.id);
@@ -104,6 +109,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)('forgot-password'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, throttler_1.Throttle)({ default: { limit: 3, ttl: 60000 } }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [forgot_password_dto_1.ForgotPasswordDto]),
@@ -155,6 +161,16 @@ __decorate([
     __metadata("design:paramtypes", [disable_two_factor_dto_1.DisableTwoFactorDto, Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "disableTwoFactor", null);
+__decorate([
+    (0, common_1.Post)('change-password'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [change_password_dto_1.ChangePasswordDto, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "changePassword", null);
 __decorate([
     (0, common_1.Get)('me'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

@@ -142,6 +142,84 @@ async function main() {
 
   console.log('Seeded patients:', patient1.id, patient2.id, patient3.id);
 
+  // ---------------------------------------------------------------------------
+  // Audit logs: sample activity so Admin > Audit Logs shows data
+  // ---------------------------------------------------------------------------
+  const adminName = `${admin.firstName} ${admin.lastName}`;
+  const now = new Date();
+  const oneHour = 60 * 60 * 1000;
+  const oneDay = 24 * oneHour;
+
+  const auditLogData = [
+    {
+      userId: admin.id,
+      userEmail: admin.email,
+      userName: adminName,
+      action: 'login',
+      resourceType: 'auth',
+      ipAddress: '192.168.1.10',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      status: 'success',
+      timestamp: new Date(now.getTime() - 1 * oneHour),
+    },
+    {
+      userId: admin.id,
+      userEmail: admin.email,
+      userName: adminName,
+      action: 'create',
+      resourceType: 'user',
+      resourceId: patient2User.id,
+      resourceName: patient2User.email,
+      ipAddress: '192.168.1.10',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      status: 'success',
+      details: { role: 'patient' },
+      timestamp: new Date(now.getTime() - 2 * oneDay),
+    },
+    {
+      userId: provider.id,
+      userEmail: provider.email,
+      userName: `${provider.firstName} ${provider.lastName}`,
+      action: 'login',
+      resourceType: 'auth',
+      ipAddress: '192.168.1.101',
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      status: 'success',
+      timestamp: new Date(now.getTime() - 3 * oneHour),
+    },
+    {
+      userId: provider.id,
+      userEmail: provider.email,
+      userName: `${provider.firstName} ${provider.lastName}`,
+      action: 'write',
+      resourceType: 'instruction',
+      resourceId: 'inst-1',
+      resourceName: 'Post-Surgery Medication Instructions',
+      ipAddress: '192.168.1.101',
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      status: 'success',
+      details: { patientId: patient1.id },
+      timestamp: new Date(now.getTime() - 5 * oneHour),
+    },
+    {
+      userId: patient1User.id,
+      userEmail: patient1User.email,
+      userName: `${patient1User.firstName} ${patient1User.lastName}`,
+      action: 'login',
+      resourceType: 'auth',
+      ipAddress: '192.168.1.100',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      status: 'success',
+      timestamp: new Date(now.getTime() - 2 * oneHour),
+    },
+  ];
+
+  await prisma.auditLog.createMany({
+    data: auditLogData,
+    skipDuplicates: true,
+  });
+  console.log('Seeded audit logs:', auditLogData.length);
+
   const providerName = `${provider.firstName} ${provider.lastName}`;
   const patient1Name = `${patient1User.firstName} ${patient1User.lastName}`;
   const patient2Name = `${patient2User.firstName} ${patient2User.lastName}`;
