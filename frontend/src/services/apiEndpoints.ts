@@ -1,10 +1,6 @@
 /**
  * API Endpoints
- * REST API endpoint definitions that return mock data
- * These will be replaced with actual backend API calls when backend is implemented
- * 
- * All endpoints make actual HTTP requests using axios so they appear in the network tab.
- * Mock data is returned via response interceptor in development mode.
+ * REST API endpoint definitions. All requests go to the backend.
  */
 
 import api from './api';
@@ -16,38 +12,14 @@ import type { ComplianceRecord, ComplianceMetrics } from '../types/compliance.ty
 import type { Notification } from '../types/notification.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
 
-// Use real API when backend URL is set, or when mock is explicitly disabled.
-// Use mock only when VITE_USE_MOCK_DATA is 'true', or when unset and no API URL (dev without backend).
-const USE_MOCK_DATA =
-  import.meta.env.VITE_USE_MOCK_DATA === 'true' ||
-  (import.meta.env.VITE_USE_MOCK_DATA !== 'false' && !import.meta.env.VITE_API_BASE_URL);
-
 /**
- * Helper to make API calls that show in network tab but return mock data
- * The axios interceptor will handle returning mock data
+ * Make API request. Expects backend to return ApiResponse<T> in response.data.
  */
 const makeApiRequest = async <T>(
   method: 'get' | 'post' | 'put' | 'delete',
   url: string,
   data?: any
 ): Promise<ApiResponse<T>> => {
-  // If dev mock mode is enabled, call the mock handler directly.
-  // This keeps the implementation simple and avoids complex axios interceptor logic.
-  if (USE_MOCK_DATA) {
-    try {
-      const { handleMockRequest } = await import('../services/mockRequestHandler.ts');
-      const mockResponse = await handleMockRequest({ url, method, data } as any);
-      if (mockResponse && typeof mockResponse === 'object' && 'success' in mockResponse) {
-        return mockResponse as ApiResponse<T>;
-      }
-      throw new Error(`[API] No mock handler returned data for ${method.toUpperCase()} ${url}`);
-    } catch (err) {
-      console.error(`[makeApiRequest][mock] Error for ${method.toUpperCase()} ${url}:`, err);
-      throw err;
-    }
-  }
-
-  // Production / real-backend path: expect axios to return ApiResponse<T> in response.data
   const response = await api[method]<ApiResponse<T>>(url, data);
   if (!response || !response.data || typeof response.data !== 'object' || !('success' in response.data)) {
     throw new Error(`[API] Unexpected response shape for ${method.toUpperCase()} ${url}`);

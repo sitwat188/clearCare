@@ -37,21 +37,7 @@ const generateRandomString = (length: number): string => {
 export const login = async (credentials: LoginCredentials): Promise<LoginResult> => {
   try {
     console.log('[AuthService] Attempting login with:', credentials.email);
-    
-    // Check if using mock data or real backend
-    const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
-    
-    if (USE_MOCK_DATA) {
-      // Use existing mock endpoint
-      const response = await apiEndpoints.auth.login(credentials);
-      if (response.success && response.data) {
-        setAccessToken(response.data.token);
-        return response.data;
-      }
-      throw new Error('Login failed - invalid response');
-    }
-    
-    // Real backend - call directly with axios
+
     const { api } = await import('./api');
     const response = await api.post('/auth/login', credentials);
 
@@ -203,14 +189,6 @@ export const logout = (): void => {
  */
 export const getCurrentUser = async (): Promise<User | null> => {
   try {
-    const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
-    
-    if (USE_MOCK_DATA) {
-      // Mock mode - return null and let components handle it
-      return null;
-    }
-    
-    // Real backend - fetch from /auth/me
     const { api } = await import('./api');
     const response = await api.get('/auth/me');
     return response.data;

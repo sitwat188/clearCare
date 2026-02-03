@@ -119,7 +119,7 @@ const AdminRoles = () => {
       } as any);
     },
     onSuccess: async (savedRole) => {
-      // Update cache immediately (mock backend doesn't persist yet)
+      // Update cache after save
       queryClient.setQueryData(['admin-roles'], (old: any) => {
         const prev = Array.isArray(old) ? old : [];
         const exists = prev.some((r: any) => r?.id === savedRole.id);
@@ -145,7 +145,7 @@ const AdminRoles = () => {
         return prev.filter((r: any) => r?.id !== roleId);
       });
 
-      toast.success('Role deleted (mock)');
+      toast.success('Role deleted');
       setDeleteDialogOpen(false);
       setSelectedRole(null);
       await queryClient.invalidateQueries({ queryKey: ['admin-roles'] });

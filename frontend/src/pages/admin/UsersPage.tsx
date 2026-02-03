@@ -119,7 +119,7 @@ const AdminUsers = () => {
         organizationId: form.role === 'patient' ? undefined : 'org-1',
       };
 
-      // basic client-side duplicate check (mock data has no persistence)
+      // basic client-side duplicate check before submit
       if (users?.some((u) => u.email.toLowerCase() === email)) {
         throw new Error('A user with this email already exists');
       }
@@ -127,11 +127,11 @@ const AdminUsers = () => {
       return adminService.createUser(payload as any);
     },
     onSuccess: async (createdUser) => {
-      toast.success('User created (mock)');
+      toast.success('User created');
       setAddDialogOpen(false);
       setCreateForm({ firstName: '', lastName: '', email: '', role: 'patient' });
 
-      // Update cache immediately (mock backend doesn't persist yet)
+      // Update cache after create
       queryClient.setQueryData(['admin-users'], (old: any) => {
         const prev = Array.isArray(old) ? old : [];
         return [createdUser, ...prev];
@@ -148,11 +148,11 @@ const AdminUsers = () => {
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => adminService.deleteUser(userId),
     onSuccess: async (_data, userId) => {
-      toast.success('User deleted (mock)');
+      toast.success('User deleted');
       setDeleteDialogOpen(false);
       setSelectedUser(null);
 
-      // Update cache immediately (mock backend doesn't persist yet)
+      // Update cache after delete
       queryClient.setQueryData(['admin-users'], (old: any) => {
         const prev = Array.isArray(old) ? old : [];
         return prev.filter((u: any) => u?.id !== userId);
@@ -496,7 +496,7 @@ const AdminUsers = () => {
               </Select>
             </FormControl>
             <Alert severity="info">
-              Permissions will be assigned automatically based on the selected role (mock behavior). Creating Administrator users is disabled for now.
+              Permissions will be assigned automatically based on the selected role. Creating Administrator users is disabled for now.
             </Alert>
           </Box>
         </DialogContent>

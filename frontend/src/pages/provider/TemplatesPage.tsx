@@ -1,9 +1,9 @@
 /**
  * Provider Templates Page
- * Manage instruction templates (API when backend connected; localStorage in mock mode)
+ * Manage instruction templates via backend API
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -45,36 +45,6 @@ import { apiEndpoints } from '../../services/apiEndpoints';
 import type { InstructionType } from '../../types/instruction.types';
 import PageHeader from '../../components/common/PageHeader';
 
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
-const TEMPLATES_STORAGE_KEY = 'clearcare_provider_templates';
-
-const mockTemplates = [
-  {
-    id: 'template-1',
-    name: 'Post-Surgery Antibiotic',
-    type: 'medication' as InstructionType,
-    description: 'Standard post-surgery antibiotic protocol',
-    content: 'Take the prescribed antibiotic as directed to prevent infection.',
-    createdAt: '2024-01-15T10:00:00Z',
-  },
-  {
-    id: 'template-2',
-    name: 'Low-Sodium Diet',
-    type: 'lifestyle' as InstructionType,
-    description: 'Dietary restrictions for hypertension',
-    content: 'Follow a low-sodium diet to help manage blood pressure.',
-    createdAt: '2024-01-10T10:00:00Z',
-  },
-  {
-    id: 'template-3',
-    name: 'Follow-Up Appointment',
-    type: 'follow-up' as InstructionType,
-    description: 'Standard follow-up appointment reminder',
-    content: 'Please schedule a follow-up appointment within 2 weeks.',
-    createdAt: '2024-01-05T10:00:00Z',
-  },
-];
-
 export type ProviderTemplate = {
   id: string;
   name: string;
@@ -89,23 +59,7 @@ const ProviderTemplates = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [localTemplates, setLocalTemplates] = useState<ProviderTemplate[]>(() => {
-    if (USE_MOCK_DATA) {
-      try {
-        const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) return parsed as ProviderTemplate[];
-        }
-      } catch {
-        // ignore
-      }
-      return mockTemplates as ProviderTemplate[];
-    }
-    return [];
-  });
-
-  const { data: apiTemplates = [], isLoading } = useQuery({
+  const { data: templates = [], isLoading } = useQuery({
     queryKey: ['provider-templates'],
     queryFn: async () => {
       const res = await apiEndpoints.provider.getTemplates();
@@ -120,7 +74,6 @@ const ProviderTemplates = () => {
         updatedAt: t.updatedAt,
       }));
     },
-    enabled: !USE_MOCK_DATA,
   });
 
   const createMutation = useMutation({
@@ -156,8 +109,6 @@ const ProviderTemplates = () => {
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to delete template'),
   });
 
-  const templates = USE_MOCK_DATA ? localTemplates : apiTemplates;
-
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<ProviderTemplate | null>(null);
   const [templateForm, setTemplateForm] = useState({
@@ -166,16 +117,6 @@ const ProviderTemplates = () => {
     description: '',
     content: '',
   });
-
-  useEffect(() => {
-    if (USE_MOCK_DATA) {
-      try {
-        localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(localTemplates));
-      } catch {
-        // ignore
-      }
-    }
-  }, [USE_MOCK_DATA, localTemplates]);
 
   const getTypeIcon = (type: InstructionType) => {
     switch (type) {
@@ -215,12 +156,7 @@ const ProviderTemplates = () => {
   };
 
   const handleDeleteTemplate = (id: string) => {
-    if (USE_MOCK_DATA) {
-      setLocalTemplates((prev) => prev.filter((t) => t.id !== id));
-      toast.success('Template deleted');
-    } else {
-      deleteMutation.mutate(id);
-    }
+    deleteMutation.mutate(id);
   };
 
   const handleUseTemplate = (template: ProviderTemplate) => {
@@ -246,36 +182,7 @@ const ProviderTemplates = () => {
       return;
     }
 
-    const now = new Date().toISOString();
     const body = { name, type: templateForm.type, description: description || undefined, content };
-
-    if (USE_MOCK_DATA) {
-      if (selectedTemplate) {
-        setLocalTemplates((prev) =>
-          prev.map((t) =>
-            t.id === selectedTemplate.id
-              ? { ...t, name, type: templateForm.type, description, content, updatedAt: now }
-              : t
-          )
-        );
-        toast.success('Template updated');
-      } else {
-        const newTemplate: ProviderTemplate = {
-          id: `template-${Date.now()}`,
-          name,
-          type: templateForm.type,
-          description,
-          content,
-          createdAt: now,
-          updatedAt: now,
-        };
-        setLocalTemplates((prev) => [newTemplate, ...prev]);
-        toast.success('Template created');
-      }
-      setDialogOpen(false);
-      setSelectedTemplate(null);
-      return;
-    }
 
     if (selectedTemplate) {
       updateMutation.mutate(
@@ -301,7 +208,7 @@ const ProviderTemplates = () => {
         }
       />
 
-      {!USE_MOCK_DATA && isLoading ? (
+      {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
           <CircularProgress />
         </Box>

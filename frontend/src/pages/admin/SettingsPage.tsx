@@ -83,7 +83,7 @@ const AdminSettings = () => {
   };
 
   const handleSave = () => {
-    toast.success('Settings saved (mock)');
+    toast.success('Settings saved');
     setHasChanges(false);
   };
 

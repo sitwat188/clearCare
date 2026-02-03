@@ -110,7 +110,7 @@ const CreateInstruction = () => {
       return instructionService.createInstruction(instructionPayload);
     },
     onSuccess: (createdInstruction) => {
-      // Update cache immediately (mock backend doesn't persist new instructions yet)
+      // Update cache after create
       queryClient.setQueryData(['provider-instructions', user?.id], (old: any) => {
         const prev = Array.isArray(old) ? old : [];
         return [createdInstruction, ...prev];
