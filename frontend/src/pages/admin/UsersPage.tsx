@@ -127,7 +127,7 @@ const AdminUsers = () => {
       return adminService.createUser(payload as any);
     },
     onSuccess: async (createdUser) => {
-      toast.success('User created');
+      toast.success('User created. Please ask the user to set their password via Forgot password on the login page.');
       setAddDialogOpen(false);
       setCreateForm({ firstName: '', lastName: '', email: '', role: 'patient' });
 
@@ -480,6 +480,7 @@ const AdminUsers = () => {
               onChange={(e) => setCreateForm((p) => ({ ...p, email: e.target.value }))}
               fullWidth
               type="email"
+              autoComplete="off"
             />
             <FormControl fullWidth>
               <InputLabel>Role</InputLabel>
@@ -495,8 +496,8 @@ const AdminUsers = () => {
                 </MenuItem>
               </Select>
             </FormControl>
-            <Alert severity="info">
-              Permissions will be assigned automatically based on the selected role. Creating Administrator users is disabled for now.
+            <Alert severity="info" sx={{ mt: 0 }}>
+              Permissions are assigned by role.
             </Alert>
           </Box>
         </DialogContent>

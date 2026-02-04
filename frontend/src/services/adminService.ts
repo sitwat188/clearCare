@@ -39,8 +39,11 @@ export const adminService = {
     try {
       const response = await apiEndpoints.admin.createUser(userData);
       return response.data;
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to create user');
+    } catch (error: unknown) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (error instanceof Error ? error.message : 'Failed to create user');
+      throw new Error(message);
     }
   },
 

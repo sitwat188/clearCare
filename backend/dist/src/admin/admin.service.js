@@ -188,8 +188,11 @@ let AdminService = class AdminService {
         const existing = await this.prisma.user.findUnique({
             where: { email },
         });
-        if (existing && !existing.deletedAt) {
-            throw new common_1.ConflictException('A user with this email already exists');
+        if (existing) {
+            if (!existing.deletedAt) {
+                throw new common_1.ConflictException('A user with this email already exists');
+            }
+            throw new common_1.ConflictException('This email was previously used by a deleted account. Use a different email or contact support to restore the account.');
         }
         const rawPassword = dto.password ?? (0, crypto_1.randomBytes)(DEFAULT_PASSWORD_LENGTH).toString('hex');
         const passwordHash = await bcrypt.hash(rawPassword, SALT_ROUNDS);
