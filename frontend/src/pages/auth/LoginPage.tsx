@@ -20,8 +20,14 @@ import {
   CircularProgress,
   alpha,
   Link,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
-import { LocalHospital as HospitalIcon } from '@mui/icons-material';
+import {
+  LocalHospital as HospitalIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+} from '@mui/icons-material';
 import { loginSuccess } from '../../store/slices/authSlice';
 import { login as loginService, verifyTwoFactor } from '../../services/authService';
 import { ROUTES } from '../../config/routes';
@@ -29,16 +35,31 @@ import { APP_NAME } from '../../utils/constants';
 
 const PASSWORD_RESET_SUCCESS_KEY = 'passwordResetSuccess';
 
+// Matches backend seed (prisma/seed.ts)
+const DEMO_PASSWORD = 'Password123!';
+const DEMO_USERS = [
+  { email: 'patient1@example.com', labelKey: 'auth.patientDemo', icon: '👤' },
+  { email: 'provider1@example.com', labelKey: 'auth.providerDemo', icon: '👨‍⚕️' },
+  { email: 'admin@example.com', labelKey: 'auth.adminDemo', icon: '⚙️' },
+] as const;
+
 const LoginPage = () => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  const fillDemoCredentials = (demoEmail: string) => {
+    setEmail(demoEmail);
+    setPassword(DEMO_PASSWORD);
+    setError(null);
+  };
 
   useEffect(() => {
     if (sessionStorage.getItem(PASSWORD_RESET_SUCCESS_KEY)) {
@@ -248,12 +269,27 @@ const LoginPage = () => {
                   fullWidth
                   name="password"
                   label={t('auth.passwordLabel')}
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   id="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          edge="end"
+                          size="small"
+                        >
+                          {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
                 />
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
                   <Link
@@ -309,17 +345,35 @@ const LoginPage = () => {
             >
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: 'primary.main' }}>
                 {t('auth.demoCredentials')}
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  👤 {t('auth.patientDemo', { email: 'patient1@example.com' })}
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  👨‍⚕️ {t('auth.providerDemo', { email: 'provider1@example.com' })}
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  ⚙️ {t('auth.adminDemo', { email: 'admin@example.com' })}
-                </Typography>
+              </Typography>         
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {DEMO_USERS.map(({ email: demoEmail, labelKey, icon }) => (
+                  <Button
+                    key={demoEmail}
+                    type="button"
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    onClick={() => fillDemoCredentials(demoEmail)}
+                    disabled={loading}
+                    sx={{
+                      justifyContent: 'flex-start',
+                      textTransform: 'none',
+                      py: 1,
+                      borderColor: alpha('#2563eb', 0.3),
+                      color: 'primary.main',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        bgcolor: alpha('#2563eb', 0.08),
+                      },
+                    }}
+                  >
+                    <Box component="span" sx={{ mr: 1 }}>
+                      {icon}
+                    </Box>
+                    {t(labelKey, { email: demoEmail })}
+                  </Button>
+                ))}
               </Box>
             </Box>
             )}
