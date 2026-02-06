@@ -31,6 +31,8 @@ import ProviderCompliance from './pages/provider/CompliancePage';
 import ProviderReports from './pages/provider/ReportsPage';
 import ProviderTemplates from './pages/provider/TemplatesPage';
 import ProviderNotifications from './pages/patient/NotificationsPage';
+import MedplumPatientsPage from './pages/provider/MedplumPatientsPage';
+import MedplumPatientDetailPage from './pages/provider/MedplumPatientDetailPage';
 
 // Admin pages
 import AdminDashboard from './pages/admin/DashboardPage';
@@ -84,6 +86,8 @@ function App() {
                       <Route path="/provider/dashboard" element={<ProviderDashboard />} />
                       <Route path="/provider/patients" element={<ProviderPatients />} />
                       <Route path="/provider/patients/:id" element={<ProviderPatientDetail />} />
+                      <Route path="/provider/medplum-patients" element={<MedplumPatientsPage />} />
+                      <Route path="/provider/medplum-patients/:id" element={<MedplumPatientDetailPage />} />
                       <Route path="/provider/instructions/create" element={<CreateInstruction />} />
                       <Route path="/provider/instructions" element={<ProviderInstructions />} />
                       <Route path="/provider/instructions/:id" element={<ProviderInstructions />} />
@@ -103,6 +107,8 @@ function App() {
                       <Route path="/admin/dashboard" element={<AdminDashboard />} />
                       <Route path="/admin/users" element={<AdminUsers />} />
                       <Route path="/admin/users/:id" element={<AdminUsers />} />
+                      <Route path="/admin/medplum-patients" element={<MedplumPatientsPage />} />
+                      <Route path="/admin/medplum-patients/:id" element={<MedplumPatientDetailPage />} />
                       <Route path="/admin/roles" element={<AdminRoles />} />
                       <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
                       <Route path="/admin/reports" element={<AdminReports />} />

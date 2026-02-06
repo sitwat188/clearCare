@@ -11,6 +11,7 @@ import type { Patient } from '../types/patient.types';
 import type { ComplianceRecord, ComplianceMetrics } from '../types/compliance.types';
 import type { Notification } from '../types/notification.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
+import type { FhirPatient, FhirBundle } from '../types/medplum.types';
 
 /**
  * Make API request. Expects backend to return ApiResponse<T> in response.data.
@@ -400,6 +401,22 @@ export const adminEndpoints = {
   },
 
   /**
+   * GET /api/v1/admin/users/:userId/patient
+   * Get patient record by user ID (admin only)
+   */
+  getPatientByUserId: async (userId: string): Promise<ApiResponse<Patient>> => {
+    return makeApiRequest('get', `/admin/users/${userId}/patient`);
+  },
+
+  /**
+   * PUT /api/v1/patients/:id
+   * Update patient record (e.g. assignedProviderIds)
+   */
+  updatePatient: async (patientId: string, updates: { assignedProviderIds?: string[] }): Promise<ApiResponse<Patient>> => {
+    return makeApiRequest('put', `/patients/${patientId}`, updates);
+  },
+
+  /**
    * GET /api/v1/admin/roles
    * Get all roles
    */
@@ -501,6 +518,45 @@ export const adminEndpoints = {
 };
 
 // ============================================================================
+// MEDPLUM (FHIR) ENDPOINTS (admin + provider)
+// ============================================================================
+
+export const medplumEndpoints = {
+  /**
+   * GET /api/v1/medplum/health
+   * Medplum connection status (no auth)
+   */
+  getHealth: async (): Promise<ApiResponse<{ status: string; medplum: string }>> => {
+    return makeApiRequest('get', '/medplum/health');
+  },
+
+  /**
+   * GET /api/v1/medplum/patients
+   * Search FHIR Patients in Medplum. Returns array of Patient resources (Medplum SDK returns ResourceArray).
+   */
+  getPatients: async (params?: Record<string, string>): Promise<ApiResponse<FhirBundle | FhirPatient[]>> => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return makeApiRequest('get', `/medplum/patients${query}`);
+  },
+
+  /**
+   * GET /api/v1/medplum/patients/:id
+   * Get one FHIR Patient by id
+   */
+  getPatient: async (id: string): Promise<ApiResponse<FhirPatient>> => {
+    return makeApiRequest('get', `/medplum/patients/${id}`);
+  },
+
+  /**
+   * GET /api/v1/medplum/seed
+   * Create sample FHIR Patients in Medplum for demo (GET so it works if POST is blocked)
+   */
+  seedSamplePatients: async (): Promise<ApiResponse<FhirPatient[]>> => {
+    return makeApiRequest('get', '/medplum/seed');
+  },
+};
+
+// ============================================================================
 // NOTIFICATION ENDPOINTS (Shared across roles)
 // ============================================================================
 
@@ -547,6 +603,7 @@ export const apiEndpoints = {
   patient: patientEndpoints,
   provider: providerEndpoints,
   admin: adminEndpoints,
+  medplum: medplumEndpoints,
   notifications: notificationEndpoints,
 };
 

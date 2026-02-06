@@ -3,7 +3,7 @@
  * User management and administration
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -40,6 +40,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
+  People as PeopleIcon,
+  Save as SaveIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
@@ -87,6 +89,32 @@ const AdminUsers = () => {
     queryFn: () => adminService.getUser(id!),
     enabled: !!id,
   });
+
+  const { data: patient, isLoading: patientLoading } = useQuery({
+    queryKey: ['admin-patient-by-user', id],
+    queryFn: () => adminService.getPatientByUserId(id!),
+    enabled: !!id && user?.role === 'patient',
+  });
+
+  const [assignedProviderIds, setAssignedProviderIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (patient?.assignedProviderIds) setAssignedProviderIds(patient.assignedProviderIds);
+    else if (patient && !patient.assignedProviderIds?.length) setAssignedProviderIds([]);
+  }, [patient?.id, patient?.assignedProviderIds]);
+
+  const updatePatientMutation = useMutation({
+    mutationFn: (payload: { patientId: string; assignedProviderIds: string[] }) =>
+      adminService.updatePatient(payload.patientId, { assignedProviderIds: payload.assignedProviderIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-patient-by-user', id] });
+      toast.success('Assigned providers updated');
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : 'Failed to update assigned providers');
+    },
+  });
+
+  const providers = useMemo(() => users?.filter((u) => u.role === 'provider') ?? [], [users]);
 
   // Filter users
   const filteredUsers = useMemo(() => {
@@ -300,6 +328,66 @@ const AdminUsers = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {user.role === 'patient' && (
+            <Grid item xs={12} md={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PeopleIcon /> Assigned providers
+                  </Typography>
+                  {patientLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  ) : !patient ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No patient record found for this user.
+                    </Typography>
+                  ) : (
+                    <>
+                      <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                        <InputLabel id="assigned-providers-label">Providers</InputLabel>
+                        <Select
+                          labelId="assigned-providers-label"
+                          multiple
+                          value={assignedProviderIds}
+                          onChange={(e) => setAssignedProviderIds(typeof e.target.value === 'string' ? [] : e.target.value)}
+                          label="Providers"
+                          renderValue={(selected) =>
+                            selected
+                              .map((uid) => users?.find((u) => u.id === uid))
+                              .filter(Boolean)
+                              .map((u) => `${u!.firstName} ${u!.lastName}`)
+                              .join(', ') || 'None'
+                          }
+                        >
+                          {providers.map((p) => (
+                            <MenuItem key={p.id} value={p.id}>
+                              {p.firstName} {p.lastName} ({p.email})
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <Button
+                        variant="contained"
+                        startIcon={<SaveIcon />}
+                        disabled={updatePatientMutation.isPending}
+                        onClick={() =>
+                          updatePatientMutation.mutate({
+                            patientId: patient.id,
+                            assignedProviderIds,
+                          })
+                        }
+                      >
+                        {updatePatientMutation.isPending ? 'Saving…' : 'Save assigned providers'}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
         </Grid>
       </>
     );

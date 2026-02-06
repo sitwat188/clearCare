@@ -32,6 +32,7 @@ import {
   CheckCircle as ComplianceIcon,
   History as HistoryIcon,
   People as PatientsIcon,
+  LocalHospital as MedplumIcon,
   AddCircle as CreateIcon,
   Assessment as ReportsIcon,
   Description as TemplatesIcon,
@@ -112,6 +113,7 @@ const Sidebar = () => {
   const getProviderMenuItems = () => [
     { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.PROVIDER.DASHBOARD },
     { text: t('nav.myPatients'), icon: <PatientsIcon />, path: ROUTES.PROVIDER.PATIENTS },
+    { text: t('nav.medplumPatients'), icon: <MedplumIcon />, path: ROUTES.PROVIDER.MEDPLUM_PATIENTS },
     { text: t('nav.instructions'), icon: <InstructionsIcon />, path: ROUTES.PROVIDER.INSTRUCTIONS },
     { text: t('nav.createInstruction'), icon: <CreateIcon />, path: ROUTES.PROVIDER.CREATE_INSTRUCTION },
     { text: t('nav.compliance'), icon: <ComplianceIcon />, path: ROUTES.PROVIDER.COMPLIANCE },
@@ -123,6 +125,7 @@ const Sidebar = () => {
   const getAdminMenuItems = () => [
     { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.ADMIN.DASHBOARD },
     { text: t('nav.users'), icon: <UsersIcon />, path: ROUTES.ADMIN.USERS },
+    { text: t('nav.medplumPatients'), icon: <MedplumIcon />, path: ROUTES.ADMIN.MEDPLUM_PATIENTS },
     { text: t('nav.roles'), icon: <RolesIcon />, path: ROUTES.ADMIN.ROLES },
     { text: t('nav.auditLogs'), icon: <AuditIcon />, path: ROUTES.ADMIN.AUDIT_LOGS },
     { text: t('nav.reports'), icon: <ReportsIcon />, path: ROUTES.ADMIN.REPORTS },

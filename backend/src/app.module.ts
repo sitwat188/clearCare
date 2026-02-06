@@ -15,6 +15,7 @@ import { ProvidersModule } from './providers/providers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { AuditModule } from './audit/audit.module';
+import { MedplumModule } from './medplum/medplum.module';
 import { AuditLogInterceptor } from './audit/audit-log.interceptor';
 
 @Module({
@@ -35,6 +36,7 @@ import { AuditLogInterceptor } from './audit/audit-log.interceptor';
     NotificationsModule,
     AdminModule,
     AuditModule,
+    MedplumModule,
   ],
   controllers: [AppController],
   providers: [

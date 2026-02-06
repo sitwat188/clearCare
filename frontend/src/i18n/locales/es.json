@@ -85,6 +85,7 @@
     "history": "Historial",
     "notifications": "Notificaciones",
     "myPatients": "Mis pacientes",
+    "medplumPatients": "Pacientes Medplum",
     "patients": "Pacientes",
     "instructions": "Instrucciones",
     "createInstruction": "Crear instrucción",

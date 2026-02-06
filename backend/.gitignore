@@ -1,6 +1,9 @@
 node_modules
+# Build output (regenerate with yarn build / npm run build)
+dist
 # Keep environment variables out of version control
 .env
 *.md
 # TypeScript incremental build cache (regenerated on build)
 *.tsbuildinfo
+*.js.map

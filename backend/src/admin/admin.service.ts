@@ -1,11 +1,14 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MedplumService } from '../medplum/medplum.service';
+import { PatientsService } from '../patients/patients.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -89,7 +92,13 @@ const DEFAULT_SYSTEM_SETTINGS = {
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AdminService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private medplumService: MedplumService,
+    private patientsService: PatientsService,
+  ) {}
 
   private getPermissionsForRole(role: string): string[] {
     const def = ROLE_DEFINITIONS.find((r) => r.id === role);
@@ -168,6 +177,13 @@ export class AdminService {
     return this.toUserResponse(user);
   }
 
+  /**
+   * Get patient record by user ID (admin only). Used for assign-providers UI.
+   */
+  async getPatientByUserId(userId: string) {
+    return this.patientsService.getPatientByUserId(userId, 'administrator');
+  }
+
   async createUser(
     dto: CreateUserDto,
     adminUserId: string,
@@ -221,6 +237,14 @@ export class AdminService {
           assignedProviderIds: [],
         },
       });
+      // Sync to Medplum FHIR when configured (non-blocking; failures are logged only)
+      if (this.medplumService.isConnected()) {
+        this.syncPatientToMedplum(user).catch((err) => {
+          this.logger.warn(
+            `Medplum Patient create failed for user ${user.id}: ${err?.message ?? err}`,
+          );
+        });
+      }
     }
 
     const adminDisplay = await this.getAdminDisplay(adminUserId);
@@ -241,6 +265,33 @@ export class AdminService {
     });
 
     return this.toUserResponse(user);
+  }
+
+  /**
+   * Create a minimal FHIR Patient in Medplum for a ClearCare user (patient).
+   * Used when Medplum is configured; failures are logged by the caller.
+   */
+  private async syncPatientToMedplum(user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  }): Promise<void> {
+    const fhirPatient = {
+      name: [
+        {
+          use: 'official',
+          family: user.lastName,
+          given: [user.firstName].filter(Boolean),
+        },
+      ],
+      identifier: [
+        {
+          system: 'https://clearcare.local/user',
+          value: user.id,
+        },
+      ],
+    };
+    await this.medplumService.createPatient(fhirPatient);
   }
 
   async updateUser(

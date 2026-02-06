@@ -59,15 +59,31 @@ export class PatientsService {
       data: {
         userId: createDto.userId,
         dateOfBirth: this.encryption.encrypt(createDto.dateOfBirth ?? '') || '',
-        medicalRecordNumber: this.encryption.encrypt(createDto.medicalRecordNumber ?? '') || '',
-        phone: createDto.phone ? this.encryption.encrypt(createDto.phone) : null,
-        addressStreet: createDto.addressStreet ? this.encryption.encrypt(createDto.addressStreet) : null,
-        addressCity: createDto.addressCity ? this.encryption.encrypt(createDto.addressCity) : null,
-        addressState: createDto.addressState ? this.encryption.encrypt(createDto.addressState) : null,
-        addressZipCode: createDto.addressZipCode ? this.encryption.encrypt(createDto.addressZipCode) : null,
-        emergencyContactName: (createDto.emergencyContactName ?? createDto.emergencyContact)
-          ? this.encryption.encrypt(createDto.emergencyContactName ?? createDto.emergencyContact ?? '')
+        medicalRecordNumber:
+          this.encryption.encrypt(createDto.medicalRecordNumber ?? '') || '',
+        phone: createDto.phone
+          ? this.encryption.encrypt(createDto.phone)
           : null,
+        addressStreet: createDto.addressStreet
+          ? this.encryption.encrypt(createDto.addressStreet)
+          : null,
+        addressCity: createDto.addressCity
+          ? this.encryption.encrypt(createDto.addressCity)
+          : null,
+        addressState: createDto.addressState
+          ? this.encryption.encrypt(createDto.addressState)
+          : null,
+        addressZipCode: createDto.addressZipCode
+          ? this.encryption.encrypt(createDto.addressZipCode)
+          : null,
+        emergencyContactName:
+          (createDto.emergencyContactName ?? createDto.emergencyContact)
+            ? this.encryption.encrypt(
+                createDto.emergencyContactName ??
+                  createDto.emergencyContact ??
+                  '',
+              )
+            : null,
         emergencyContactRelationship: createDto.emergencyContactRelationship
           ? this.encryption.encrypt(createDto.emergencyContactRelationship)
           : null,
@@ -152,8 +168,12 @@ export class PatientsService {
     const state = this.encryption.decrypt(patient.addressState);
     const zipCode = this.encryption.decrypt(patient.addressZipCode);
     const emergencyName = this.encryption.decrypt(patient.emergencyContactName);
-    const emergencyRel = this.encryption.decrypt(patient.emergencyContactRelationship);
-    const emergencyPhone = this.encryption.decrypt(patient.emergencyContactPhone);
+    const emergencyRel = this.encryption.decrypt(
+      patient.emergencyContactRelationship,
+    );
+    const emergencyPhone = this.encryption.decrypt(
+      patient.emergencyContactPhone,
+    );
     return {
       ...rest,
       dateOfBirth: this.encryption.decrypt(patient.dateOfBirth),
@@ -189,6 +209,26 @@ export class PatientsService {
       createdAt: patient.createdAt?.toISOString?.() ?? patient.createdAt,
       updatedAt: patient.updatedAt?.toISOString?.() ?? patient.updatedAt,
     };
+  }
+
+  /**
+   * Get patient by user ID (admin only).
+   * Used by admin UI to load patient record for assignment.
+   */
+  async getPatientByUserId(userId: string, requestingUserRole: string) {
+    if (requestingUserRole !== 'administrator') {
+      throw new ForbiddenException(
+        'Only administrators can look up patient by user ID',
+      );
+    }
+    const patient = await this.prisma.patient.findFirst({
+      where: { userId, deletedAt: null },
+      include: { user: true },
+    });
+    if (!patient) {
+      throw new NotFoundException('Patient not found for this user');
+    }
+    return this.toPatientResponse(patient);
   }
 
   /**
@@ -291,25 +331,38 @@ export class PatientsService {
     };
 
     const data: Record<string, unknown> = {};
-    if (updateDto.dateOfBirth != null) data.dateOfBirth = this.encryption.encrypt(updateDto.dateOfBirth);
+    if (updateDto.dateOfBirth != null)
+      data.dateOfBirth = this.encryption.encrypt(updateDto.dateOfBirth);
     if (updateDto.medicalRecordNumber != null)
-      data.medicalRecordNumber = this.encryption.encrypt(updateDto.medicalRecordNumber);
-    if (updateDto.phone != null) data.phone = this.encryption.encrypt(updateDto.phone);
+      data.medicalRecordNumber = this.encryption.encrypt(
+        updateDto.medicalRecordNumber,
+      );
+    if (updateDto.phone != null)
+      data.phone = this.encryption.encrypt(updateDto.phone);
     if (updateDto.addressStreet != null)
       data.addressStreet = this.encryption.encrypt(updateDto.addressStreet);
-    if (updateDto.addressCity != null) data.addressCity = this.encryption.encrypt(updateDto.addressCity);
+    if (updateDto.addressCity != null)
+      data.addressCity = this.encryption.encrypt(updateDto.addressCity);
     if (updateDto.addressState != null)
       data.addressState = this.encryption.encrypt(updateDto.addressState);
     if (updateDto.addressZipCode != null)
       data.addressZipCode = this.encryption.encrypt(updateDto.addressZipCode);
     if (updateDto.emergencyContact != null)
-      data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContact);
+      data.emergencyContactName = this.encryption.encrypt(
+        updateDto.emergencyContact,
+      );
     if (updateDto.emergencyContactName != null)
-      data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContactName);
+      data.emergencyContactName = this.encryption.encrypt(
+        updateDto.emergencyContactName,
+      );
     if (updateDto.emergencyContactRelationship != null)
-      data.emergencyContactRelationship = this.encryption.encrypt(updateDto.emergencyContactRelationship);
+      data.emergencyContactRelationship = this.encryption.encrypt(
+        updateDto.emergencyContactRelationship,
+      );
     if (updateDto.emergencyContactPhone != null)
-      data.emergencyContactPhone = this.encryption.encrypt(updateDto.emergencyContactPhone);
+      data.emergencyContactPhone = this.encryption.encrypt(
+        updateDto.emergencyContactPhone,
+      );
     if (updateDto.assignedProviderIds != null)
       data.assignedProviderIds = updateDto.assignedProviderIds;
 

@@ -27,6 +27,8 @@ export const ROUTES = {
     DASHBOARD: '/provider/dashboard',
     PATIENTS: '/provider/patients',
     PATIENT_DETAIL: (id: string) => `/provider/patients/${id}`,
+    MEDPLUM_PATIENTS: '/provider/medplum-patients',
+    MEDPLUM_PATIENT_DETAIL: (id: string) => `/provider/medplum-patients/${id}`,
     CREATE_INSTRUCTION: '/provider/instructions/create',
     INSTRUCTIONS: '/provider/instructions',
     INSTRUCTION_DETAIL: (id: string) => `/provider/instructions/${id}`,
@@ -50,5 +52,7 @@ export const ROUTES = {
     SETTINGS: '/admin/settings',
     NOTIFICATIONS: '/admin/notifications',
     PROFILE: '/admin/profile',
+    MEDPLUM_PATIENTS: '/admin/medplum-patients',
+    MEDPLUM_PATIENT_DETAIL: (id: string) => `/admin/medplum-patients/${id}`,
   },
 } as const;

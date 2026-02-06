@@ -29,6 +29,15 @@ export class AdminController {
     return this.adminService.getUsers();
   }
 
+  /**
+   * Get patient record for a user (admin only). Must be before users/:id.
+   * GET /api/v1/admin/users/:userId/patient
+   */
+  @Get('users/:userId/patient')
+  async getPatientByUserId(@Param('userId') userId: string) {
+    return this.adminService.getPatientByUserId(userId);
+  }
+
   @Get('users/:id')
   async getUser(@Param('id') id: string) {
     return this.adminService.getUser(id);

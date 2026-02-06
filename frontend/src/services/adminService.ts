@@ -5,6 +5,7 @@
 
 import { apiEndpoints } from './apiEndpoints';
 import type { User } from '../types/auth.types';
+import type { Patient } from '../types/patient.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
 
 export const adminService = {
@@ -68,6 +69,26 @@ export const adminService = {
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to delete user');
     }
+  },
+
+  /**
+   * Get patient record by user ID (admin only)
+   */
+  getPatientByUserId: async (userId: string): Promise<Patient | null> => {
+    try {
+      const response = await apiEndpoints.admin.getPatientByUserId(userId);
+      return response.data;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Update patient (e.g. assigned providers)
+   */
+  updatePatient: async (patientId: string, updates: { assignedProviderIds?: string[] }): Promise<Patient> => {
+    const response = await apiEndpoints.admin.updatePatient(patientId, updates);
+    return response.data;
   },
 
   /**

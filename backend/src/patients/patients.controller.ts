@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { PatientsService } from './patients.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
@@ -55,6 +57,20 @@ export class PatientsController {
       requestingUserId,
       requestingUserRole,
     );
+  }
+
+  /**
+   * Get patient by user ID (admin only). Must be before :id so path is not captured.
+   * GET /api/v1/patients/by-user/:userId
+   */
+  @Get('by-user/:userId')
+  @UseGuards(RolesGuard)
+  @Roles('administrator')
+  async getPatientByUserId(
+    @Param('userId') userId: string,
+    @CurrentUser('role') requestingUserRole: string,
+  ) {
+    return this.patientsService.getPatientByUserId(userId, requestingUserRole);
   }
 
   /**
