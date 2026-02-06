@@ -58,7 +58,7 @@ const MedplumPatientsPage = () => {
   const location = useLocation();
   const queryClient = useQueryClient();
   const isAdmin = location.pathname.startsWith('/admin');
-  const listRoute = isAdmin ? ROUTES.ADMIN.MEDPLUM_PATIENTS : ROUTES.PROVIDER.MEDPLUM_PATIENTS;
+  // const listRoute = isAdmin ? ROUTES.ADMIN.MEDPLUM_PATIENTS : ROUTES.PROVIDER.MEDPLUM_PATIENTS;
   const detailRoute = isAdmin ? ROUTES.ADMIN.MEDPLUM_PATIENT_DETAIL : ROUTES.PROVIDER.MEDPLUM_PATIENT_DETAIL;
   const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
