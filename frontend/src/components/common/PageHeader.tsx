@@ -12,7 +12,7 @@ import { ROUTES } from '../../config/routes';
 
 interface PageHeaderProps {
   title: string;
-  subtitle?: string;
+  subtitle?: string | React.ReactNode;
   showBack?: boolean;
   backPath?: string;
   breadcrumbs?: Array<{ label: string; path?: string }>;
