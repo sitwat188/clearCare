@@ -76,7 +76,10 @@
     "enterNewPasswordBelow": "Introduce tu nueva contraseña a continuación",
     "passwordResetSuccessful": "Contraseña restablecida correctamente",
     "failedToSendReset": "Error al enviar el correo. Inténtalo de nuevo.",
-    "failedToResetPassword": "Error al restablecer la contraseña. Inténtalo de nuevo."
+    "failedToResetPassword": "Error al restablecer la contraseña. Inténtalo de nuevo.",
+    "setPasswordTitle": "Establece tu contraseña",
+    "setPasswordSubtitle": "Has iniciado sesión con una contraseña temporal. Establece una nueva contraseña para continuar.",
+    "setPasswordButton": "Establecer contraseña"
   },
   "nav": {
     "dashboard": "Panel",

@@ -76,7 +76,10 @@
     "enterNewPasswordBelow": "Enter your new password below",
     "passwordResetSuccessful": "Password reset successful",
     "failedToSendReset": "Failed to send reset email. Please try again.",
-    "failedToResetPassword": "Failed to reset password. Please try again."
+    "failedToResetPassword": "Failed to reset password. Please try again.",
+    "setPasswordTitle": "Set your password",
+    "setPasswordSubtitle": "You signed in with a temporary password. Please set a new password to continue.",
+    "setPasswordButton": "Set password"
   },
   "nav": {
     "dashboard": "Dashboard",

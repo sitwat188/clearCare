@@ -7,6 +7,7 @@ import { ROUTES } from './config/routes';
 import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
+import SetPasswordPage from './pages/auth/SetPasswordPage';
 import OAuthCallbackPage from './pages/auth/OAuthCallbackPage';
 
 // Patient pages
@@ -57,6 +58,7 @@ function App() {
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
         <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
         <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
+        <Route path={ROUTES.SET_PASSWORD} element={<ProtectedRoute><SetPasswordPage /></ProtectedRoute>} />
         <Route path={ROUTES.OAUTH_CALLBACK} element={<OAuthCallbackPage />} />
 
         {/* Protected routes */}

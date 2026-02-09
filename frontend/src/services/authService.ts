@@ -49,13 +49,13 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
       return { requiresTwoFactor: true, twoFactorToken, message };
     }
 
-    const { user, accessToken, refreshToken } = payload ?? {};
+    const { user, accessToken, refreshToken, mustChangePassword } = payload ?? {};
     if (accessToken) {
       setAccessToken(accessToken);
       if (refreshToken) {
         localStorage.setItem('refreshToken', refreshToken);
       }
-      return { user, token: accessToken };
+      return { user, token: accessToken, mustChangePassword: mustChangePassword === true };
     }
 
     throw new Error('Login failed - no access token received');
@@ -72,12 +72,12 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
 export const verifyTwoFactor = async (
   twoFactorToken: string,
   code: string,
-): Promise<{ user: User; token: string }> => {
+): Promise<{ user: User; token: string; mustChangePassword?: boolean }> => {
   try {
     const { api } = await import('./api');
     const response = await api.post('/auth/verify-2fa', { twoFactorToken, code });
     const payload = response.data?.data ?? response.data;
-    const { user, accessToken, refreshToken } = payload ?? {};
+    const { user, accessToken, refreshToken, mustChangePassword } = payload ?? {};
     if (!accessToken || !user) {
       throw new Error('Invalid response from 2FA verification');
     }
@@ -85,7 +85,7 @@ export const verifyTwoFactor = async (
     if (refreshToken) {
       localStorage.setItem('refreshToken', refreshToken);
     }
-    return { user, token: accessToken };
+    return { user, token: accessToken, mustChangePassword: mustChangePassword === true };
   } catch (error: any) {
     const message =
       error?.response?.data?.message ||

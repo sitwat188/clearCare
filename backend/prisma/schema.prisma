@@ -31,6 +31,10 @@ model User {
   twoFactorSecret  String? @map("two_factor_secret") // Encrypted TOTP secret
   backupCodes      String? // JSON array of encrypted backup codes
 
+  // Invitation / temporary password (admin-created users)
+  mustChangePassword        Boolean   @default(false) @map("must_change_password")
+  temporaryPasswordExpiresAt DateTime? @map("temporary_password_expires_at") // Max 1 year from creation
+
   // Soft delete
   deletedAt DateTime? @map("deleted_at")
 

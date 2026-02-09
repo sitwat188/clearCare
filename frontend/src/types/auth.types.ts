@@ -39,7 +39,7 @@ export interface LoginCredentials {
   password: string;
 }
 
-/** Result of login: either full success or 2FA required */
+/** Result of login: either full success (optionally must change password) or 2FA required */
 export type LoginResult =
-  | { user: User; token: string }
+  | { user: User; token: string; mustChangePassword?: boolean }
   | { requiresTwoFactor: true; twoFactorToken: string; message?: string };

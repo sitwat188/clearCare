@@ -155,7 +155,7 @@ const AdminUsers = () => {
       return adminService.createUser(payload as any);
     },
     onSuccess: async (createdUser) => {
-      toast.success('User created. Please ask the user to set their password via Forgot password on the login page.');
+      toast.success('User created. An invitation email with a temporary password has been sent. The user must set a new password on first login.');
       setAddDialogOpen(false);
       setCreateForm({ firstName: '', lastName: '', email: '', role: 'patient' });
 

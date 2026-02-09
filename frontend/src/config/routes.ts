@@ -7,6 +7,7 @@ export const ROUTES = {
   LOGIN: '/login',
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',
+  SET_PASSWORD: '/set-password', // Required after first login with temporary password
   VERIFY_2FA: '/verify-2fa',
   OAUTH_CALLBACK: '/auth/callback',
   

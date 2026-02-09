@@ -168,6 +168,15 @@ export class AuthService {
       };
     }
 
+    // Temporary password expired (invitation flow)
+    if (user.mustChangePassword && user.temporaryPasswordExpiresAt) {
+      if (new Date() > user.temporaryPasswordExpiresAt) {
+        throw new UnauthorizedException(
+          'Your temporary password has expired. Please request a new invitation or password reset from your administrator.',
+        );
+      }
+    }
+
     // Update last login
     await this.prisma.user.update({
       where: { id: user.id },
@@ -187,6 +196,11 @@ export class AuthService {
 
     // Generate tokens
     const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const mustChangePassword = !!(
+      user.mustChangePassword &&
+      user.temporaryPasswordExpiresAt &&
+      new Date() <= user.temporaryPasswordExpiresAt
+    );
 
     return {
       user: {
@@ -199,6 +213,7 @@ export class AuthService {
         lastLoginAt: user.lastLoginAt,
       },
       ...tokens,
+      ...(mustChangePassword ? { mustChangePassword: true } : {}),
     };
   }
 
@@ -293,6 +308,11 @@ export class AuthService {
     });
 
     const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const mustChangePassword = !!(
+      user.mustChangePassword &&
+      user.temporaryPasswordExpiresAt &&
+      new Date() <= user.temporaryPasswordExpiresAt
+    );
     return {
       user: {
         id: user.id,
@@ -304,6 +324,7 @@ export class AuthService {
         lastLoginAt: user.lastLoginAt,
       },
       ...tokens,
+      ...(mustChangePassword ? { mustChangePassword: true } : {}),
     };
   }
 
@@ -513,11 +534,12 @@ export class AuthService {
       data: { email, token, expiresAt },
     });
 
-    const resetEmailTo = process.env.PASSWORD_RESET_REDIRECT_EMAIL || '';
+    const mailTo =
+      process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim() || email;
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
 
     await this.sendPasswordResetEmail(
-      resetEmailTo,
+      mailTo,
       resetLink,
       expiresAt,
       email,
@@ -582,6 +604,141 @@ export class AuthService {
     }
   }
 
+  /**
+   * Build HTML body for invitation email (inline CSS for email client compatibility).
+   */
+  private getInvitationEmailHtml(
+    displayName: string,
+    to: string,
+    temporaryPassword: string,
+    loginUrl: string,
+  ): string {
+    const loginLink = `${loginUrl}/login`;
+    const escape = (s: string) =>
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const safeName = escape(displayName);
+    const safeEmail = escape(to);
+    const safePassword = escape(temporaryPassword);
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're invited to ClearCare+</title>
+</head>
+<body style="margin:0; padding:0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f1f5f9; color: #334155;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; padding: 32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); overflow: hidden;">
+          <tr>
+            <td style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 28px 24px; text-align: center;">
+              <span style="font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">ClearCare+</span>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.9);">Care &amp; compliance platform</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px 24px;">
+              <h1 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 600; color: #1e293b;">Welcome, ${safeName}</h1>
+              <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: #475569;">Your account has been created. Use the sign-in details below to log in. You’ll be asked to set a new password on first login.</p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Email</p>
+                    <p style="margin: 0; font-size: 15px; font-weight: 500; color: #1e293b;">${safeEmail}</p>
+                    <p style="margin: 16px 0 0 0; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Temporary password</p>
+                    <p style="margin: 4px 0 0 0; font-size: 15px; font-weight: 600; color: #1e293b; font-family: ui-monospace, monospace; letter-spacing: 0.05em;">${safePassword}</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 0 0 20px 0; font-size: 13px; color: #94a3b8;">This temporary password is valid for <strong>1 day</strong>. After that, request a new invitation from your administrator.</p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding: 8px 0;">
+                    <a href="${loginLink}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; border-radius: 8px;">Log in to ClearCare+</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 24px 0 0 0; font-size: 13px; color: #94a3b8;">If you didn’t expect this email, please ignore it or contact your administrator.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 16px 24px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+              <p style="margin: 0; font-size: 12px; color: #94a3b8;">ClearCare+ · Post-visit care and compliance</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
+  /**
+   * Send invitation email with temporary password. Delivers to the address in
+   * PASSWORD_RESET_REDIRECT_EMAIL (env) so all system emails go to one inbox for now.
+   * The body still shows the invited user's email and temp password.
+   */
+  async sendInvitationEmail(
+    invitedUserEmail: string,
+    firstName: string,
+    temporaryPassword: string,
+  ): Promise<void> {
+    const loginUrl =
+      process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
+    const mailTo =
+      process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim() || invitedUserEmail;
+    const host = process.env.SMTP_HOST?.trim();
+    const port = process.env.SMTP_PORT?.trim();
+    const user = process.env.SMTP_USER?.trim();
+    const pass = process.env.SMTP_PASS?.trim();
+
+    const subject = "You're invited to ClearCare+";
+    const displayName = firstName || 'User';
+    const text = `Welcome to ClearCare+, ${displayName}.\n\nYour account has been created. Use the temporary password below to log in. You will be asked to set a new password on first login. This temporary password is valid for one day.\n\nEmail: ${invitedUserEmail}\nTemporary password: ${temporaryPassword}\n\nLog in here: ${loginUrl}/login\n\nIf you did not expect this email, please contact your administrator.`;
+    const html = this.getInvitationEmailHtml(displayName, invitedUserEmail, temporaryPassword, loginUrl);
+
+    if (!mailTo) {
+      console.log(
+        `[Invitation] No PASSWORD_RESET_REDIRECT_EMAIL set and no recipient. Invited: ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+      );
+      return;
+    }
+    if (host && port && user && pass) {
+      const cleanPass = pass.replace(/^["']|["']$/g, '');
+      const cleanUser = user.replace(/^["']|["']$/g, '');
+      try {
+        const transporter = nodemailer.createTransport({
+          host,
+          port: parseInt(port, 10),
+          secure: process.env.SMTP_SECURE?.trim() === 'true',
+          auth: { user: cleanUser, pass: cleanPass },
+        });
+        const from =
+          process.env.MAIL_FROM?.trim() || `ClearCare <${cleanUser}>`;
+        await transporter.sendMail({
+          from,
+          to: mailTo,
+          subject,
+          text,
+          html,
+        });
+      } catch (err) {
+        console.error('[Invitation] Failed to send to', mailTo, err);
+      }
+    } else {
+      console.log(
+        `[Invitation] SMTP not configured. Would send to ${mailTo}: invited ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+      );
+    }
+  }
+
   async resetPassword(dto: ResetPasswordDto) {
     const record = await this.prisma.passwordResetToken.findFirst({
       where: {
@@ -641,7 +798,11 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+        temporaryPasswordExpiresAt: null,
+      },
     });
 
     return {

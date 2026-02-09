@@ -29,6 +29,7 @@ import {
   Add as AddIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
+import { toast } from 'react-toastify';
 import { medplumService } from '../../services/medplumService';
 import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
@@ -66,6 +67,13 @@ const MedplumPatientsPage = () => {
   const { data: patients, isLoading, error } = useQuery({
     queryKey: ['medplum-patients'],
     queryFn: () => medplumService.getMedplumPatients(),
+    staleTime: 60_000, // 1 min – avoid refetch on every focus
+  });
+
+  const { data: health } = useQuery({
+    queryKey: ['medplum-health'],
+    queryFn: () => medplumService.getMedplumHealth(),
+    staleTime: 30_000,
   });
 
   const filteredPatients = useMemo(() => {
@@ -84,8 +92,9 @@ const MedplumPatientsPage = () => {
     try {
       await medplumService.seedSamplePatients();
       await queryClient.invalidateQueries({ queryKey: ['medplum-patients'] });
-    } catch {
-      // Error shown by UI or toast
+      toast.success('Sample patients loaded (or already present).');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load sample patients.');
     } finally {
       setSeeding(false);
     }
@@ -103,7 +112,25 @@ const MedplumPatientsPage = () => {
     <>
       <PageHeader
         title="Medplum Patients"
-        subtitle="FHIR patients from Medplum"
+        subtitle={
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            FHIR patients from Medplum
+            {health?.data?.medplum && (
+              <Chip
+                size="small"
+                label={
+                  health.data.medplum === 'connected'
+                    ? 'Medplum: connected'
+                    : health.data.medplum === 'not_configured'
+                      ? 'Medplum: not configured'
+                      : `Medplum: ${health.data.medplum}`
+                }
+                color={health.data.medplum === 'connected' ? 'success' : 'default'}
+                sx={{ fontWeight: 500 }}
+              />
+            )}
+          </Box>
+        }
         action={
           <Button
             variant="contained"

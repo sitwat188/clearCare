@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MedplumService } from '../medplum/medplum.service';
 import { PatientsService } from '../patients/patients.service';
+import { AuthService } from '../auth/auth.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -16,6 +17,7 @@ import { randomBytes } from 'crypto';
 
 const SALT_ROUNDS = 12;
 const DEFAULT_PASSWORD_LENGTH = 16;
+const TEMPORARY_PASSWORD_VALID_DAYS = 1;
 
 // Static role definitions (no Role table in schema)
 const ROLE_DEFINITIONS: Array<{
@@ -98,6 +100,7 @@ export class AdminService {
     private prisma: PrismaService,
     private medplumService: MedplumService,
     private patientsService: PatientsService,
+    private authService: AuthService,
   ) {}
 
   private getPermissionsForRole(role: string): string[] {
@@ -205,18 +208,24 @@ export class AdminService {
         'This email was previously used by a deleted account. Use a different email or contact support to restore the account.',
       );
     }
-    const rawPassword =
-      dto.password ?? randomBytes(DEFAULT_PASSWORD_LENGTH).toString('hex');
+    // Invitation flow: always generate a temporary password (valid up to 1 day)
+    const rawPassword = randomBytes(DEFAULT_PASSWORD_LENGTH).toString('hex');
     const passwordHash = await bcrypt.hash(rawPassword, SALT_ROUNDS);
+    const temporaryPasswordExpiresAt = new Date(
+      Date.now() + TEMPORARY_PASSWORD_VALID_DAYS * 24 * 60 * 60 * 1000,
+    );
 
+    const createData = {
+      email,
+      passwordHash,
+      firstName: dto.firstName.trim(),
+      lastName: dto.lastName.trim(),
+      role: dto.role,
+      mustChangePassword: true,
+      temporaryPasswordExpiresAt,
+    };
     const user = await this.prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName.trim(),
-        role: dto.role,
-      },
+      data: createData as never,
       select: {
         id: true,
         email: true,
@@ -227,6 +236,13 @@ export class AdminService {
         lastLoginAt: true,
       },
     });
+
+    // Send invitation email to user and, if set, to PASSWORD_RESET_REDIRECT_EMAIL
+    await this.authService.sendInvitationEmail(
+      user.email,
+      user.firstName,
+      rawPassword,
+    );
 
     if (dto.role === 'patient') {
       await this.prisma.patient.create({

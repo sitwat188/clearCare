@@ -87,7 +87,9 @@ const LoginPage = () => {
       if ('user' in response && response.token) {
         dispatch(loginSuccess({ user: response.user, token: response.token }));
         const redirectPath =
-          response.user.role === 'patient'
+          response.mustChangePassword
+            ? ROUTES.SET_PASSWORD
+            : response.user.role === 'patient'
             ? ROUTES.PATIENT.DASHBOARD
             : response.user.role === 'provider'
             ? ROUTES.PROVIDER.DASHBOARD
@@ -110,7 +112,9 @@ const LoginPage = () => {
       const result = await verifyTwoFactor(twoFactorToken, twoFactorCode.trim());
       dispatch(loginSuccess({ user: result.user, token: result.token }));
       const redirectPath =
-        result.user.role === 'patient'
+        result.mustChangePassword
+          ? ROUTES.SET_PASSWORD
+          : result.user.role === 'patient'
           ? ROUTES.PATIENT.DASHBOARD
           : result.user.role === 'provider'
           ? ROUTES.PROVIDER.DASHBOARD
