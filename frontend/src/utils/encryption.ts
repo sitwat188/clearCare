@@ -6,9 +6,16 @@
 
 import CryptoJS from 'crypto-js';
 
-// Get encryption key from environment or use default for development
+const DEFAULT_KEY = 'clearcare-default-encryption-key-32chars';
+
+/** Get encryption key. In production, do not use default key (PHI must use a proper key or backend-only encryption). */
 const getEncryptionKey = (): string => {
-  const key = import.meta.env.VITE_ENCRYPTION_KEY || 'clearcare-default-encryption-key-32chars';
+  const key = import.meta.env.VITE_ENCRYPTION_KEY || DEFAULT_KEY;
+  if (import.meta.env.PROD && key === DEFAULT_KEY) {
+    throw new Error(
+      'VITE_ENCRYPTION_KEY must be set in production when using client-side PHI encryption. Do not rely on mock data in production.',
+    );
+  }
   if (key.length < 32) {
     console.warn('Encryption key should be at least 32 characters for AES-256');
   }

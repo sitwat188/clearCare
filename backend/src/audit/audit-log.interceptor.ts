@@ -23,21 +23,34 @@ function safeJson(value: unknown): unknown {
   }
 }
 
+/** Keys that must never be stored in audit (credentials, secrets). */
+const SENSITIVE_KEY = /password|token|secret|code|otp|twofactor|2fa/i;
+/** PHI/PII field names – redact values in audit details. */
+const PHI_KEY =
+  /dateofbirth|medicalrecordnumber|phone|address|emergencycontact|content|medicationdetails|lifestyledetails|followupdetails|warningdetails|firstname|lastname|email/i;
+
 function scrubObject(input: unknown): unknown {
-  const sensitiveKey = /password|token|secret|code|otp|twofactor|2fa/i;
   if (!input || typeof input !== 'object') return input;
   if (Array.isArray(input)) return input.map(scrubObject);
   const obj = input as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (sensitiveKey.test(k)) {
+    const keyLower = k.toLowerCase().replace(/_/g, '');
+    if (SENSITIVE_KEY.test(k)) {
       out[k] = '[redacted]';
+      continue;
+    }
+    if (PHI_KEY.test(keyLower)) {
+      out[k] = '[PHI]';
       continue;
     }
     out[k] = scrubObject(v);
   }
   return out;
 }
+
+/** Resource types that may contain PHI – do not store request body in audit details. */
+const PHI_RESOURCE_TYPES = new Set(['patient', 'instruction', 'compliance', 'user']);
 
 function inferAction(method: string, path: string): string {
   const p = path.toLowerCase();
@@ -132,15 +145,18 @@ export class AuditLogInterceptor implements NestInterceptor {
       user.email ||
       user.id;
 
-    const baseDetails = {
+    const isPhiResource = PHI_RESOURCE_TYPES.has(resourceType);
+    const baseDetails: Record<string, unknown> = {
       method: method.toUpperCase(),
       path,
       query: scrubObject(safeJson(req.query)),
-      // DO NOT log full bodies (may contain PHI). Log only keys (scrubbed), and only for non-GET.
+      // For PHI resource types, never store body. Otherwise store scrubbed body for non-GET only.
       body:
         method.toUpperCase() === 'GET'
           ? undefined
-          : scrubObject(safeJson(req.body)),
+          : isPhiResource
+            ? undefined
+            : scrubObject(safeJson(req.body)),
     };
 
     const writeLog = async (

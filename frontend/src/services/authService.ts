@@ -36,8 +36,6 @@ const generateRandomString = (length: number): string => {
  */
 export const login = async (credentials: LoginCredentials): Promise<LoginResult> => {
   try {
-    console.log('[AuthService] Attempting login with:', credentials.email);
-
     const { api } = await import('./api');
     const response = await api.post('/auth/login', credentials);
 
@@ -60,7 +58,6 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
 
     throw new Error('Login failed - no access token received');
   } catch (error: any) {
-    console.error('[AuthService] Login error:', error);
     const errorMessage = error.response?.data?.message || error.message || 'Login failed';
     throw new Error(errorMessage);
   }
