@@ -89,6 +89,8 @@
     "notifications": "Notificaciones",
     "myPatients": "Mis pacientes",
     "medplumPatients": "Pacientes Medplum",
+    "medplumProviders": "Proveedores Medplum",
+    "medplumInstructions": "Instrucciones Medplum",
     "patients": "Pacientes",
     "instructions": "Instrucciones",
     "createInstruction": "Crear instrucción",

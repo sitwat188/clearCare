@@ -27,7 +27,7 @@ export class InstructionsService {
     },
   >(instruction: T): T {
     if (!instruction) return instruction;
-    const out = { ...instruction } as T;
+    const out = { ...instruction };
     if (instruction.content) {
       (out as { content: string }).content = this.encryption.decrypt(
         instruction.content,
@@ -62,7 +62,7 @@ export class InstructionsService {
 
   /** Decrypt stored JSON details (backward compatible with plain JSON). */
   private decryptJsonDetails(val: unknown): object | null | undefined {
-    if (val == null) return val as null | undefined;
+    if (val == null) return val;
     if (
       typeof val === 'object' &&
       val !== null &&
@@ -139,10 +139,18 @@ export class InstructionsService {
         type: createDto.type,
         priority: createDto.priority || 'medium',
         content: this.encryption.encrypt(createDto.content),
-        medicationDetails: this.encryptJsonDetails(createDto.medicationDetails ?? undefined) as object | null,
-        lifestyleDetails: this.encryptJsonDetails(createDto.lifestyleDetails ?? undefined) as object | null,
-        followUpDetails: this.encryptJsonDetails(createDto.followUpDetails ?? undefined) as object | null,
-        warningDetails: this.encryptJsonDetails(createDto.warningDetails ?? undefined) as object | null,
+        medicationDetails:
+          this.encryptJsonDetails(createDto.medicationDetails ?? undefined) ??
+          undefined,
+        lifestyleDetails:
+          this.encryptJsonDetails(createDto.lifestyleDetails ?? undefined) ??
+          undefined,
+        followUpDetails:
+          this.encryptJsonDetails(createDto.followUpDetails ?? undefined) ??
+          undefined,
+        warningDetails:
+          this.encryptJsonDetails(createDto.warningDetails ?? undefined) ??
+          undefined,
         assignedDate: createDto.assignedDate
           ? new Date(createDto.assignedDate)
           : new Date(),
@@ -420,16 +428,24 @@ export class InstructionsService {
           content: this.encryption.encrypt(updateDto.content),
         }),
         ...(updateDto.medicationDetails && {
-          medicationDetails: this.encryptJsonDetails(updateDto.medicationDetails) as object,
+          medicationDetails: this.encryptJsonDetails(
+            updateDto.medicationDetails,
+          ) as object,
         }),
         ...(updateDto.lifestyleDetails && {
-          lifestyleDetails: this.encryptJsonDetails(updateDto.lifestyleDetails) as object,
+          lifestyleDetails: this.encryptJsonDetails(
+            updateDto.lifestyleDetails,
+          ) as object,
         }),
         ...(updateDto.followUpDetails && {
-          followUpDetails: this.encryptJsonDetails(updateDto.followUpDetails) as object,
+          followUpDetails: this.encryptJsonDetails(
+            updateDto.followUpDetails,
+          ) as object,
         }),
         ...(updateDto.warningDetails && {
-          warningDetails: this.encryptJsonDetails(updateDto.warningDetails) as object,
+          warningDetails: this.encryptJsonDetails(
+            updateDto.warningDetails,
+          ) as object,
         }),
         ...(updateDto.assignedDate && {
           assignedDate: new Date(updateDto.assignedDate),

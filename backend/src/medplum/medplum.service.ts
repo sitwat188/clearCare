@@ -68,6 +68,10 @@ export class MedplumService implements OnModuleInit {
     return this.client != null;
   }
 
+  /** System used for ClearCare user id when syncing to Medplum Patient. */
+  static readonly CLEARCARE_USER_IDENTIFIER_SYSTEM =
+    'https://clearcare.local/user';
+
   /**
    * Search Patient resources in Medplum.
    * @param searchParams optional FHIR search params (e.g. { name: 'Smith' })
@@ -75,6 +79,30 @@ export class MedplumService implements OnModuleInit {
   async searchPatients(searchParams?: Record<string, string>) {
     const client = this.ensureClient();
     return client.searchResources('Patient', searchParams ?? {});
+  }
+
+  /**
+   * Find a Medplum Patient by ClearCare user id (identifier system + value).
+   * Returns the first match if any; use to enforce uniqueness before create.
+   */
+  async findPatientByClearCareUserId(
+    clearCareUserId: string,
+  ): Promise<{ id: string; [k: string]: unknown } | null> {
+    const client = this.ensureClient();
+    const identifier = `${MedplumService.CLEARCARE_USER_IDENTIFIER_SYSTEM}|${clearCareUserId}`;
+    const results = (await client.searchResources('Patient', {
+      identifier,
+      _count: '1',
+    })) as unknown;
+    const first: unknown = Array.isArray(results) ? results[0] : undefined;
+    if (
+      first !== null &&
+      first !== undefined &&
+      typeof (first as Record<string, unknown>).id === 'string'
+    ) {
+      return first as { id: string; [k: string]: unknown };
+    }
+    return null;
   }
 
   /**
@@ -104,12 +132,65 @@ export class MedplumService implements OnModuleInit {
     return client.updateResource(patient as any);
   }
 
+  /** Normalize Medplum search result to an array (handles array or Bundle). */
+  private normalizeSearchResult<T extends { resourceType?: string }>(
+    result: unknown,
+    resourceType: string,
+  ): T[] {
+    if (!result) return [];
+    if (Array.isArray(result))
+      return result.filter(
+        (r: unknown) =>
+          r != null &&
+          typeof r === 'object' &&
+          (r as { resourceType?: string }).resourceType === resourceType,
+      ) as T[];
+    const entries =
+      (result as { entry?: Array<{ resource?: T }> })?.entry ?? [];
+    return entries
+      .map((e) => e?.resource)
+      .filter((r): r is T => r != null && r.resourceType === resourceType);
+  }
+
   /**
-   * Search Task resources (e.g. for care instructions).
+   * Search Practitioner resources in Medplum (providers).
+   * Returns a plain array for consistent API response.
    */
-  async searchTasks(searchParams?: Record<string, string>) {
+  async searchPractitioners(
+    searchParams?: Record<string, string>,
+  ): Promise<unknown[]> {
     const client = this.ensureClient();
-    return client.searchResources('Task', searchParams ?? {});
+    const result = await client.searchResources(
+      'Practitioner',
+      searchParams ?? {},
+    );
+    return this.normalizeSearchResult(result as unknown, 'Practitioner');
+  }
+
+  /**
+   * Read one Practitioner by id.
+   */
+  async getPractitioner(id: string) {
+    const client = this.ensureClient();
+    return client.readResource('Practitioner', id);
+  }
+
+  /**
+   * Search Task resources (care instructions / orders).
+   * Returns a plain array for consistent API response.
+   */
+  async searchTasks(searchParams?: Record<string, string>): Promise<unknown[]> {
+    const client = this.ensureClient();
+    const result = await client.searchResources('Task', searchParams ?? {});
+    return this.normalizeSearchResult(result as unknown, 'Task');
+  }
+
+  /**
+   * Read one Task by id.
+   */
+  async getTask(id: string) {
+    const client = this.ensureClient();
+    return client.readResource('Task', id);
   }
 
   /**

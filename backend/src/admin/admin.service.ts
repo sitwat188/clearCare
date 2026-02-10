@@ -279,35 +279,50 @@ export class AdminService {
         details: { role: user.role },
       },
     });
+    this.logger.log(
+      `Audit log written: create user ${user.id} (${user.email})`,
+    );
 
     return this.toUserResponse(user);
   }
 
   /**
-   * Create a minimal FHIR Patient in Medplum for a ClearCare user (patient).
-   * Used when Medplum is configured; failures are logged by the caller.
+   * Create or update a minimal FHIR Patient in Medplum for a ClearCare user (patient).
+   * Uses identifier https://clearcare.local/user|userId for uniqueness; updates if already present.
    */
   private async syncPatientToMedplum(user: {
     id: string;
     firstName: string;
     lastName: string;
   }): Promise<void> {
-    const fhirPatient = {
-      name: [
-        {
-          use: 'official',
-          family: user.lastName,
-          given: [user.firstName].filter(Boolean),
-        },
-      ],
-      identifier: [
-        {
-          system: 'https://clearcare.local/user',
-          value: user.id,
-        },
-      ],
-    };
-    await this.medplumService.createPatient(fhirPatient);
+    const namePayload = [
+      {
+        use: 'official',
+        family: user.lastName,
+        given: [user.firstName].filter(Boolean),
+      },
+    ];
+    const identifierPayload = [
+      {
+        system: 'https://clearcare.local/user',
+        value: user.id,
+      },
+    ];
+    const existing = await this.medplumService.findPatientByClearCareUserId(
+      user.id,
+    );
+    if (existing) {
+      await this.medplumService.updatePatient({
+        ...existing,
+        name: namePayload,
+        identifier: identifierPayload,
+      });
+      return;
+    }
+    await this.medplumService.createPatient({
+      name: namePayload,
+      identifier: identifierPayload,
+    });
   }
 
   async updateUser(
@@ -408,6 +423,7 @@ export class AdminService {
         status: 'success',
       },
     });
+    this.logger.log(`Audit log written: delete user ${id} (${user.email})`);
   }
 
   // ---------- Roles (static) ----------
@@ -458,6 +474,11 @@ export class AdminService {
   }
 
   // ---------- Audit logs ----------
+  /** Returns total count of audit log rows (for verifying DB vs UI). */
+  async getAuditLogsCount(): Promise<number> {
+    return this.prisma.auditLog.count();
+  }
+
   async getAuditLogs(filters: {
     userId?: string;
     action?: string;

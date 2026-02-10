@@ -34,6 +34,10 @@ import ProviderTemplates from './pages/provider/TemplatesPage';
 import ProviderNotifications from './pages/patient/NotificationsPage';
 import MedplumPatientsPage from './pages/provider/MedplumPatientsPage';
 import MedplumPatientDetailPage from './pages/provider/MedplumPatientDetailPage';
+import MedplumProvidersPage from './pages/provider/MedplumProvidersPage';
+import MedplumProviderDetailPage from './pages/provider/MedplumProviderDetailPage';
+import MedplumInstructionsPage from './pages/provider/MedplumInstructionsPage';
+import MedplumInstructionDetailPage from './pages/provider/MedplumInstructionDetailPage';
 
 // Admin pages
 import AdminDashboard from './pages/admin/DashboardPage';
@@ -90,6 +94,10 @@ function App() {
                       <Route path="/provider/patients/:id" element={<ProviderPatientDetail />} />
                       <Route path="/provider/medplum-patients" element={<MedplumPatientsPage />} />
                       <Route path="/provider/medplum-patients/:id" element={<MedplumPatientDetailPage />} />
+                      <Route path="/provider/medplum-providers" element={<MedplumProvidersPage />} />
+                      <Route path="/provider/medplum-providers/:id" element={<MedplumProviderDetailPage />} />
+                      <Route path="/provider/medplum-instructions" element={<MedplumInstructionsPage />} />
+                      <Route path="/provider/medplum-instructions/:id" element={<MedplumInstructionDetailPage />} />
                       <Route path="/provider/instructions/create" element={<CreateInstruction />} />
                       <Route path="/provider/instructions" element={<ProviderInstructions />} />
                       <Route path="/provider/instructions/:id" element={<ProviderInstructions />} />
@@ -111,6 +119,10 @@ function App() {
                       <Route path="/admin/users/:id" element={<AdminUsers />} />
                       <Route path="/admin/medplum-patients" element={<MedplumPatientsPage />} />
                       <Route path="/admin/medplum-patients/:id" element={<MedplumPatientDetailPage />} />
+                      <Route path="/admin/medplum-providers" element={<MedplumProvidersPage />} />
+                      <Route path="/admin/medplum-providers/:id" element={<MedplumProviderDetailPage />} />
+                      <Route path="/admin/medplum-instructions" element={<MedplumInstructionsPage />} />
+                      <Route path="/admin/medplum-instructions/:id" element={<MedplumInstructionDetailPage />} />
                       <Route path="/admin/roles" element={<AdminRoles />} />
                       <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
                       <Route path="/admin/reports" element={<AdminReports />} />

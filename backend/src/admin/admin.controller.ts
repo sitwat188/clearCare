@@ -102,6 +102,11 @@ export class AdminController {
     return this.adminService.deleteRoleStub();
   }
 
+  @Get('audit-logs/count')
+  async getAuditLogsCount() {
+    return this.adminService.getAuditLogsCount();
+  }
+
   @Get('audit-logs')
   async getAuditLogs(
     @Query('userId') userId?: string,

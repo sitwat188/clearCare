@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -19,6 +20,26 @@ import { MedplumService } from './medplum.service';
 @Controller('medplum')
 export class MedplumController {
   constructor(private readonly medplumService: MedplumService) {}
+
+  /**
+   * Root: list available Medplum API paths (no auth). GET /api/v1/medplum
+   */
+  @Get()
+  getMedplumRoot() {
+    return {
+      medplum: 'ok',
+      paths: [
+        'GET /api/v1/medplum/health',
+        'GET /api/v1/medplum/patients',
+        'GET /api/v1/medplum/patients/:id',
+        'GET /api/v1/medplum/practitioners',
+        'GET /api/v1/medplum/practitioners/:id',
+        'GET /api/v1/medplum/tasks',
+        'GET /api/v1/medplum/tasks/:id',
+        'GET /api/v1/medplum/seed',
+      ],
+    };
+  }
 
   /**
    * Health check for Medplum connection (no auth).
@@ -68,8 +89,54 @@ export class MedplumController {
   }
 
   /**
+   * Search Practitioners in Medplum (admin and provider).
+   * GET /api/v1/medplum/practitioners
+   */
+  @Get('practitioners')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrator', 'provider')
+  async searchPractitioners(@Query() query: Record<string, string>) {
+    if (!this.medplumService.isConnected()) {
+      throw new BadRequestException(
+        'Medplum not configured. Set MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET.',
+      );
+    }
+    try {
+      return await this.medplumService.searchPractitioners(query);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Medplum practitioners request failed';
+      throw new BadGatewayException(`Medplum: ${message}`);
+    }
+  }
+
+  /**
+   * Search Tasks (instructions/orders) in Medplum.
+   * GET /api/v1/medplum/tasks
+   */
+  @Get('tasks')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrator', 'provider')
+  async searchTasks(@Query() query: Record<string, string>) {
+    if (!this.medplumService.isConnected()) {
+      throw new BadRequestException(
+        'Medplum not configured. Set MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET.',
+      );
+    }
+    try {
+      return await this.medplumService.searchTasks(query);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Medplum tasks request failed';
+      throw new BadGatewayException(`Medplum: ${message}`);
+    }
+  }
+
+  /**
    * Seed sample FHIR Patients in Medplum (admin and provider).
-   * GET /api/v1/medplum/seed — use GET so it works even if POST is blocked (e.g. proxy).
+   * GET /api/v1/medplum/seed
    */
   @Get('seed')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -80,7 +147,6 @@ export class MedplumController {
         'Medplum not configured. Set MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET.',
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call -- MedplumService returns Promise<unknown[]>
     const result: unknown[] = await this.medplumService.seedSamplePatients();
     return result;
   }
@@ -99,5 +165,51 @@ export class MedplumController {
       );
     }
     return await this.medplumService.getPatient(id);
+  }
+
+  /**
+   * Get one Practitioner by id.
+   * GET /api/v1/medplum/practitioners/:id
+   */
+  @Get('practitioners/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrator', 'provider')
+  async getPractitioner(@Param('id') id: string): Promise<unknown> {
+    if (!this.medplumService.isConnected()) {
+      throw new BadRequestException(
+        'Medplum not configured. Set MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET.',
+      );
+    }
+    try {
+      return await this.medplumService.getPractitioner(id);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Medplum practitioner request failed';
+      throw new BadGatewayException(`Medplum: ${message}`);
+    }
+  }
+
+  /**
+   * Get one Task by id.
+   * GET /api/v1/medplum/tasks/:id
+   */
+  @Get('tasks/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrator', 'provider')
+  async getTask(@Param('id') id: string): Promise<unknown> {
+    if (!this.medplumService.isConnected()) {
+      throw new BadRequestException(
+        'Medplum not configured. Set MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET.',
+      );
+    }
+    try {
+      return await this.medplumService.getTask(id);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Medplum task request failed';
+      throw new BadGatewayException(`Medplum: ${message}`);
+    }
   }
 }

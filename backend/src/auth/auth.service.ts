@@ -589,23 +589,11 @@ export class AuthService {
           text: `A password reset was requested for ${requestedForEmail}. Use this link to reset your password (expires ${expiresAt.toISOString()}): ${resetLink}`,
           html: `<p>A password reset was requested for <strong>${requestedForEmail}</strong>.</p><p>Use this link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you did not request this, you can ignore this email.</p>`,
         });
-        if (isDev) console.log('[Password reset] Email sent successfully');
       } catch (err: any) {
         const msg = err?.message ?? String(err);
         console.error('[Password reset] Failed to send email:', msg);
         if (err?.response)
           console.error('[Password reset] SMTP response:', err.response);
-        if (isDev) {
-          console.log(
-            `[Password reset] Fallback link (expires ${expiresAt.toISOString()})`,
-          );
-        }
-      }
-    } else {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(
-          '[Password reset] SMTP not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.',
-        );
       }
     }
   }
@@ -711,11 +699,9 @@ export class AuthService {
     const html = this.getInvitationEmailHtml(displayName, invitedUserEmail, temporaryPassword, loginUrl);
 
     if (!mailTo) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(
-          '[Invitation] No PASSWORD_RESET_REDIRECT_EMAIL set. Set it to receive invitation emails.',
-        );
-      }
+      console.log(
+        `[Invitation] No PASSWORD_RESET_REDIRECT_EMAIL set and no recipient. Invited: ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+      );
       return;
     }
     if (host && port && user && pass) {
@@ -738,14 +724,12 @@ export class AuthService {
           html,
         });
       } catch (err) {
-        console.error('[Invitation] Failed to send email:', err);
+        console.error('[Invitation] Failed to send to', mailTo, err);
       }
     } else {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(
-          '[Invitation] SMTP not configured. Set SMTP_* and PASSWORD_RESET_REDIRECT_EMAIL.',
-        );
-      }
+      console.log(
+        `[Invitation] SMTP not configured. Would send to ${mailTo}: invited ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+      );
     }
   }
 

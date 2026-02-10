@@ -24,6 +24,7 @@ async function bootstrap() {
   }
 
   const app = await NestFactory.create(AppModule);
+
   app.useGlobalInterceptors(new ResponseWrapperInterceptor());
 
   // Enable CORS for frontend (HIPAA: restrict to known origins in production)

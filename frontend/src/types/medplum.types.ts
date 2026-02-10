@@ -43,6 +43,43 @@ export interface FhirPatient {
   [key: string]: unknown;
 }
 
+/** FHIR Practitioner (provider) */
+export interface FhirPractitioner {
+  resourceType: 'Practitioner';
+  id?: string;
+  meta?: { versionId?: string; lastUpdated?: string };
+  name?: FhirHumanName[];
+  identifier?: FhirIdentifier[];
+  telecom?: FhirContactPoint[];
+  address?: FhirAddress[];
+  qualification?: Array<{ code?: { text?: string }; issuer?: { display?: string } }>;
+  [key: string]: unknown;
+}
+
+/** FHIR reference (e.g. Patient/123, Practitioner/456) */
+export interface FhirReference {
+  reference?: string;
+  display?: string;
+}
+
+/** FHIR Task (instruction / order) */
+export interface FhirTask {
+  resourceType: 'Task';
+  id?: string;
+  meta?: { versionId?: string; lastUpdated?: string };
+  status?: 'draft' | 'requested' | 'received' | 'accepted' | 'rejected' | 'ready' | 'cancelled' | 'in-progress' | 'on-hold' | 'failed' | 'completed' | 'entered-in-error';
+  intent?: 'unknown' | 'proposal' | 'plan' | 'order' | 'original-order' | 'reflex-order' | 'filler-order' | 'instance-order' | 'option';
+  description?: string;
+  for?: FhirReference;
+  owner?: FhirReference;
+  executionPeriod?: { start?: string; end?: string };
+  code?: { text?: string };
+  focus?: FhirReference;
+  authoredOn?: string;
+  lastModified?: string;
+  [key: string]: unknown;
+}
+
 /** FHIR Bundle (search result) */
 export interface FhirBundle {
   resourceType: 'Bundle';

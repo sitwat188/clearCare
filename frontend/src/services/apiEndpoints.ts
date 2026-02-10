@@ -11,7 +11,7 @@ import type { Patient } from '../types/patient.types';
 import type { ComplianceRecord, ComplianceMetrics } from '../types/compliance.types';
 import type { Notification } from '../types/notification.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
-import type { FhirPatient, FhirBundle } from '../types/medplum.types';
+import type { FhirPatient, FhirBundle, FhirPractitioner, FhirTask } from '../types/medplum.types';
 
 /**
  * Make API request. Expects backend to return ApiResponse<T> in response.data.
@@ -553,6 +553,40 @@ export const medplumEndpoints = {
    */
   seedSamplePatients: async (): Promise<ApiResponse<FhirPatient[]>> => {
     return makeApiRequest('get', '/medplum/seed');
+  },
+
+  /**
+   * GET /api/v1/medplum/practitioners
+   * Search FHIR Practitioners (providers) in Medplum
+   */
+  getPractitioners: async (params?: Record<string, string>): Promise<ApiResponse<FhirPractitioner[] | FhirBundle>> => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return makeApiRequest('get', `/medplum/practitioners${query}`);
+  },
+
+  /**
+   * GET /api/v1/medplum/practitioners/:id
+   * Get one FHIR Practitioner by id
+   */
+  getPractitioner: async (id: string): Promise<ApiResponse<FhirPractitioner>> => {
+    return makeApiRequest('get', `/medplum/practitioners/${id}`);
+  },
+
+  /**
+   * GET /api/v1/medplum/tasks
+   * Search FHIR Tasks (instructions/orders) in Medplum
+   */
+  getTasks: async (params?: Record<string, string>): Promise<ApiResponse<FhirTask[] | FhirBundle>> => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return makeApiRequest('get', `/medplum/tasks${query}`);
+  },
+
+  /**
+   * GET /api/v1/medplum/tasks/:id
+   * Get one FHIR Task by id
+   */
+  getTask: async (id: string): Promise<ApiResponse<FhirTask>> => {
+    return makeApiRequest('get', `/medplum/tasks/${id}`);
   },
 };
 

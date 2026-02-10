@@ -1,10 +1,24 @@
 /**
  * Medplum FHIR service
- * Fetches patients from Medplum via backend and normalizes responses.
+ * Fetches patients, practitioners, and tasks from Medplum via backend.
  */
 
 import { apiEndpoints } from './apiEndpoints';
-import type { FhirPatient } from '../types/medplum.types';
+import type { FhirPatient, FhirPractitioner, FhirTask } from '../types/medplum.types';
+
+function asArray<T extends { resourceType?: string }>(
+  data: unknown,
+  resourceType: string,
+): T[] {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data.filter((r): r is T => r?.resourceType === resourceType);
+  }
+  const entries = (data as { entry?: Array<{ resource?: T }> }).entry ?? [];
+  return entries
+    .map((e) => e?.resource)
+    .filter((r): r is T => r != null && r.resourceType === resourceType);
+}
 
 /**
  * Get list of FHIR Patients from Medplum.
@@ -15,16 +29,7 @@ export const getMedplumPatients = async (
 ): Promise<FhirPatient[]> => {
   const response = await apiEndpoints.medplum.getPatients(params);
   if (!response.success || response.data == null) return [];
-  const data = response.data;
-  // Medplum searchResources returns ResourceArray (array), not Bundle
-  if (Array.isArray(data)) {
-    return data.filter((r): r is FhirPatient => r?.resourceType === 'Patient');
-  }
-  // Fallback: if backend ever returns a Bundle
-  const entries = (data as { entry?: Array<{ resource?: FhirPatient }> }).entry ?? [];
-  return entries
-    .map((e) => e?.resource)
-    .filter((r): r is FhirPatient => r != null && r.resourceType === 'Patient');
+  return asArray<FhirPatient>(response.data, 'Patient');
 };
 
 /**
@@ -52,9 +57,43 @@ export const seedSamplePatients = async (): Promise<FhirPatient[]> => {
   return Array.isArray(response.data) ? response.data : [];
 };
 
+export const getMedplumPractitioners = async (
+  params?: Record<string, string>
+): Promise<FhirPractitioner[]> => {
+  const response = await apiEndpoints.medplum.getPractitioners(params);
+  if (!response.success || response.data == null) return [];
+  return asArray<FhirPractitioner>(response.data, 'Practitioner');
+};
+
+export const getMedplumPractitioner = async (
+  id: string
+): Promise<FhirPractitioner | null> => {
+  const response = await apiEndpoints.medplum.getPractitioner(id);
+  if (!response.success || !response.data) return null;
+  return response.data;
+};
+
+export const getMedplumTasks = async (
+  params?: Record<string, string>
+): Promise<FhirTask[]> => {
+  const response = await apiEndpoints.medplum.getTasks(params);
+  if (!response.success || response.data == null) return [];
+  return asArray<FhirTask>(response.data, 'Task');
+};
+
+export const getMedplumTask = async (id: string): Promise<FhirTask | null> => {
+  const response = await apiEndpoints.medplum.getTask(id);
+  if (!response.success || !response.data) return null;
+  return response.data;
+};
+
 export const medplumService = {
   getMedplumPatients,
   getMedplumPatient,
+  getMedplumPractitioners,
+  getMedplumPractitioner,
+  getMedplumTasks,
+  getMedplumTask,
   getMedplumHealth,
   seedSamplePatients,
 };
