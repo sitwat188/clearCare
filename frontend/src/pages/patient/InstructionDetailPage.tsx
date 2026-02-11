@@ -37,7 +37,6 @@ import {
   Event as FollowUpIcon,
   Warning as WarningIcon,
   Download as DownloadIcon,
-  Print as PrintIcon,
   Description as DescriptionIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
