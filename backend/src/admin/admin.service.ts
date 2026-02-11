@@ -237,12 +237,10 @@ export class AdminService {
       },
     });
 
-    // Send invitation email to user and, if set, to PASSWORD_RESET_REDIRECT_EMAIL
-    await this.authService.sendInvitationEmail(
-      user.email,
-      user.firstName,
-      rawPassword,
-    );
+    // Send invitation email in background (avoids timeout when SMTP is blocked, e.g. on Render)
+    void this.authService
+      .sendInvitationEmail(user.email, user.firstName, rawPassword)
+      .catch(() => {});
 
     if (dto.role === 'patient') {
       await this.prisma.patient.create({

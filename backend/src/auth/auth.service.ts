@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
@@ -510,7 +511,7 @@ export class AuthService {
       }
 
       return this.generateTokens(user.id, user.email, user.role);
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -534,15 +535,15 @@ export class AuthService {
       data: { email, token, expiresAt },
     });
 
+    // In production, always send to the user's email. Redirect only for testing/staging (when NODE_ENV !== 'production').
+    const redirect = process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim();
     const mailTo =
-      process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim() || email;
+      process.env.NODE_ENV !== 'production' && redirect ? redirect : email;
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
 
-    await this.sendPasswordResetEmail(
-      mailTo,
-      resetLink,
-      expiresAt,
-      email,
+    // Send email in background so request returns immediately (avoids timeout when SMTP is blocked, e.g. on Render)
+    void this.sendPasswordResetEmail(mailTo, resetLink, expiresAt, email).catch(
+      () => {},
     );
 
     return {
@@ -550,8 +551,22 @@ export class AuthService {
     };
   }
 
+  private static isResendConfigured(): boolean {
+    return !!process.env.RESEND_API_KEY?.trim();
+  }
+
+  private static getMailFrom(): string {
+    const from = process.env.MAIL_FROM?.trim();
+    if (from) return from;
+    if (AuthService.isResendConfigured())
+      return 'ClearCare <onboarding@resend.dev>';
+    const user = process.env.SMTP_USER?.trim()?.replace(/^["']|["']$/g, '');
+    return user ? `ClearCare <${user}>` : 'ClearCare <noreply@example.com>';
+  }
+
   /**
-   * Send password reset email. If SMTP is not configured, logs the link to console.
+   * Send password reset email. Uses Resend (HTTP) if RESEND_API_KEY is set (works on Render);
+   * otherwise uses SMTP. If neither is configured, logs the link to console.
    */
   private async sendPasswordResetEmail(
     to: string,
@@ -559,41 +574,83 @@ export class AuthService {
     expiresAt: Date,
     requestedForEmail: string,
   ): Promise<void> {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const resendKey = process.env.RESEND_API_KEY?.trim();
     const host = process.env.SMTP_HOST?.trim();
     const port = process.env.SMTP_PORT?.trim();
     const user = process.env.SMTP_USER?.trim();
     const pass = process.env.SMTP_PASS?.trim();
 
-    if (host && port && user && pass) {
-      const cleanPass = pass.replace(/^["']|["']$/g, '');
-      const cleanUser = user.replace(/^["']|["']$/g, '');
-      const isDev = process.env.NODE_ENV !== 'production';
-      if (isDev) {
-        console.log(
-          `[Password reset] Sending to ${to} via ${host}:${port} (SMTP_USER=${cleanUser})`,
-        );
-      }
+    if (resendKey) {
       try {
-        const transporter = nodemailer.createTransport({
-          host,
-          port: parseInt(port, 10),
-          secure: process.env.SMTP_SECURE?.trim() === 'true',
-          auth: { user: cleanUser, pass: cleanPass },
-        });
-        const from =
-          process.env.MAIL_FROM?.trim() || `ClearCare <${cleanUser}>`;
-        await transporter.sendMail({
+        const resend = new Resend(resendKey);
+        const from = AuthService.getMailFrom();
+        await resend.emails.send({
           from,
           to,
           subject: 'Reset your password - ClearCare',
-          text: `A password reset was requested for ${requestedForEmail}. Use this link to reset your password (expires ${expiresAt.toISOString()}): ${resetLink}`,
           html: `<p>A password reset was requested for <strong>${requestedForEmail}</strong>.</p><p>Use this link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you did not request this, you can ignore this email.</p>`,
         });
-      } catch (err: any) {
-        const msg = err?.message ?? String(err);
-        console.error('[Password reset] Failed to send email:', msg);
-        if (err?.response)
-          console.error('[Password reset] SMTP response:', err.response);
+        return;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[Password reset] Resend failed:', msg);
+        if (isProduction) {
+          console.error(
+            '[Password reset] PRODUCTION: Check RESEND_API_KEY and Resend dashboard.',
+          );
+        }
+        return;
+      }
+    }
+
+    if (!host || !port || !user || !pass) {
+      if (isProduction) {
+        console.error(
+          '[Password reset] PRODUCTION: No email sent. Set RESEND_API_KEY (recommended on Render) or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.',
+        );
+      } else {
+        console.log(
+          `[Password reset] Email not configured. Would send to ${to}. Reset link (1h): ${resetLink}`,
+        );
+      }
+      return;
+    }
+
+    const cleanPass = pass.replace(/^["']|["']$/g, '');
+    const cleanUser = user.replace(/^["']|["']$/g, '');
+    if (!isProduction) {
+      console.log(
+        `[Password reset] Sending to ${to} via ${host}:${port} (SMTP_USER=${cleanUser})`,
+      );
+    }
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port: parseInt(port, 10),
+        secure: process.env.SMTP_SECURE?.trim() === 'true',
+        auth: { user: cleanUser, pass: cleanPass },
+      });
+      const from = AuthService.getMailFrom();
+      await transporter.sendMail({
+        from,
+        to,
+        subject: 'Reset your password - ClearCare',
+        text: `A password reset was requested for ${requestedForEmail}. Use this link to reset your password (expires ${expiresAt.toISOString()}): ${resetLink}`,
+        html: `<p>A password reset was requested for <strong>${requestedForEmail}</strong>.</p><p>Use this link to reset your password (valid for 1 hour):</p><p><a href="${resetLink}">${resetLink}</a></p><p>If you did not request this, you can ignore this email.</p>`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const response =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: string }).response
+          : undefined;
+      console.error('[Password reset] Failed to send email:', msg);
+      if (response) console.error('[Password reset] SMTP response:', response);
+      if (isProduction) {
+        console.error(
+          '[Password reset] PRODUCTION: On Render, SMTP is often blocked. Use RESEND_API_KEY instead (HTTP API).',
+        );
       }
     }
   }
@@ -675,9 +732,8 @@ export class AuthService {
   }
 
   /**
-   * Send invitation email with temporary password. Delivers to the address in
-   * PASSWORD_RESET_REDIRECT_EMAIL (env) so all system emails go to one inbox for now.
-   * The body still shows the invited user's email and temp password.
+   * Send invitation email with temporary password. In production, sends to the invited user's email.
+   * When NODE_ENV !== 'production' and PASSWORD_RESET_REDIRECT_EMAIL is set, redirects to that address for testing.
    */
   async sendInvitationEmail(
     invitedUserEmail: string,
@@ -686,8 +742,11 @@ export class AuthService {
   ): Promise<void> {
     const loginUrl =
       process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
+    const redirect = process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim();
     const mailTo =
-      process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim() || invitedUserEmail;
+      process.env.NODE_ENV !== 'production' && redirect
+        ? redirect
+        : invitedUserEmail;
     const host = process.env.SMTP_HOST?.trim();
     const port = process.env.SMTP_PORT?.trim();
     const user = process.env.SMTP_USER?.trim();
@@ -696,40 +755,80 @@ export class AuthService {
     const subject = "You're invited to ClearCare+";
     const displayName = firstName || 'User';
     const text = `Welcome to ClearCare+, ${displayName}.\n\nYour account has been created. Use the temporary password below to log in. You will be asked to set a new password on first login. This temporary password is valid for one day.\n\nEmail: ${invitedUserEmail}\nTemporary password: ${temporaryPassword}\n\nLog in here: ${loginUrl}/login\n\nIf you did not expect this email, please contact your administrator.`;
-    const html = this.getInvitationEmailHtml(displayName, invitedUserEmail, temporaryPassword, loginUrl);
+    const html = this.getInvitationEmailHtml(
+      displayName,
+      invitedUserEmail,
+      temporaryPassword,
+      loginUrl,
+    );
 
     if (!mailTo) {
       console.log(
-        `[Invitation] No PASSWORD_RESET_REDIRECT_EMAIL set and no recipient. Invited: ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+        `[Invitation] No recipient. Invited: ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
       );
       return;
     }
-    if (host && port && user && pass) {
-      const cleanPass = pass.replace(/^["']|["']$/g, '');
-      const cleanUser = user.replace(/^["']|["']$/g, '');
+    const isProduction = process.env.NODE_ENV === 'production';
+    const resendKey = process.env.RESEND_API_KEY?.trim();
+
+    if (resendKey) {
       try {
-        const transporter = nodemailer.createTransport({
-          host,
-          port: parseInt(port, 10),
-          secure: process.env.SMTP_SECURE?.trim() === 'true',
-          auth: { user: cleanUser, pass: cleanPass },
-        });
-        const from =
-          process.env.MAIL_FROM?.trim() || `ClearCare <${cleanUser}>`;
-        await transporter.sendMail({
+        const resend = new Resend(resendKey);
+        const from = AuthService.getMailFrom();
+        await resend.emails.send({
           from,
           to: mailTo,
           subject,
-          text,
           html,
         });
+        return;
       } catch (err) {
-        console.error('[Invitation] Failed to send to', mailTo, err);
+        console.error('[Invitation] Resend failed to', mailTo, err);
+        if (isProduction) {
+          console.error(
+            '[Invitation] PRODUCTION: Check RESEND_API_KEY and Resend dashboard.',
+          );
+        }
+        return;
       }
-    } else {
-      console.log(
-        `[Invitation] SMTP not configured. Would send to ${mailTo}: invited ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
-      );
+    }
+
+    if (!host || !port || !user || !pass) {
+      if (isProduction) {
+        console.error(
+          '[Invitation] PRODUCTION: No email sent. Set RESEND_API_KEY (recommended on Render) or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.',
+        );
+      } else {
+        console.log(
+          `[Invitation] Email not configured. Would send to ${mailTo}: invited ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+        );
+      }
+      return;
+    }
+    const cleanPass = pass.replace(/^["']|["']$/g, '');
+    const cleanUser = user.replace(/^["']|["']$/g, '');
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port: parseInt(port, 10),
+        secure: process.env.SMTP_SECURE?.trim() === 'true',
+        auth: { user: cleanUser, pass: cleanPass },
+      });
+      const from = AuthService.getMailFrom();
+      await transporter.sendMail({
+        from,
+        to: mailTo,
+        subject,
+        text,
+        html,
+      });
+    } catch (err) {
+      console.error('[Invitation] Failed to send to', mailTo, err);
+      if (isProduction) {
+        console.error(
+          '[Invitation] PRODUCTION: On Render, SMTP is often blocked. Use RESEND_API_KEY instead.',
+        );
+      }
     }
   }
 

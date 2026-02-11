@@ -53,5 +53,24 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
   console.log(`🚀 Application is running on: http://localhost:${port}/api/v1`);
+  if (process.env.NODE_ENV === 'production') {
+    const resendSet = !!process.env.RESEND_API_KEY?.trim();
+    const smtpSet =
+      !!process.env.SMTP_HOST?.trim() &&
+      !!process.env.SMTP_PORT?.trim() &&
+      !!process.env.SMTP_USER?.trim() &&
+      !!process.env.SMTP_PASS?.trim();
+    if (!resendSet && !smtpSet) {
+      console.warn(
+        '⚠️  PRODUCTION: Email not configured. Set RESEND_API_KEY (recommended on Render) or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (and FRONTEND_URL).',
+      );
+    } else {
+      console.log(
+        resendSet
+          ? '✓ Email (Resend) configured for password reset and invitations.'
+          : '✓ Email (SMTP) configured for password reset and invitations.',
+      );
+    }
+  }
 }
-bootstrap();
+void bootstrap();
