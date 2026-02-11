@@ -23,7 +23,6 @@ import { format } from 'date-fns';
 import { medplumService } from '../../services/medplumService';
 import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
-import type { FhirTask } from '../../types/medplum.types';
 
 const MedplumInstructionDetailPage = () => {
   const { id } = useParams<{ id: string }>();
