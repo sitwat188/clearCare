@@ -114,7 +114,7 @@ const Sidebar = () => {
     { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.PROVIDER.DASHBOARD },
     { text: t('nav.myPatients'), icon: <PatientsIcon />, path: ROUTES.PROVIDER.PATIENTS },
     { text: t('nav.medplumPatients'), icon: <MedplumIcon />, path: ROUTES.PROVIDER.MEDPLUM_PATIENTS },
-    { text: t('nav.medplumProviders'), icon: <PersonIcon />, path: ROUTES.PROVIDER.MEDPLUM_PROVIDERS },
+    // { text: t('nav.medplumProviders'), icon: <PersonIcon />, path: ROUTES.PROVIDER.MEDPLUM_PROVIDERS },
     { text: t('nav.medplumInstructions'), icon: <InstructionsIcon />, path: ROUTES.PROVIDER.MEDPLUM_INSTRUCTIONS },
     { text: t('nav.instructions'), icon: <InstructionsIcon />, path: ROUTES.PROVIDER.INSTRUCTIONS },
     { text: t('nav.createInstruction'), icon: <CreateIcon />, path: ROUTES.PROVIDER.CREATE_INSTRUCTION },
