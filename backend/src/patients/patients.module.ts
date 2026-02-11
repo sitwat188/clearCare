@@ -7,9 +7,16 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { InstructionsModule } from '../instructions/instructions.module';
 import { ComplianceModule } from '../compliance/compliance.module';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, InstructionsModule, ComplianceModule, UsersModule],
+  imports: [
+    PrismaModule,
+    InstructionsModule,
+    ComplianceModule,
+    UsersModule,
+    NotificationsModule,
+  ],
   controllers: [PatientsController, PatientsMeController],
   providers: [PatientsService, RolesGuard],
   exports: [PatientsService],

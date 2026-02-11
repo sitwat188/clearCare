@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 
@@ -14,6 +15,7 @@ export class PatientsService {
   constructor(
     private prisma: PrismaService,
     private encryption: EncryptionService,
+    private notifications: NotificationsService,
   ) {}
 
   /**
@@ -363,6 +365,7 @@ export class PatientsService {
       data.emergencyContactPhone = this.encryption.encrypt(
         updateDto.emergencyContactPhone,
       );
+    const previousProviderIds = patient.assignedProviderIds;
     if (updateDto.assignedProviderIds != null)
       data.assignedProviderIds = updateDto.assignedProviderIds;
 
@@ -393,6 +396,57 @@ export class PatientsService {
         userAgent,
       },
     });
+
+    // When admin assigns providers, notify the patient and each newly assigned provider
+    if (
+      requestingUserRole === 'administrator' &&
+      updateDto.assignedProviderIds != null &&
+      updatedPatient?.user
+    ) {
+      const newProviderIds = updateDto.assignedProviderIds.filter(
+        (id) => !previousProviderIds.includes(id),
+      );
+      const patientName =
+        `${updatedPatient.user.firstName ?? ''} ${updatedPatient.user.lastName ?? ''}`.trim() ||
+        updatedPatient.user.email;
+
+      if (newProviderIds.length > 0) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- NotificationsService.createNotification
+          await this.notifications.createNotification({
+            userId: updatedPatient.userId,
+            type: 'provider_assigned',
+            title: 'Provider assigned',
+            message: 'A care provider has been assigned to your care.',
+            priority: 'medium',
+            actionUrl: '/patient/instructions',
+            actionLabel: 'View instructions',
+          });
+        } catch {
+          // Do not fail the update if notification fails
+        }
+        const providers = await this.prisma.user.findMany({
+          where: { id: { in: newProviderIds }, deletedAt: null },
+          select: { id: true, firstName: true, lastName: true, email: true },
+        });
+        for (const prov of providers) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- NotificationsService.createNotification
+            await this.notifications.createNotification({
+              userId: prov.id,
+              type: 'provider_assigned',
+              title: 'Patient assignment',
+              message: `You have been assigned to patient ${patientName}.`,
+              priority: 'medium',
+              actionUrl: '/provider/patients',
+              actionLabel: 'View patients',
+            });
+          } catch {
+            // Do not fail the update if notification fails
+          }
+        }
+      }
+    }
 
     return updatedPatient
       ? this.toPatientResponse(updatedPatient)

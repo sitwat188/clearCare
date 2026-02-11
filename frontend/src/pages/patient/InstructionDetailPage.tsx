@@ -169,9 +169,7 @@ const PatientInstructionDetail = () => {
             >
               Download PDF
             </Button>
-            <Button variant="outlined" startIcon={<PrintIcon />}>
-              Print
-            </Button>
+         
           </Box>
         }
       />

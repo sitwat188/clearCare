@@ -10,6 +10,33 @@ export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
   /**
+   * Create a notification for a user (e.g. provider_assigned, instruction_assigned).
+   */
+  async createNotification(params: {
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    priority?: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    return this.prisma.notification.create({
+      data: {
+        userId: params.userId,
+        type: params.type,
+        title: params.title,
+        message: params.message,
+        priority: params.priority ?? 'medium',
+        actionUrl: params.actionUrl ?? undefined,
+        actionLabel: params.actionLabel ?? undefined,
+        metadata: (params.metadata ?? undefined) as object | undefined,
+      },
+    });
+  }
+
+  /**
    * Get all notifications for the current user
    */
   async getNotifications(userId: string) {
