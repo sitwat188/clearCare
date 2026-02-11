@@ -102,39 +102,25 @@ export class InstructionsService {
     // Verify patient exists and is assigned to provider
     const patient = await this.prisma.patient.findFirst({
       where: { id: createDto.patientId, deletedAt: null },
+      include: { patientProviders: { select: { providerId: true } } },
     });
 
     if (!patient) {
       throw new NotFoundException('Patient not found');
     }
 
-    // HIPAA: Provider can only create instructions for assigned patients
-    if (!patient.assignedProviderIds.includes(requestingUserId)) {
+    const assignedProviderIds = patient.patientProviders?.map((pp) => pp.providerId) ?? [];
+    if (!assignedProviderIds.includes(requestingUserId)) {
       throw new ForbiddenException(
         'You can only create instructions for patients assigned to you',
       );
     }
 
-    // Get provider and patient user info
-    const provider = await this.prisma.user.findFirst({
-      where: { id: requestingUserId, deletedAt: null },
-    });
-
-    const patientUser = await this.prisma.user.findFirst({
-      where: { id: patient.userId, deletedAt: null },
-    });
-
-    if (!provider || !patientUser) {
-      throw new NotFoundException('Provider or patient user not found');
-    }
-
-    // Create instruction (encrypt content at rest)
+    // Create instruction (encrypt content at rest; providerName/patientName derived from relations)
     const instruction = await this.prisma.careInstruction.create({
       data: {
         providerId: requestingUserId,
-        providerName: `${provider.firstName} ${provider.lastName}`,
         patientId: createDto.patientId,
-        patientName: `${patientUser.firstName} ${patientUser.lastName}`,
         title: createDto.title,
         type: createDto.type,
         priority: createDto.priority || 'medium',
@@ -183,7 +169,28 @@ export class InstructionsService {
       },
     });
 
-    return this.decryptInstruction(instruction);
+    const withRelations = await this.prisma.careInstruction.findFirst({
+      where: { id: instruction.id },
+      include: {
+        provider: true,
+        patient: { include: { user: true } },
+      },
+    });
+    return this.toInstructionResponse(withRelations ?? instruction);
+  }
+
+  /** Add providerName/patientName from relations and decrypt content */
+  private toInstructionResponse(instruction: any) {
+    const decrypted = this.decryptInstruction(instruction);
+    const providerName =
+      instruction.provider != null
+        ? `${instruction.provider.firstName ?? ''} ${instruction.provider.lastName ?? ''}`.trim()
+        : '';
+    const patientName =
+      instruction.patient?.user != null
+        ? `${instruction.patient.user.firstName ?? ''} ${instruction.patient.user.lastName ?? ''}`.trim()
+        : '';
+    return { ...decrypted, providerName, patientName };
   }
 
   /**
@@ -202,12 +209,9 @@ export class InstructionsService {
           orderBy: { timestamp: 'desc' },
           take: 10,
         },
+        provider: true,
         patient: {
-          select: {
-            id: true,
-            userId: true,
-            assignedProviderIds: true,
-          },
+          include: { user: true, patientProviders: { select: { providerId: true } } },
         },
       },
     });
@@ -216,12 +220,9 @@ export class InstructionsService {
       throw new NotFoundException('Instruction not found');
     }
 
-    // HIPAA: Row-level access control
+    const providerIds = instruction.patient?.patientProviders?.map((pp: { providerId: string }) => pp.providerId) ?? [];
+
     if (requestingUserRole === 'patient') {
-      // Patients can only access their own instructions
-      const user = await this.prisma.user.findFirst({
-        where: { id: requestingUserId, deletedAt: null },
-      });
       const patient = await this.prisma.patient.findFirst({
         where: { userId: requestingUserId, deletedAt: null },
       });
@@ -231,19 +232,14 @@ export class InstructionsService {
         );
       }
     } else if (requestingUserRole === 'provider') {
-      // Providers can only access instructions for assigned patients
-      if (
-        instruction.patient.assignedProviderIds &&
-        !instruction.patient.assignedProviderIds.includes(requestingUserId)
-      ) {
+      if (!providerIds.includes(requestingUserId)) {
         throw new ForbiddenException(
           'You can only access instructions for patients assigned to you',
         );
       }
     }
-    // Administrators can access all instructions
 
-    return this.decryptInstruction(instruction);
+    return this.toInstructionResponse(instruction);
   }
 
   /**
@@ -272,7 +268,6 @@ export class InstructionsService {
             userId: user.id,
             dateOfBirth: '',
             medicalRecordNumber: `TEMP-${user.id.slice(0, 8)}`,
-            assignedProviderIds: [],
           },
         });
       }
@@ -292,20 +287,18 @@ export class InstructionsService {
       const list = await this.prisma.careInstruction.findMany({
         where,
         include: {
-          acknowledgments: {
-            orderBy: { timestamp: 'desc' },
-            take: 5,
-          },
+          acknowledgments: { orderBy: { timestamp: 'desc' }, take: 5 },
+          provider: true,
+          patient: { include: { user: true } },
         },
         orderBy: { createdAt: 'desc' },
       });
-      return list.map((i) => this.decryptInstruction(i));
+      return list.map((i) => this.toInstructionResponse(i));
     } else if (requestingUserRole === 'provider') {
-      // Providers see instructions for assigned patients
       const where: any = {
         deletedAt: null,
         patient: {
-          assignedProviderIds: { has: requestingUserId },
+          patientProviders: { some: { providerId: requestingUserId } },
         },
       };
 
@@ -322,20 +315,13 @@ export class InstructionsService {
       const list = await this.prisma.careInstruction.findMany({
         where,
         include: {
-          acknowledgments: {
-            orderBy: { timestamp: 'desc' },
-            take: 5,
-          },
-          patient: {
-            select: {
-              id: true,
-              userId: true,
-            },
-          },
+          acknowledgments: { orderBy: { timestamp: 'desc' }, take: 5 },
+          provider: true,
+          patient: { include: { user: true } },
         },
         orderBy: { createdAt: 'desc' },
       });
-      return list.map((i) => this.decryptInstruction(i));
+      return list.map((i) => this.toInstructionResponse(i));
     } else if (requestingUserRole === 'administrator') {
       // Administrators see all instructions
       const where: any = {
@@ -355,20 +341,13 @@ export class InstructionsService {
       const list = await this.prisma.careInstruction.findMany({
         where,
         include: {
-          acknowledgments: {
-            orderBy: { timestamp: 'desc' },
-            take: 5,
-          },
-          patient: {
-            select: {
-              id: true,
-              userId: true,
-            },
-          },
+          acknowledgments: { orderBy: { timestamp: 'desc' }, take: 5 },
+          provider: true,
+          patient: { include: { user: true } },
         },
         orderBy: { createdAt: 'desc' },
       });
-      return list.map((i) => this.decryptInstruction(i));
+      return list.map((i) => this.toInstructionResponse(i));
     }
 
     return [];
@@ -389,7 +368,7 @@ export class InstructionsService {
     const instruction = await this.prisma.careInstruction.findFirst({
       where: { id: instructionId, deletedAt: null },
       include: {
-        patient: true,
+        patient: { include: { patientProviders: { select: { providerId: true } } } },
       },
     });
 
@@ -397,13 +376,12 @@ export class InstructionsService {
       throw new NotFoundException('Instruction not found');
     }
 
-    // HIPAA: Only providers can update instructions
     if (requestingUserRole !== 'provider') {
       throw new ForbiddenException('Only providers can update instructions');
     }
 
-    // HIPAA: Provider can only update instructions for assigned patients
-    if (!instruction.patient.assignedProviderIds.includes(requestingUserId)) {
+    const providerIds = instruction.patient.patientProviders?.map((pp) => pp.providerId) ?? [];
+    if (!providerIds.includes(requestingUserId)) {
       throw new ForbiddenException(
         'You can only update instructions for patients assigned to you',
       );
@@ -485,7 +463,11 @@ export class InstructionsService {
       },
     });
 
-    return this.decryptInstruction(updatedInstruction);
+    const withRelations = await this.prisma.careInstruction.findFirst({
+      where: { id: instructionId },
+      include: { provider: true, patient: { include: { user: true } } },
+    });
+    return this.toInstructionResponse(withRelations ?? updatedInstruction);
   }
 
   /**
@@ -502,7 +484,7 @@ export class InstructionsService {
     const instruction = await this.prisma.careInstruction.findFirst({
       where: { id: instructionId, deletedAt: null },
       include: {
-        patient: true,
+        patient: { include: { patientProviders: { select: { providerId: true } } } },
       },
     });
 
@@ -510,13 +492,12 @@ export class InstructionsService {
       throw new NotFoundException('Instruction not found');
     }
 
-    // HIPAA: Only providers can delete instructions
     if (requestingUserRole !== 'provider') {
       throw new ForbiddenException('Only providers can delete instructions');
     }
 
-    // HIPAA: Provider can only delete instructions for assigned patients
-    if (!instruction.patient.assignedProviderIds.includes(requestingUserId)) {
+    const providerIds = instruction.patient.patientProviders?.map((pp) => pp.providerId) ?? [];
+    if (!providerIds.includes(requestingUserId)) {
       throw new ForbiddenException(
         'You can only delete instructions for patients assigned to you',
       );
@@ -587,11 +568,10 @@ export class InstructionsService {
       );
     }
 
-    // Create acknowledgment
+    // Create acknowledgment (patientId derivable from instruction)
     await this.prisma.acknowledgment.create({
       data: {
         instructionId: instruction.id,
-        patientId: patient.id,
         acknowledgmentType: acknowledgeDto.acknowledgmentType,
         ipAddress: ipAddress || '',
         userAgent: userAgent || '',
@@ -651,6 +631,10 @@ export class InstructionsService {
       },
     });
 
-    return this.decryptInstruction(updatedInstruction);
+    const withRelations = await this.prisma.careInstruction.findFirst({
+      where: { id: instructionId },
+      include: { provider: true, patient: { include: { user: true } } },
+    });
+    return this.toInstructionResponse(withRelations ?? updatedInstruction);
   }
 }

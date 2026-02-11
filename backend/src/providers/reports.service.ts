@@ -18,7 +18,10 @@ export class ReportsService {
     const end = new Date(config.dateRange.end);
 
     const patients = await this.prisma.patient.findMany({
-      where: { assignedProviderIds: { has: providerId }, deletedAt: null },
+      where: {
+        patientProviders: { some: { providerId } },
+        deletedAt: null,
+      },
       include: { user: { select: { firstName: true, lastName: true, email: true } } },
     });
 
@@ -35,12 +38,18 @@ export class ReportsService {
 
     const complianceRecords = await this.prisma.complianceRecord.findMany({
       where: {
-        patient: { assignedProviderIds: { has: providerId } },
+        instruction: {
+          patient: {
+            patientProviders: { some: { providerId } },
+          },
+        },
         updatedAt: { gte: start, lte: end },
       },
       include: {
-        instruction: { select: { title: true, type: true } },
-        patient: { include: { user: { select: { firstName: true, lastName: true } } } },
+        instruction: {
+          select: { title: true, type: true },
+          include: { patient: { include: { user: { select: { firstName: true, lastName: true } } } } },
+        },
       },
     });
 

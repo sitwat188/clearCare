@@ -248,7 +248,6 @@ export class AdminService {
           userId: user.id,
           dateOfBirth: '1900-01-01',
           medicalRecordNumber: `MRN-${user.id.slice(0, 8).toUpperCase()}`,
-          assignedProviderIds: [],
         },
       });
       // Sync to Medplum FHIR when configured (non-blocking; failures are logged only)
@@ -261,16 +260,12 @@ export class AdminService {
       }
     }
 
-    const adminDisplay = await this.getAdminDisplay(adminUserId);
     await this.prisma.auditLog.create({
       data: {
         userId: adminUserId,
-        userEmail: adminDisplay.userEmail,
-        userName: adminDisplay.userName,
         action: 'create',
         resourceType: 'user',
         resourceId: user.id,
-        resourceName: user.email,
         ipAddress: ipAddress ?? '',
         userAgent: userAgent ?? '',
         status: 'success',
@@ -367,16 +362,12 @@ export class AdminService {
       },
     });
 
-    const adminDisplay = await this.getAdminDisplay(adminUserId);
     await this.prisma.auditLog.create({
       data: {
         userId: adminUserId,
-        userEmail: adminDisplay.userEmail,
-        userName: adminDisplay.userName,
         action: 'write',
         resourceType: 'user',
         resourceId: id,
-        resourceName: updated.email,
         ipAddress: ipAddress ?? '',
         userAgent: userAgent ?? '',
         status: 'success',
@@ -406,16 +397,12 @@ export class AdminService {
       data: { deletedAt: new Date() },
     });
 
-    const adminDisplay = await this.getAdminDisplay(adminUserId);
     await this.prisma.auditLog.create({
       data: {
         userId: adminUserId,
-        userEmail: adminDisplay.userEmail,
-        userName: adminDisplay.userName,
         action: 'delete',
         resourceType: 'user',
         resourceId: id,
-        resourceName: user.email,
         ipAddress: ipAddress ?? '',
         userAgent: userAgent ?? '',
         status: 'success',
@@ -510,26 +497,62 @@ export class AdminService {
         orderBy: { timestamp: 'desc' },
         skip,
         take: limit,
+        include: {
+          user: {
+            select: { email: true, firstName: true, lastName: true },
+          },
+        },
       }),
       this.prisma.auditLog.count({ where }),
     ]);
 
+    const resourceUserIds = [
+      ...new Set(
+        items
+          .filter((l) => l.resourceType === 'user' && l.resourceId != null)
+          .map((l) => l.resourceId as string),
+      ),
+    ];
+    const resourceUsers =
+      resourceUserIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: resourceUserIds } },
+            select: { id: true, email: true },
+          })
+        : [];
+    const resourceNameByUserId = new Map(
+      resourceUsers.map((u) => [u.id, u.email]),
+    );
+
     return {
-      data: items.map((log) => ({
-        id: log.id,
-        userId: log.userId,
-        userEmail: log.userEmail,
-        userName: log.userName,
-        action: log.action,
-        resourceType: log.resourceType,
-        resourceId: log.resourceId,
-        resourceName: log.resourceName,
-        ipAddress: log.ipAddress,
-        userAgent: log.userAgent,
-        timestamp: log.timestamp.toISOString(),
-        status: log.status,
-        details: log.details as Record<string, unknown> | undefined,
-      })),
+      data: items.map((log) => {
+        const userName =
+          log.user != null
+            ? `${log.user.firstName ?? ''} ${log.user.lastName ?? ''}`.trim() ||
+              log.user.email ||
+              log.userId
+            : '(deleted user)';
+        const userEmail = log.user?.email ?? '(deleted user)';
+        const resourceName =
+          log.resourceType === 'user' && log.resourceId != null
+            ? (resourceNameByUserId.get(log.resourceId) ?? null)
+            : null;
+        return {
+          id: log.id,
+          userId: log.userId,
+          userEmail,
+          userName,
+          action: log.action,
+          resourceType: log.resourceType,
+          resourceId: log.resourceId,
+          resourceName,
+          ipAddress: log.ipAddress,
+          userAgent: log.userAgent,
+          timestamp: log.timestamp.toISOString(),
+          status: log.status,
+          details: log.details as Record<string, unknown> | undefined,
+        };
+      }),
       total,
       page,
       limit,

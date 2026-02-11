@@ -57,6 +57,7 @@ export class PatientsService {
     }
 
     // Create patient record (encrypt PHI at rest)
+    const providerIds = createDto.assignedProviderIds ?? [];
     const patient = await this.prisma.patient.create({
       data: {
         userId: createDto.userId,
@@ -92,7 +93,12 @@ export class PatientsService {
         emergencyContactPhone: createDto.emergencyContactPhone
           ? this.encryption.encrypt(createDto.emergencyContactPhone)
           : null,
-        assignedProviderIds: createDto.assignedProviderIds ?? [],
+        patientProviders:
+          providerIds.length > 0
+            ? {
+                create: providerIds.map((providerId) => ({ providerId })),
+              }
+            : undefined,
       },
     });
 
@@ -132,6 +138,7 @@ export class PatientsService {
       where: { id: patientId, deletedAt: null },
       include: {
         user: true,
+        patientProviders: { select: { providerId: true } },
         instructions: {
           where: { deletedAt: null },
           take: 10,
@@ -152,7 +159,8 @@ export class PatientsService {
         );
       }
     } else if (requestingUserRole === 'provider') {
-      if (!patient.assignedProviderIds.includes(requestingUserId)) {
+      const assignedProviderIds = patient.patientProviders?.map((pp) => pp.providerId) ?? [];
+      if (!assignedProviderIds.includes(requestingUserId)) {
         throw new ForbiddenException(
           'You can only access patients assigned to you',
         );
@@ -164,7 +172,9 @@ export class PatientsService {
 
   /** Map DB patient (with user) to frontend-friendly shape; decrypt PHI for API response */
   private toPatientResponse(patient: any) {
-    const { user: u, ...rest } = patient;
+    const { user: u, patientProviders, ...rest } = patient;
+    const assignedProviderIds =
+      patientProviders?.map((pp: { providerId: string }) => pp.providerId) ?? [];
     const street = this.encryption.decrypt(patient.addressStreet);
     const city = this.encryption.decrypt(patient.addressCity);
     const state = this.encryption.decrypt(patient.addressState);
@@ -178,6 +188,7 @@ export class PatientsService {
     );
     return {
       ...rest,
+      assignedProviderIds,
       dateOfBirth: this.encryption.decrypt(patient.dateOfBirth),
       medicalRecordNumber: this.encryption.decrypt(patient.medicalRecordNumber),
       phone: this.encryption.decrypt(patient.phone) || undefined,
@@ -230,7 +241,11 @@ export class PatientsService {
     if (!patient) {
       throw new NotFoundException('Patient not found for this user');
     }
-    return this.toPatientResponse(patient);
+    const withProviders = await this.prisma.patient.findFirst({
+      where: { id: patient.id },
+      include: { user: true, patientProviders: { select: { providerId: true } } },
+    });
+    return withProviders ? this.toPatientResponse(withProviders) : this.toPatientResponse(patient);
   }
 
   /**
@@ -256,11 +271,12 @@ export class PatientsService {
     } else if (requestingUserRole === 'provider') {
       const list = await this.prisma.patient.findMany({
         where: {
-          assignedProviderIds: { has: requestingUserId },
+          patientProviders: { some: { providerId: requestingUserId } },
           deletedAt: null,
         },
         include: {
           user: true,
+          patientProviders: { select: { providerId: true } },
           instructions: {
             where: { deletedAt: null },
             take: 5,
@@ -274,6 +290,7 @@ export class PatientsService {
         where: { deletedAt: null },
         include: {
           user: true,
+          patientProviders: { select: { providerId: true } },
           instructions: {
             where: { deletedAt: null },
             take: 5,
@@ -301,11 +318,14 @@ export class PatientsService {
   ) {
     const patient = await this.prisma.patient.findFirst({
       where: { id: patientId, deletedAt: null },
+      include: { patientProviders: { select: { providerId: true } } },
     });
 
     if (!patient) {
       throw new NotFoundException('Patient not found');
     }
+
+    const assignedProviderIds = patient.patientProviders?.map((pp) => pp.providerId) ?? [];
 
     // HIPAA: Row-level access control
     if (requestingUserRole === 'patient') {
@@ -318,7 +338,7 @@ export class PatientsService {
         );
       }
     } else if (requestingUserRole === 'provider') {
-      if (!patient.assignedProviderIds.includes(requestingUserId)) {
+      if (!assignedProviderIds.includes(requestingUserId)) {
         throw new ForbiddenException(
           'You can only update patients assigned to you',
         );
@@ -365,19 +385,33 @@ export class PatientsService {
       data.emergencyContactPhone = this.encryption.encrypt(
         updateDto.emergencyContactPhone,
       );
-    const previousProviderIds = patient.assignedProviderIds;
-    if (updateDto.assignedProviderIds != null)
-      data.assignedProviderIds = updateDto.assignedProviderIds;
 
     await this.prisma.patient.update({
       where: { id: patientId },
       data,
     });
 
+    // Sync provider assignments via junction table
+    if (updateDto.assignedProviderIds != null) {
+      await this.prisma.patientProvider.deleteMany({
+        where: { patientId },
+      });
+      if (updateDto.assignedProviderIds.length > 0) {
+        await this.prisma.patientProvider.createMany({
+          data: updateDto.assignedProviderIds.map((providerId) => ({
+            patientId,
+            providerId,
+          })),
+        });
+      }
+    }
+
+    const previousProviderIds = assignedProviderIds;
+
     // Create history entry
     const updatedPatient = await this.prisma.patient.findFirst({
       where: { id: patientId },
-      include: { user: true },
+      include: { user: true, patientProviders: { select: { providerId: true } } },
     });
     await this.prisma.patientHistory.create({
       data: {
@@ -404,7 +438,7 @@ export class PatientsService {
       updatedPatient?.user
     ) {
       const newProviderIds = updateDto.assignedProviderIds.filter(
-        (id) => !previousProviderIds.includes(id),
+        (id: string) => !previousProviderIds.includes(id),
       );
       const patientName =
         `${updatedPatient.user.firstName ?? ''} ${updatedPatient.user.lastName ?? ''}`.trim() ||

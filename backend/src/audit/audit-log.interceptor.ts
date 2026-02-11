@@ -92,10 +92,15 @@ function inferResourceType(path: string): string {
   return first || 'unknown';
 }
 
+/** Path segment that looks like an ID (UUID, hex, or long opaque string). */
+const ID_LIKE = /^[0-9a-zA-Z_-]{8,}$/;
+/** Path segments that are route names, not IDs. */
+const NOT_IDS = new Set(['by-user', 'audit-logs', 'me', 'login', 'logout', 'refresh', 'forgot-password', 'reset-password']);
+
 function inferResourceId(
   params: Record<string, unknown> | undefined,
+  path: string,
 ): string | undefined {
-  if (!params) return undefined;
   const candidates = [
     'id',
     'userId',
@@ -104,14 +109,25 @@ function inferResourceId(
     'recordId',
     'notificationId',
   ];
-  for (const key of candidates) {
-    const v = params[key];
-    if (typeof v === 'string' && v.trim()) return v;
+  if (params && typeof params === 'object') {
+    for (const key of candidates) {
+      const v = params[key];
+      if (typeof v === 'string' && v.trim()) return v;
+    }
+    for (const v of Object.values(params)) {
+      if (typeof v === 'string' && v.trim()) return v;
+    }
   }
-  // fallback: first string param
-  for (const v of Object.values(params)) {
-    if (typeof v === 'string' && v.trim()) return v;
-  }
+
+  // Fallback: extract from path (req.params is often empty in global interceptor)
+  const cleaned = path.replace(/^\/+/, '').split('?')[0];
+  const parts = cleaned.split('/').filter(Boolean);
+  const skip = parts[0] === 'api' && parts[1] === 'v1' ? 2 : 0;
+  const rest = parts.slice(skip);
+  if (rest.length < 2) return undefined;
+  const last = rest[rest.length - 1];
+  if (typeof last !== 'string' || NOT_IDS.has(last.toLowerCase())) return undefined;
+  if (ID_LIKE.test(last)) return last;
   return undefined;
 }
 
@@ -139,11 +155,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const action = inferAction(method, path);
     const resourceType = inferResourceType(path);
-    const resourceId = inferResourceId(req.params);
-    const userName =
-      `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
-      user.email ||
-      user.id;
+    const resourceId = inferResourceId(req.params, path);
 
     const isPhiResource = PHI_RESOURCE_TYPES.has(resourceType);
     const baseDetails: Record<string, unknown> = {
@@ -172,12 +184,9 @@ export class AuditLogInterceptor implements NestInterceptor {
         await this.prisma.auditLog.create({
           data: {
             userId: user.id,
-            userEmail: user.email || '',
-            userName,
             action,
             resourceType,
             resourceId: resourceId ?? undefined,
-            resourceName: undefined,
             ipAddress: ipAddress || 'unknown',
             userAgent: userAgent || '',
             status,

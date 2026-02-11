@@ -27,7 +27,7 @@ export class ComplianceService {
     const instruction = await this.prisma.careInstruction.findFirst({
       where: { id: createDto.instructionId, deletedAt: null },
       include: {
-        patient: true,
+        patient: { include: { patientProviders: { select: { providerId: true } } } },
       },
     });
 
@@ -35,7 +35,8 @@ export class ComplianceService {
       throw new NotFoundException('Instruction not found');
     }
 
-    // HIPAA: Row-level access control
+    const providerIds = instruction.patient.patientProviders?.map((pp) => pp.providerId) ?? [];
+
     if (requestingUserRole === 'patient') {
       const patient = await this.prisma.patient.findFirst({
         where: { userId: requestingUserId, deletedAt: null },
@@ -46,18 +47,16 @@ export class ComplianceService {
         );
       }
     } else if (requestingUserRole === 'provider') {
-      if (!instruction.patient.assignedProviderIds.includes(requestingUserId)) {
+      if (!providerIds.includes(requestingUserId)) {
         throw new ForbiddenException(
           'You can only create compliance records for assigned patients',
         );
       }
     }
 
-    // Check if compliance record already exists
     const existing = await this.prisma.complianceRecord.findFirst({
       where: {
         instructionId: createDto.instructionId,
-        patientId: instruction.patientId,
         type: createDto.type,
       },
     });
@@ -68,11 +67,9 @@ export class ComplianceService {
       );
     }
 
-    // Create compliance record
     const compliance = await this.prisma.complianceRecord.create({
       data: {
         instructionId: createDto.instructionId,
-        patientId: instruction.patientId,
         type: createDto.type,
         status: createDto.status || 'not-started',
         overallPercentage: createDto.overallPercentage || 0,
@@ -106,98 +103,56 @@ export class ComplianceService {
       }
 
       const where: any = {
-        patientId: patient.id,
+        instruction: { patientId: patient.id },
       };
-
-      if (filters?.instructionId) {
-        where.instructionId = filters.instructionId;
-      }
-      if (filters?.type) {
-        where.type = filters.type;
-      }
+      if (filters?.instructionId) where.instructionId = filters.instructionId;
+      if (filters?.type) where.type = filters.type;
 
       return this.prisma.complianceRecord.findMany({
         where,
         include: {
           instruction: {
-            select: {
-              id: true,
-              title: true,
-              type: true,
-              status: true,
-            },
+            select: { id: true, title: true, type: true, status: true, patientId: true },
           },
         },
         orderBy: { updatedAt: 'desc' },
       });
     } else if (requestingUserRole === 'provider') {
-      // Providers see compliance for assigned patients
       const where: any = {
-        patient: {
-          assignedProviderIds: { has: requestingUserId },
+        instruction: {
+          patient: {
+            patientProviders: { some: { providerId: requestingUserId } },
+          },
         },
       };
-
       if (filters?.patientId) {
-        where.patientId = filters.patientId;
+        (where.instruction as any).patientId = filters.patientId;
       }
-      if (filters?.instructionId) {
-        where.instructionId = filters.instructionId;
-      }
-      if (filters?.type) {
-        where.type = filters.type;
-      }
+      if (filters?.instructionId) where.instructionId = filters.instructionId;
+      if (filters?.type) where.type = filters.type;
 
       return this.prisma.complianceRecord.findMany({
         where,
         include: {
           instruction: {
-            select: {
-              id: true,
-              title: true,
-              type: true,
-              status: true,
-            },
-          },
-          patient: {
-            select: {
-              id: true,
-              userId: true,
-            },
+            select: { id: true, title: true, type: true, status: true, patientId: true },
           },
         },
         orderBy: { updatedAt: 'desc' },
       });
     } else if (requestingUserRole === 'administrator') {
-      // Administrators see all compliance records
       const where: any = {};
-
       if (filters?.patientId) {
-        where.patientId = filters.patientId;
+        where.instruction = { patientId: filters.patientId };
       }
-      if (filters?.instructionId) {
-        where.instructionId = filters.instructionId;
-      }
-      if (filters?.type) {
-        where.type = filters.type;
-      }
+      if (filters?.instructionId) where.instructionId = filters.instructionId;
+      if (filters?.type) where.type = filters.type;
 
       return this.prisma.complianceRecord.findMany({
         where,
         include: {
           instruction: {
-            select: {
-              id: true,
-              title: true,
-              type: true,
-              status: true,
-            },
-          },
-          patient: {
-            select: {
-              id: true,
-              userId: true,
-            },
+            select: { id: true, title: true, type: true, status: true, patientId: true },
           },
         },
         orderBy: { updatedAt: 'desc' },
@@ -221,7 +176,7 @@ export class ComplianceService {
       include: {
         instruction: {
           include: {
-            patient: true,
+            patient: { include: { patientProviders: { select: { providerId: true } } } },
           },
         },
       },
@@ -236,15 +191,15 @@ export class ComplianceService {
       const patient = await this.prisma.patient.findFirst({
         where: { userId: requestingUserId, deletedAt: null },
       });
-      if (!patient || record.patientId !== patient.id) {
+      if (!patient || record.instruction.patientId !== patient.id) {
         throw new ForbiddenException(
           'You can only access your own compliance records',
         );
       }
     } else if (requestingUserRole === 'provider') {
       if (
-        !record.instruction.patient.assignedProviderIds.includes(
-          requestingUserId,
+        !record.instruction.patient.patientProviders?.some(
+          (pp) => pp.providerId === requestingUserId,
         )
       ) {
         throw new ForbiddenException(
@@ -271,7 +226,7 @@ export class ComplianceService {
       include: {
         instruction: {
           include: {
-            patient: true,
+            patient: { include: { patientProviders: { select: { providerId: true } } } },
           },
         },
       },
@@ -286,15 +241,15 @@ export class ComplianceService {
       const patient = await this.prisma.patient.findFirst({
         where: { userId: requestingUserId, deletedAt: null },
       });
-      if (!patient || record.patientId !== patient.id) {
+      if (!patient || record.instruction.patientId !== patient.id) {
         throw new ForbiddenException(
           'You can only update your own compliance records',
         );
       }
     } else if (requestingUserRole === 'provider') {
       if (
-        !record.instruction.patient.assignedProviderIds.includes(
-          requestingUserId,
+        !record.instruction.patient.patientProviders?.some(
+          (pp) => pp.providerId === requestingUserId,
         )
       ) {
         throw new ForbiddenException(
@@ -343,7 +298,7 @@ export class ComplianceService {
       include: {
         instruction: {
           include: {
-            patient: true,
+            patient: { include: { patientProviders: { select: { providerId: true } } } },
           },
         },
       },
@@ -364,15 +319,15 @@ export class ComplianceService {
       const patient = await this.prisma.patient.findFirst({
         where: { userId: requestingUserId, deletedAt: null },
       });
-      if (!patient || record.patientId !== patient.id) {
+      if (!patient || record.instruction.patientId !== patient.id) {
         throw new ForbiddenException(
           'You can only update your own medication adherence',
         );
       }
     } else if (requestingUserRole === 'provider') {
       if (
-        !record.instruction.patient.assignedProviderIds.includes(
-          requestingUserId,
+        !record.instruction.patient.patientProviders?.some(
+          (pp) => pp.providerId === requestingUserId,
         )
       ) {
         throw new ForbiddenException(
@@ -469,7 +424,7 @@ export class ComplianceService {
       include: {
         instruction: {
           include: {
-            patient: true,
+            patient: { include: { patientProviders: { select: { providerId: true } } } },
           },
         },
       },
@@ -490,15 +445,15 @@ export class ComplianceService {
       const patient = await this.prisma.patient.findFirst({
         where: { userId: requestingUserId, deletedAt: null },
       });
-      if (!patient || record.patientId !== patient.id) {
+      if (!patient || record.instruction.patientId !== patient.id) {
         throw new ForbiddenException(
           'You can only update your own lifestyle compliance',
         );
       }
     } else if (requestingUserRole === 'provider') {
       if (
-        !record.instruction.patient.assignedProviderIds.includes(
-          requestingUserId,
+        !record.instruction.patient.patientProviders?.some(
+          (pp) => pp.providerId === requestingUserId,
         )
       ) {
         throw new ForbiddenException(
@@ -590,7 +545,8 @@ export class ComplianceService {
       });
       patientId = patient?.id;
     } else if (records.length > 0) {
-      patientId = filters?.patientId || (records[0] as any).patientId;
+      patientId =
+        filters?.patientId || (records[0] as any).instruction?.patientId;
     }
 
     const compliantCount = records.filter((r) => r.status === 'compliant').length;

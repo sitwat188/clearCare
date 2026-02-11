@@ -85,7 +85,7 @@ async function main() {
   // ---------------------------------------------------------------------------
   const patient1 = await prisma.patient.upsert({
     where: { userId: patient1User.id },
-    update: { assignedProviderIds: [provider.id] },
+    update: {},
     create: {
       userId: patient1User.id,
       dateOfBirth: '1985-05-15',
@@ -98,13 +98,12 @@ async function main() {
       emergencyContactName: 'Jane Doe',
       emergencyContactRelationship: 'Spouse',
       emergencyContactPhone: '555-0102',
-      assignedProviderIds: [provider.id],
     },
   });
 
   const patient2 = await prisma.patient.upsert({
     where: { userId: patient2User.id },
-    update: { assignedProviderIds: [provider.id] },
+    update: {},
     create: {
       userId: patient2User.id,
       dateOfBirth: '1990-08-22',
@@ -117,13 +116,12 @@ async function main() {
       emergencyContactName: 'Michael Johnson',
       emergencyContactRelationship: 'Husband',
       emergencyContactPhone: '555-0202',
-      assignedProviderIds: [provider.id],
     },
   });
 
   const patient3 = await prisma.patient.upsert({
     where: { userId: patient3User.id },
-    update: { assignedProviderIds: [provider.id] },
+    update: {},
     create: {
       userId: patient3User.id,
       dateOfBirth: '1978-12-05',
@@ -136,16 +134,22 @@ async function main() {
       emergencyContactName: 'Mary Williams',
       emergencyContactRelationship: 'Wife',
       emergencyContactPhone: '555-0302',
-      assignedProviderIds: [provider.id],
     },
   });
 
-  console.log('Seeded patients:', patient1.id, patient2.id, patient3.id);
+  await prisma.patientProvider.createMany({
+    data: [
+      { patientId: patient1.id, providerId: provider.id },
+      { patientId: patient2.id, providerId: provider.id },
+      { patientId: patient3.id, providerId: provider.id },
+    ],
+    skipDuplicates: true,
+  });
+  console.log('Seeded patients and provider assignments:', patient1.id, patient2.id, patient3.id);
 
   // ---------------------------------------------------------------------------
   // Audit logs: sample activity so Admin > Audit Logs shows data
   // ---------------------------------------------------------------------------
-  const adminName = `${admin.firstName} ${admin.lastName}`;
   const now = new Date();
   const oneHour = 60 * 60 * 1000;
   const oneDay = 24 * oneHour;
@@ -153,8 +157,6 @@ async function main() {
   const auditLogData = [
     {
       userId: admin.id,
-      userEmail: admin.email,
-      userName: adminName,
       action: 'login',
       resourceType: 'auth',
       ipAddress: '192.168.1.10',
@@ -164,12 +166,9 @@ async function main() {
     },
     {
       userId: admin.id,
-      userEmail: admin.email,
-      userName: adminName,
       action: 'create',
       resourceType: 'user',
       resourceId: patient2User.id,
-      resourceName: patient2User.email,
       ipAddress: '192.168.1.10',
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       status: 'success',
@@ -178,8 +177,6 @@ async function main() {
     },
     {
       userId: provider.id,
-      userEmail: provider.email,
-      userName: `${provider.firstName} ${provider.lastName}`,
       action: 'login',
       resourceType: 'auth',
       ipAddress: '192.168.1.101',
@@ -189,12 +186,9 @@ async function main() {
     },
     {
       userId: provider.id,
-      userEmail: provider.email,
-      userName: `${provider.firstName} ${provider.lastName}`,
       action: 'write',
       resourceType: 'instruction',
       resourceId: 'inst-1',
-      resourceName: 'Post-Surgery Medication Instructions',
       ipAddress: '192.168.1.101',
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
       status: 'success',
@@ -203,8 +197,6 @@ async function main() {
     },
     {
       userId: patient1User.id,
-      userEmail: patient1User.email,
-      userName: `${patient1User.firstName} ${patient1User.lastName}`,
       action: 'login',
       resourceType: 'auth',
       ipAddress: '192.168.1.100',
@@ -220,17 +212,12 @@ async function main() {
   });
   console.log('Seeded audit logs:', auditLogData.length);
 
-  const providerName = `${provider.firstName} ${provider.lastName}`;
-  const patient1Name = `${patient1User.firstName} ${patient1User.lastName}`;
-  const patient2Name = `${patient2User.firstName} ${patient2User.lastName}`;
-  const patient3Name = `${patient3User.firstName} ${patient3User.lastName}`;
-
   const baseDate = new Date('2024-01-20T10:00:00Z');
   const nextWeek = new Date(baseDate);
   nextWeek.setDate(nextWeek.getDate() + 7);
 
   // ---------------------------------------------------------------------------
-  // Instructions: match mock (inst-1 to inst-5)
+  // Instructions: match mock (inst-1 to inst-5); providerName/patientName derived from relations
   // ---------------------------------------------------------------------------
   await prisma.careInstruction.upsert({
     where: { id: 'inst-1' },
@@ -238,9 +225,7 @@ async function main() {
     create: {
       id: 'inst-1',
       providerId: provider.id,
-      providerName,
       patientId: patient1.id,
-      patientName: patient1Name,
       title: 'Post-Surgery Medication Instructions',
       type: 'medication',
       status: 'active',
@@ -271,9 +256,7 @@ async function main() {
     create: {
       id: 'inst-2',
       providerId: provider.id,
-      providerName,
       patientId: patient1.id,
-      patientName: patient1Name,
       title: 'Dietary Restrictions',
       type: 'lifestyle',
       status: 'acknowledged',
@@ -304,9 +287,7 @@ async function main() {
     create: {
       id: 'inst-3',
       providerId: provider.id,
-      providerName,
       patientId: patient1.id,
-      patientName: patient1Name,
       title: 'Follow-Up Appointment Required',
       type: 'follow-up',
       status: 'completed',
@@ -332,9 +313,7 @@ async function main() {
     create: {
       id: 'inst-4',
       providerId: provider.id,
-      providerName,
       patientId: patient2.id,
-      patientName: patient2Name,
       title: 'Hypertension Medication',
       type: 'medication',
       status: 'active',
@@ -364,9 +343,7 @@ async function main() {
     create: {
       id: 'inst-5',
       providerId: provider.id,
-      providerName,
       patientId: patient3.id,
-      patientName: patient3Name,
       title: 'Exercise Regimen',
       type: 'lifestyle',
       status: 'active',
@@ -403,7 +380,6 @@ async function main() {
     create: {
       id: 'ack-1',
       instructionId: 'inst-2',
-      patientId: patient1.id,
       acknowledgmentType: 'receipt',
       ipAddress: '192.168.1.1',
       userAgent: 'Mozilla/5.0',
@@ -416,7 +392,6 @@ async function main() {
     create: {
       id: 'ack-2',
       instructionId: 'inst-2',
-      patientId: patient1.id,
       acknowledgmentType: 'understanding',
       ipAddress: '192.168.1.1',
       userAgent: 'Mozilla/5.0',
@@ -429,7 +404,6 @@ async function main() {
     create: {
       id: 'ack-3',
       instructionId: 'inst-3',
-      patientId: patient1.id,
       acknowledgmentType: 'receipt',
       ipAddress: '192.168.1.1',
       userAgent: 'Mozilla/5.0',
@@ -451,7 +425,6 @@ async function main() {
     create: {
       id: 'comp-1',
       instructionId: 'inst-1',
-      patientId: patient1.id,
       type: 'medication',
       status: 'compliant',
       overallPercentage: 95,
@@ -481,7 +454,6 @@ async function main() {
     create: {
       id: 'comp-2',
       instructionId: 'inst-2',
-      patientId: patient1.id,
       type: 'lifestyle',
       status: 'compliant',
       overallPercentage: 88,

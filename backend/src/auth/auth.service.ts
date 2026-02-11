@@ -532,7 +532,7 @@ export class AuthService {
     );
 
     await this.prisma.passwordResetToken.create({
-      data: { email, token, expiresAt },
+      data: { userId: user.id, token, expiresAt },
     });
 
     // In production, always send to the user's email. Redirect only for testing/staging (when NODE_ENV !== 'production').
@@ -839,17 +839,15 @@ export class AuthService {
         usedAt: null,
         expiresAt: { gt: new Date() },
       },
+      include: { user: true },
     });
 
     if (!record) {
       throw new BadRequestException('Invalid or expired reset token');
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: { email: record.email, deletedAt: null },
-    });
-
-    if (!user) {
+    const user = record.user;
+    if (!user || user.deletedAt) {
       throw new BadRequestException('User no longer exists');
     }
 

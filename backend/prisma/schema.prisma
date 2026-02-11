@@ -44,9 +44,18 @@ model User {
   lastLoginAt DateTime? @map("last_login_at")
 
   // Relations
-  auditLogs   AuditLog[]
-  userHistory UserHistory[]
-  patient     Patient?
+  auditLogs                   AuditLog[]
+  userHistory                 UserHistory[]
+  historyChangedBy            UserHistory[]           @relation("UserHistoryChangedBy")
+  patient                     Patient?
+  instructionsAsProvider      CareInstruction[]       @relation("InstructionProvider")
+  patientProviders            PatientProvider[]       @relation("PatientProviders")
+  passwordResetTokens         PasswordResetToken[]
+  notifications               Notification[]
+  patientHistoryChangedBy     PatientHistory[]        @relation("PatientHistoryChangedBy")
+  instructionHistoryChangedBy InstructionHistory[]    @relation("InstructionHistoryChangedBy")
+  complianceRecordsUpdated    ComplianceRecord[]      @relation("ComplianceRecordsUpdated")
+  instructionTemplates        InstructionTemplate[]
 
   @@index([email])
   @@index([deletedAt]) // For efficient soft delete queries
@@ -65,23 +74,22 @@ model UserHistory {
   userAgent String?  @map("user_agent")
   createdAt DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user        User  @relation(fields: [userId], references: [id])
+  changedByUser User? @relation("UserHistoryChangedBy", fields: [changedBy], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([createdAt])
+  @@index([changedBy])
   @@map("user_history")
 }
 
-// Audit Log table for all PHI access and actions
+// Audit Log: normalized – userEmail/userName/resourceName removed; derive via user relation (and resourceType+resourceId) when displaying
 model AuditLog {
   id           String   @id @default(uuid())
   userId       String   @map("user_id")
-  userEmail    String   @map("user_email")
-  userName     String   @map("user_name")
   action       String // 'read', 'write', 'delete', 'export', 'login', 'logout', etc.
   resourceType String   @map("resource_type") // 'patient', 'instruction', 'compliance', 'user', etc.
   resourceId   String?  @map("resource_id")
-  resourceName String?  @map("resource_name")
   ipAddress    String   @map("ip_address")
   userAgent    String   @map("user_agent")
   status       String // 'success', 'failure', 'denied'
@@ -114,8 +122,6 @@ model Patient {
   emergencyContactRelationship String? @map("emergency_contact_relationship") // Encrypted
   emergencyContactPhone        String? @map("emergency_contact_phone") // Encrypted
 
-  assignedProviderIds String[] @map("assigned_provider_ids") // Array of provider user IDs
-
   // Soft delete
   deletedAt DateTime? @map("deleted_at")
 
@@ -124,14 +130,28 @@ model Patient {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user               User     @relation(fields: [userId], references: [id])
-  patientHistory     PatientHistory[]
-  instructions       CareInstruction[]
-  complianceRecords  ComplianceRecord[]
+  user             User              @relation(fields: [userId], references: [id])
+  patientHistory   PatientHistory[]
+  instructions     CareInstruction[]
+  patientProviders PatientProvider[]
 
   @@index([userId])
   @@index([deletedAt])
   @@map("patients")
+}
+
+// Junction: patient – provider (many-to-many), normalized from former assignedProviderIds array
+model PatientProvider {
+  patientId   String @map("patient_id")
+  providerId  String @map("provider_id")
+  assignedAt  DateTime @default(now()) @map("assigned_at")
+
+  patient  Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  provider User    @relation("PatientProviders", fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@id([patientId, providerId])
+  @@index([providerId])
+  @@map("patient_providers")
 }
 
 // History table for Patient changes
@@ -139,14 +159,15 @@ model PatientHistory {
   id        String   @id @default(uuid())
   patientId String   @map("patient_id")
   action    String // 'create', 'update', 'delete', 'view', 'export'
-  changedBy String   @map("changed_by") // User ID who accessed/changed
+  changedBy String?  @map("changed_by") // User ID who accessed/changed (null if user deleted)
   oldValues Json?    @map("old_values") // Encrypted previous PHI values
   newValues Json?    @map("new_values") // Encrypted new PHI values
   ipAddress String?  @map("ip_address")
   userAgent String?  @map("user_agent")
   createdAt DateTime @default(now()) @map("created_at")
 
-  patient Patient @relation(fields: [patientId], references: [id])
+  patient       Patient @relation(fields: [patientId], references: [id])
+  changedByUser User?   @relation("PatientHistoryChangedBy", fields: [changedBy], references: [id], onDelete: SetNull)
 
   @@index([patientId])
   @@index([createdAt])
@@ -154,14 +175,12 @@ model PatientHistory {
   @@map("patient_history")
 }
 
-// Care Instruction model
+// Care Instruction model (providerName/patientName removed; derive via provider/patient relations)
 model CareInstruction {
-  id           String @id @default(uuid())
-  providerId   String @map("provider_id")
-  providerName String @map("provider_name")
-  patientId    String @map("patient_id")
-  patientName  String @map("patient_name")
-  title        String
+  id         String @id @default(uuid())
+  providerId String @map("provider_id")
+  patientId  String @map("patient_id")
+  title      String
   type         String // 'medication' | 'lifestyle' | 'follow-up' | 'warning'
   status       String // 'draft' | 'active' | 'acknowledged' | 'completed' | 'expired' | 'cancelled'
   priority     String // 'low' | 'medium' | 'high' | 'urgent'
@@ -190,6 +209,7 @@ model CareInstruction {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
+  provider           User                 @relation("InstructionProvider", fields: [providerId], references: [id])
   patient            Patient              @relation(fields: [patientId], references: [id])
   acknowledgments    Acknowledgment[]
   instructionHistory InstructionHistory[]
@@ -207,25 +227,26 @@ model InstructionHistory {
   id            String   @id @default(uuid())
   instructionId String   @map("instruction_id")
   action        String // 'create', 'update', 'delete', 'acknowledge', 'view'
-  changedBy     String   @map("changed_by")
+  changedBy     String?  @map("changed_by") // null if user deleted
   oldValues     Json?    @map("old_values")
   newValues     Json?    @map("new_values")
   ipAddress     String?  @map("ip_address")
   userAgent     String?  @map("user_agent")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  instruction CareInstruction @relation(fields: [instructionId], references: [id])
+  instruction   CareInstruction @relation(fields: [instructionId], references: [id])
+  changedByUser User?           @relation("InstructionHistoryChangedBy", fields: [changedBy], references: [id], onDelete: SetNull)
 
   @@index([instructionId])
   @@index([createdAt])
+  @@index([changedBy])
   @@map("instruction_history")
 }
 
-// Acknowledgment model
+// Acknowledgment model (patientId removed; derive via instruction.patientId)
 model Acknowledgment {
   id                 String   @id @default(uuid())
   instructionId      String   @map("instruction_id")
-  patientId          String   @map("patient_id")
   acknowledgmentType String   @map("acknowledgment_type") // 'receipt' | 'understanding' | 'commitment'
   ipAddress          String   @map("ip_address")
   userAgent          String   @map("user_agent")
@@ -234,15 +255,13 @@ model Acknowledgment {
   instruction CareInstruction @relation(fields: [instructionId], references: [id])
 
   @@index([instructionId])
-  @@index([patientId])
   @@map("acknowledgments")
 }
 
-// Compliance Record model
+// Compliance Record model (patientId removed; derive via instruction.patientId)
 model ComplianceRecord {
   id                String @id @default(uuid())
   instructionId     String @map("instruction_id")
-  patientId         String @map("patient_id")
   type              String // 'medication' | 'lifestyle' | 'appointment'
   status            String // 'compliant' | 'non-compliant' | 'partial' | 'not-started'
   overallPercentage Float  @map("overall_percentage")
@@ -252,18 +271,18 @@ model ComplianceRecord {
   lifestyleCompliance   Json? @map("lifestyle_compliance")
   appointmentCompliance Json? @map("appointment_compliance")
 
-  lastUpdatedBy String @map("last_updated_by")
+  lastUpdatedBy String? @map("last_updated_by") // null if user deleted
 
   // Timestamps
   updatedAt DateTime @updatedAt @map("updated_at")
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  instruction CareInstruction @relation(fields: [instructionId], references: [id])
-  patient     Patient         @relation(fields: [patientId], references: [id])
+  instruction     CareInstruction @relation(fields: [instructionId], references: [id])
+  lastUpdatedByUser User?         @relation("ComplianceRecordsUpdated", fields: [lastUpdatedBy], references: [id], onDelete: SetNull)
 
   @@index([instructionId])
-  @@index([patientId])
+  @@index([lastUpdatedBy])
   @@map("compliance_records")
 }
 
@@ -281,22 +300,26 @@ model Notification {
   metadata    Json? // Additional context
   createdAt   DateTime @default(now()) @map("created_at")
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([read])
   @@index([createdAt])
   @@map("notifications")
 }
 
-// Password reset token (for forgot/reset password flow)
+// Password reset token (userId FK; email derived from User when sending)
 model PasswordResetToken {
   id        String   @id @default(uuid())
-  email     String
+  userId    String   @map("user_id")
   token     String   @unique
   expiresAt DateTime @map("expires_at")
   usedAt    DateTime? @map("used_at")
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([email])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@index([token])
   @@index([expiresAt])
   @@map("password_reset_tokens")
@@ -313,6 +336,8 @@ model InstructionTemplate {
   details     Json? // type-specific: medicationDetails, lifestyleDetails, etc.
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+
+  provider User @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
   @@index([providerId])
   @@map("instruction_templates")
