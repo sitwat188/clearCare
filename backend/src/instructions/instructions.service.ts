@@ -257,7 +257,7 @@ export class InstructionsService {
         where: { userId: requestingUserId, deletedAt: null },
       });
 
-      // If user has no Patient record (e.g. registered but seed not run), create one so seed can attach instructions later
+      // If user has no Patient record (e.g. registered but seed not run), create one so seed can attach instructions later (PHI encrypted at rest)
       if (!patient) {
         const user = await this.prisma.user.findFirst({
           where: { id: requestingUserId, deletedAt: null },
@@ -266,8 +266,10 @@ export class InstructionsService {
         patient = await this.prisma.patient.create({
           data: {
             userId: user.id,
-            dateOfBirth: '',
-            medicalRecordNumber: `TEMP-${user.id.slice(0, 8)}`,
+            dateOfBirth: this.encryption.encrypt(''),
+            medicalRecordNumber: this.encryption.encrypt(
+              `TEMP-${user.id.slice(0, 8)}`,
+            ),
           },
         });
       }

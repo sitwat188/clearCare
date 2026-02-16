@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MedplumService } from '../medplum/medplum.service';
 import { PatientsService } from '../patients/patients.service';
 import { AuthService } from '../auth/auth.service';
+import { EncryptionService } from '../common/encryption/encryption.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -101,6 +102,7 @@ export class AdminService {
     private medplumService: MedplumService,
     private patientsService: PatientsService,
     private authService: AuthService,
+    private encryption: EncryptionService,
   ) {}
 
   private getPermissionsForRole(role: string): string[] {
@@ -246,8 +248,10 @@ export class AdminService {
       await this.prisma.patient.create({
         data: {
           userId: user.id,
-          dateOfBirth: '1900-01-01',
-          medicalRecordNumber: `MRN-${user.id.slice(0, 8).toUpperCase()}`,
+          dateOfBirth: this.encryption.encrypt('1900-01-01'),
+          medicalRecordNumber: this.encryption.encrypt(
+            `MRN-${user.id.slice(0, 8).toUpperCase()}`,
+          ),
         },
       });
       // Sync to Medplum FHIR when configured (non-blocking; failures are logged only)
