@@ -582,8 +582,11 @@ export class AuthService {
     const pass = process.env.SMTP_PASS?.trim();
 
     if (resendKey) {
-      const resend = new Resend(resendKey);
       const from = AuthService.getMailFrom();
+      console.log(
+        `[Password reset] Sending via Resend to ${to} (from: ${from})`,
+      );
+      const resend = new Resend(resendKey);
       const html = this.getPasswordResetEmailHtml(requestedForEmail, resetLink);
       const { data, error } = await resend.emails.send({
         from,
@@ -596,18 +599,17 @@ export class AuthService {
           '[Password reset] Resend failed:',
           error.message ?? JSON.stringify(error),
         );
+        console.error('[Password reset] Full Resend error:', JSON.stringify(error));
         if (isProduction) {
           console.error(
-            '[Password reset] PRODUCTION: Check RESEND_API_KEY, MAIL_FROM (use onboarding@resend.dev or verified domain), and Resend dashboard.',
+            '[Password reset] Fix: Use MAIL_FROM=ClearCare <onboarding@resend.dev> (or verify your domain in Resend dashboard).',
           );
         }
         return;
       }
-      if (isProduction) {
-        console.log(
-          `[Password reset] Email sent via Resend to ${to} (id: ${data?.id ?? 'n/a'})`,
-        );
-      }
+      console.log(
+        `[Password reset] Sent via Resend to ${to} (id: ${data?.id ?? 'n/a'})`,
+      );
       return;
     }
 
@@ -844,8 +846,11 @@ export class AuthService {
     const resendKey = process.env.RESEND_API_KEY?.trim();
 
     if (resendKey) {
-      const resend = new Resend(resendKey);
       const from = AuthService.getMailFrom();
+      console.log(
+        `[Invitation] Sending via Resend to ${mailTo} (from: ${from})`,
+      );
+      const resend = new Resend(resendKey);
       const { data, error } = await resend.emails.send({
         from,
         to: mailTo,
@@ -857,18 +862,17 @@ export class AuthService {
           '[Invitation] Resend failed:',
           error.message ?? JSON.stringify(error),
         );
+        console.error('[Invitation] Full Resend error:', JSON.stringify(error));
         if (isProduction) {
           console.error(
-            '[Invitation] PRODUCTION: Check RESEND_API_KEY, MAIL_FROM (use onboarding@resend.dev or verified domain), and Resend dashboard.',
+            '[Invitation] Fix: Use MAIL_FROM=ClearCare <onboarding@resend.dev> (or verify your domain in Resend dashboard).',
           );
         }
         return;
       }
-      if (isProduction) {
-        console.log(
-          `[Invitation] Email sent via Resend to ${mailTo} (id: ${data?.id ?? 'n/a'})`,
-        );
-      }
+      console.log(
+        `[Invitation] Sent via Resend to ${mailTo} (id: ${data?.id ?? 'n/a'})`,
+      );
       return;
     }
 
