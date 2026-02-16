@@ -134,7 +134,9 @@ export class AdminService {
     role: string;
     createdAt: Date;
     lastLoginAt: Date | null;
+    deletedAt?: Date | null;
   }) {
+    const deletedAt = user.deletedAt;
     return {
       id: user.id,
       email: user.email,
@@ -144,13 +146,18 @@ export class AdminService {
       permissions: this.getPermissionsForRole(user.role),
       createdAt: user.createdAt.toISOString(),
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      status: deletedAt == null ? 'active' : 'inactive',
+      deletedAt: deletedAt?.toISOString() ?? null,
     };
   }
 
   // ---------- Users ----------
+  /**
+   * List all users (active and inactive). Inactive users include status: 'inactive' and deletedAt
+   * so the UI can show a "Deleted/Inactive" badge and a Restore action.
+   */
   async getUsers() {
     const users = await this.prisma.user.findMany({
-      where: { deletedAt: null },
       select: {
         id: true,
         email: true,
@@ -159,15 +166,16 @@ export class AdminService {
         role: true,
         createdAt: true,
         lastLoginAt: true,
+        deletedAt: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ deletedAt: 'asc' }, { createdAt: 'desc' }],
     });
     return users.map((u) => this.toUserResponse(u));
   }
 
   async getUser(id: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { id, deletedAt: null },
+    const user = await this.prisma.user.findUnique({
+      where: { id },
       select: {
         id: true,
         email: true,
@@ -176,6 +184,7 @@ export class AdminService {
         role: true,
         createdAt: true,
         lastLoginAt: true,
+        deletedAt: true,
       },
     });
     if (!user) throw new NotFoundException('User not found');
@@ -206,9 +215,14 @@ export class AdminService {
       if (!existing.deletedAt) {
         throw new ConflictException('A user with this email already exists');
       }
-      throw new ConflictException(
-        'This email was previously used by a deleted account. Use a different email or contact support to restore the account.',
-      );
+      // Never auto-restore. Admin must manually restore via POST /admin/users/:id/restore.
+      // Return code + id so frontend can show "Would you like to restore?" and call restore endpoint.
+      throw new ConflictException({
+        code: 'USER_INACTIVE',
+        message:
+          'User already exists in inactive state. Would you like to restore this user?',
+        inactiveUserId: existing.id,
+      });
     }
     // Invitation flow: always generate a temporary password (valid up to 1 day)
     const rawPassword = randomBytes(DEFAULT_PASSWORD_LENGTH).toString('hex');
@@ -396,9 +410,10 @@ export class AdminService {
       throw new ForbiddenException('Cannot delete administrator user');
     }
 
+    const deletedAt = new Date();
     await this.prisma.user.update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: { deletedAt },
     });
 
     await this.prisma.auditLog.create({
@@ -413,6 +428,127 @@ export class AdminService {
       },
     });
     this.logger.log(`Audit log written: delete user ${id} (${user.email})`);
+
+    // HIPAA: Soft-delete linked Patient so PHI is excluded from all reads
+    const patient = await this.prisma.patient.findFirst({
+      where: { userId: id, deletedAt: null },
+      select: { id: true },
+    });
+    if (patient) {
+      await this.prisma.patient.update({
+        where: { id: patient.id },
+        data: { deletedAt },
+      });
+      await this.prisma.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'delete',
+          resourceType: 'patient',
+          resourceId: patient.id,
+          ipAddress: ipAddress ?? '',
+          userAgent: userAgent ?? '',
+          status: 'success',
+        },
+      });
+      this.logger.log(
+        `Audit log written: cascade soft-delete patient ${patient.id} (user ${id})`,
+      );
+    }
+  }
+
+  /**
+   * Restore a soft-deleted user (and linked patient if any).
+   * HIPAA: Admin only; audit logged.
+   */
+  async restoreUser(
+    id: string,
+    adminUserId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        deletedAt: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.deletedAt) {
+      throw new BadRequestException('User is not inactive; nothing to restore');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: adminUserId,
+        action: 'restore',
+        resourceType: 'user',
+        resourceId: id,
+        ipAddress: ipAddress ?? '',
+        userAgent: userAgent ?? '',
+        status: 'success',
+      },
+    });
+    this.logger.log(`Audit log written: restore user ${id} (${user.email})`);
+
+    const patient = await this.prisma.patient.findFirst({
+      where: { userId: id },
+      select: { id: true, deletedAt: true },
+    });
+    if (patient?.deletedAt) {
+      await this.prisma.patient.update({
+        where: { id: patient.id },
+        data: { deletedAt: null },
+      });
+      await this.prisma.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'restore',
+          resourceType: 'patient',
+          resourceId: patient.id,
+          ipAddress: ipAddress ?? '',
+          userAgent: userAgent ?? '',
+          status: 'success',
+        },
+      });
+      this.logger.log(
+        `Audit log written: restore patient ${patient.id} (user ${id})`,
+      );
+    }
+
+    // Notify user that their account was restored (Resend or SMTP; non-blocking)
+    void this.authService
+      .sendRestoreNotificationEmail(user.email, user.firstName ?? 'User')
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Restore notification email failed for ${user.email}: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+
+    const restored = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+    });
+    return this.toUserResponse(restored!);
   }
 
   // ---------- Roles (static) ----------

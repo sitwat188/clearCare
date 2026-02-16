@@ -15,6 +15,10 @@ export interface User {
   createdAt: string;
   lastLoginAt?: string;
   twoFactorEnabled?: boolean;
+  /** Admin list: 'active' | 'inactive' (soft-deleted) */
+  status?: 'active' | 'inactive';
+  /** Admin list: ISO date when soft-deleted, null when active */
+  deletedAt?: string | null;
 }
 
 export interface AuthState {

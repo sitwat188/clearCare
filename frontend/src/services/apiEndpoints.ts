@@ -394,10 +394,18 @@ export const adminEndpoints = {
 
   /**
    * DELETE /api/v1/admin/users/:id
-   * Delete user
+   * Delete user (soft delete)
    */
   deleteUser: async (id: string): Promise<ApiResponse<void>> => {
     return makeApiRequest('delete', `/admin/users/${id}`);
+  },
+
+  /**
+   * POST /api/v1/admin/users/:id/restore
+   * Restore a soft-deleted user (and linked patient)
+   */
+  restoreUser: async (id: string): Promise<ApiResponse<User>> => {
+    return makeApiRequest('post', `/admin/users/${id}/restore`);
   },
 
   /**

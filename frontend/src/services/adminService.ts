@@ -41,9 +41,12 @@ export const adminService = {
       const response = await apiEndpoints.admin.createUser(userData);
       return response.data;
     } catch (error: unknown) {
-      const message =
-        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        (error instanceof Error ? error.message : 'Failed to create user');
+      const err = error as { response?: { data?: { code?: string; message?: string; inactiveUserId?: string } } };
+      const data = err?.response?.data;
+      if (data?.code === 'USER_INACTIVE' && data?.inactiveUserId) {
+        throw { code: 'USER_INACTIVE' as const, message: data.message, inactiveUserId: data.inactiveUserId };
+      }
+      const message = data?.message || (error instanceof Error ? error.message : 'Failed to create user');
       throw new Error(message);
     }
   },
@@ -61,13 +64,25 @@ export const adminService = {
   },
 
   /**
-   * Delete user
+   * Delete user (soft delete)
    */
   deleteUser: async (id: string): Promise<void> => {
     try {
       await apiEndpoints.admin.deleteUser(id);
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to delete user');
+    }
+  },
+
+  /**
+   * Restore a soft-deleted user (and linked patient)
+   */
+  restoreUser: async (id: string): Promise<User> => {
+    try {
+      const response = await apiEndpoints.admin.restoreUser(id);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to restore user');
     }
   },
 

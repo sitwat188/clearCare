@@ -77,6 +77,21 @@ export class AdminController {
     await this.adminService.deleteUser(id, adminUserId, ipAddress, userAgent);
   }
 
+  /**
+   * Manually restore a soft-deleted user (and linked patient). Admin only; never auto-restored on create.
+   * POST /api/v1/admin/users/:id/restore
+   */
+  @Post('users/:id/restore')
+  async restoreUser(
+    @Param('id') id: string,
+    @CurrentUser('id') adminUserId: string,
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.connection?.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    return this.adminService.restoreUser(id, adminUserId, ipAddress, userAgent);
+  }
+
   @Get('roles')
   async getRoles() {
     return this.adminService.getRoles();

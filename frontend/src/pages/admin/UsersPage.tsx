@@ -42,6 +42,7 @@ import {
   Add as AddIcon,
   People as PeopleIcon,
   Save as SaveIcon,
+  Restore as RestoreIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
@@ -63,6 +64,13 @@ const ROLE_PERMISSIONS: Record<CreateUserForm['role'], string[]> = {
   administrator: ['admin:users', 'admin:roles', 'admin:system', 'admin:audit', 'admin:reports'],
 };
 
+/** Deleted = soft-deleted by admin. Inactive = never logged in (and not deleted). */
+function getUserStatusBadge(user: { status?: string; deletedAt?: string | null; lastLoginAt?: string | null }) {
+  if (user.status === 'inactive' || user.deletedAt) return 'deleted';
+  if (!user.lastLoginAt) return 'inactive';
+  return 'active';
+}
+
 const AdminUsers = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -72,6 +80,9 @@ const AdminUsers = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [inactiveRestoreDialogOpen, setInactiveRestoreDialogOpen] = useState(false);
+  const [inactiveUserId, setInactiveUserId] = useState<string | null>(null);
+  const [inactiveUserEmail, setInactiveUserEmail] = useState('');
   const [createForm, setCreateForm] = useState<CreateUserForm>({
     firstName: '',
     lastName: '',
@@ -114,7 +125,10 @@ const AdminUsers = () => {
     },
   });
 
-  const providers = useMemo(() => users?.filter((u) => u.role === 'provider') ?? [], [users]);
+  const providers = useMemo(
+    () => users?.filter((u) => u.role === 'provider' && u.status !== 'inactive') ?? [],
+    [users],
+  );
 
   // Filter users
   const filteredUsers = useMemo(() => {
@@ -147,8 +161,8 @@ const AdminUsers = () => {
         organizationId: form.role === 'patient' ? undefined : 'org-1',
       };
 
-      // basic client-side duplicate check before submit
-      if (users?.some((u) => u.email.toLowerCase() === email)) {
+      // basic client-side duplicate check (active users only)
+      if (users?.some((u) => u.email.toLowerCase() === email && u.status !== 'inactive')) {
         throw new Error('A user with this email already exists');
       }
 
@@ -168,29 +182,53 @@ const AdminUsers = () => {
 
       await queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to create user');
+    onError: (error: unknown) => {
+      const err = error as {
+        code?: string;
+        message?: string;
+        inactiveUserId?: string;
+        response?: { data?: { code?: string; message?: string; inactiveUserId?: string } };
+      };
+      const data = err?.code ? err : err?.response?.data;
+      if (data?.code === 'USER_INACTIVE' && data?.inactiveUserId) {
+        setInactiveUserId(data.inactiveUserId);
+        setInactiveUserEmail(createForm.email.trim());
+        setInactiveRestoreDialogOpen(true);
+        toast.info('This email belongs to an inactive user. You can restore them in the dialog below.');
+        return;
+      }
+      const message = data?.message || (error instanceof Error ? error.message : 'Failed to create user');
+      toast.error(message);
     },
   });
 
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => adminService.deleteUser(userId),
-    onSuccess: async (_data, userId) => {
+    onSuccess: async () => {
       toast.success('User deleted');
       setDeleteDialogOpen(false);
       setSelectedUser(null);
-
-      // Update cache after delete
-      queryClient.setQueryData(['admin-users'], (old: any) => {
-        const prev = Array.isArray(old) ? old : [];
-        return prev.filter((u: any) => u?.id !== userId);
-      });
-      queryClient.removeQueries({ queryKey: ['admin-user', userId] });
-
       await queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Failed to delete user');
+    },
+  });
+
+  const restoreUserMutation = useMutation({
+    mutationFn: (userId: string) => adminService.restoreUser(userId),
+    onSuccess: async (restoredUser) => {
+      toast.success('User reactivated');
+      setInactiveRestoreDialogOpen(false);
+      setInactiveUserId(null);
+      setInactiveUserEmail('');
+      setAddDialogOpen(false);
+      setCreateForm({ firstName: '', lastName: '', email: '', role: 'patient' });
+      queryClient.setQueryData(['admin-user', restoredUser.id], restoredUser);
+      await queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Failed to restore user');
     },
   });
 
@@ -274,6 +312,23 @@ const AdminUsers = () => {
                 </Box>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {getUserStatusBadge(user) === 'deleted' && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Chip label="Deleted" color="default" variant="outlined" sx={{ fontWeight: 600 }} />
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<RestoreIcon />}
+                        onClick={() => restoreUserMutation.mutate(user.id)}
+                        disabled={restoreUserMutation.isPending}
+                      >
+                        {restoreUserMutation.isPending ? 'Restoring...' : 'Restore user'}
+                      </Button>
+                    </Box>
+                  )}
+                  {getUserStatusBadge(user) === 'inactive' && (
+                    <Chip label="Inactive (never logged in)" color="warning" variant="outlined" sx={{ fontWeight: 600 }} />
+                  )}
                   <Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                       Role
@@ -467,6 +522,7 @@ const AdminUsers = () => {
                   <TableCell>User</TableCell>
                   <TableCell>Email</TableCell>
                   <TableCell>Role</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Permissions</TableCell>
                   <TableCell>Created</TableCell>
                   <TableCell>Last Login</TableCell>
@@ -496,8 +552,21 @@ const AdminUsers = () => {
                         />
                       </TableCell>
                       <TableCell>
+                        {(() => {
+                          const badge = getUserStatusBadge(user);
+                          return (
+                            <Chip
+                              label={badge === 'deleted' ? 'Deleted' : badge === 'inactive' ? 'Inactive' : 'Active'}
+                              size="small"
+                              color={badge === 'deleted' ? 'default' : badge === 'inactive' ? 'warning' : 'success'}
+                              variant={badge === 'active' ? 'filled' : 'outlined'}
+                            />
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell>
                         <Typography variant="body2" color="text.secondary">
-                          {user.permissions.length} permission(s)
+                          {user.permissions?.length ?? 0} permission(s)
                         </Typography>
                       </TableCell>
                       <TableCell>{format(new Date(user.createdAt), 'MMM dd, yyyy')}</TableCell>
@@ -505,22 +574,42 @@ const AdminUsers = () => {
                         {user.lastLoginAt ? format(new Date(user.lastLoginAt), 'MMM dd, yyyy') : 'Never'}
                       </TableCell>
                       <TableCell align="right">
-                        <IconButton
-                          size="small"
-                          onClick={() => navigate(ROUTES.ADMIN.USER_DETAIL(user.id))}
-                          sx={{ mr: 0.5 }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton size="small" onClick={() => handleDelete(user.id)} color="error">
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
+                        {getUserStatusBadge(user) === 'deleted' ? (
+                          <IconButton
+                            size="small"
+                            onClick={() => restoreUserMutation.mutate(user.id)}
+                            color="primary"
+                            title="Restore / Reactivate user"
+                            disabled={restoreUserMutation.isPending}
+                          >
+                            <RestoreIcon fontSize="small" />
+                          </IconButton>
+                        ) : (
+                          <>
+                            <IconButton
+                              size="small"
+                              onClick={() => navigate(ROUTES.ADMIN.USER_DETAIL(user.id))}
+                              sx={{ mr: 0.5 }}
+                              title="Edit user"
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDelete(user.id)}
+                              color="error"
+                              title="Delete user"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={8} align="center">
                       <Alert severity="info">No users found</Alert>
                     </TableCell>
                   </TableRow>
@@ -535,12 +624,48 @@ const AdminUsers = () => {
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>Delete User</DialogTitle>
         <DialogContent>
-          <Typography>Are you sure you want to delete this user? This action cannot be undone.</Typography>
+          <Typography>Are you sure you want to delete this user? The user will be deactivated and can be restored later.</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
           <Button onClick={confirmDelete} color="error" variant="contained" disabled={deleteUserMutation.isPending}>
             {deleteUserMutation.isPending ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Inactive user: restore instead of create */}
+      <Dialog
+        open={inactiveRestoreDialogOpen}
+        onClose={() => {
+          setInactiveRestoreDialogOpen(false);
+          setInactiveUserId(null);
+          setInactiveUserEmail('');
+        }}
+      >
+        <DialogTitle>User already inactive</DialogTitle>
+        <DialogContent>
+          <Typography>
+            A user with email <strong>{inactiveUserEmail}</strong> already exists in inactive state. Would you like to
+            restore this user?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setInactiveRestoreDialogOpen(false);
+              setInactiveUserId(null);
+              setInactiveUserEmail('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => inactiveUserId && restoreUserMutation.mutate(inactiveUserId)}
+            disabled={!inactiveUserId || restoreUserMutation.isPending}
+          >
+            {restoreUserMutation.isPending ? 'Restoring...' : 'Restore user'}
           </Button>
         </DialogActions>
       </Dialog>
