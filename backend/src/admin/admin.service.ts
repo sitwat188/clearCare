@@ -11,6 +11,7 @@ import { MedplumService } from '../medplum/medplum.service';
 import { PatientsService } from '../patients/patients.service';
 import { AuthService } from '../auth/auth.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
+import { redactPHIFromString } from '../common/redact-phi';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -298,7 +299,8 @@ export class AdminService {
         details: { role: user.role },
       },
     });
-    this.logger.log(`Audit log written: create user ${user.id} (${email})`);
+    const createUserAddr = redactPHIFromString(email);
+    this.logger.log(`Audit log written: create user ${user.id} (${createUserAddr})`);
 
     return this.toUserResponse(user);
   }
@@ -437,9 +439,10 @@ export class AdminService {
         status: 'success',
       },
     });
-    this.logger.log(
-      `Audit log written: delete user ${id} (${this.encryption.decrypt(user.email)})`,
+    const deletedUserAddr = redactPHIFromString(
+      this.encryption.decrypt(user.email),
     );
+    this.logger.log(`Audit log written: delete user ${id} (${deletedUserAddr})`);
 
     // HIPAA: Soft-delete linked Patient so PHI is excluded from all reads
     const patient = await this.prisma.patient.findFirst({
@@ -512,8 +515,11 @@ export class AdminService {
         status: 'success',
       },
     });
+    const restoredUserAddr = redactPHIFromString(
+      this.encryption.decrypt(user.email),
+    );
     this.logger.log(
-      `Audit log written: restore user ${id} (${this.encryption.decrypt(user.email)})`,
+      `Audit log written: restore user ${id} (${restoredUserAddr})`,
     );
 
     const patient = await this.prisma.patient.findFirst({
@@ -544,11 +550,12 @@ export class AdminService {
     const decryptedEmail = this.encryption.decrypt(user.email);
     const decryptedFirstName =
       this.encryption.decrypt(user.firstName) ?? 'User';
+    const restoredAddr = redactPHIFromString(decryptedEmail);
     void this.authService
       .sendRestoreNotificationEmail(decryptedEmail, decryptedFirstName)
       .catch((err: unknown) =>
         this.logger.warn(
-          `Restore notification email failed for ${decryptedEmail}: ${err instanceof Error ? err.message : String(err)}`,
+          `Restore notification failed for ${restoredAddr}: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );
 

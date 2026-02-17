@@ -62,13 +62,13 @@ async function bootstrap() {
       !!process.env.SMTP_PASS?.trim();
     if (!resendSet && !smtpSet) {
       console.warn(
-        '⚠️  PRODUCTION: Email not configured. Set RESEND_API_KEY (recommended on Render) or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (and FRONTEND_URL).',
+        '⚠️  PRODUCTION: Mail not configured. Set RESEND_API_KEY (recommended on Render) or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (and FRONTEND_URL).',
       );
     } else {
       console.log(
         resendSet
-          ? '✓ Email (Resend) configured for password reset and invitations.'
-          : '✓ Email (SMTP) configured for password reset and invitations.',
+          ? '✓ Mail (Resend) configured for password reset and invitations.'
+          : '✓ Mail (SMTP) configured for password reset and invitations.',
       );
     }
   }

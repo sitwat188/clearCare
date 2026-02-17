@@ -26,6 +26,7 @@ import {
   getInvitationEmailHtml,
 } from '../email-templates';
 import { EncryptionService } from '../common/encryption/encryption.service';
+import { redactPHIFromObject, redactPHIFromString } from '../common/redact-phi';
 
 const TWO_FACTOR_APP_NAME = 'ClearCare';
 const BACKUP_CODES_COUNT = 8;
@@ -70,9 +71,9 @@ export class AuthService {
   ) {}
 
   /** Decrypt email, firstName, lastName for API response / tokens (supports legacy plaintext rows). */
-  private decryptUser<T extends { email: string; firstName: string; lastName: string }>(
-    user: T,
-  ): T & { email: string; firstName: string; lastName: string } {
+  private decryptUser<
+    T extends { email: string; firstName: string; lastName: string },
+  >(user: T): T & { email: string; firstName: string; lastName: string } {
     return {
       ...user,
       email: this.encryption.decrypt(user.email),
@@ -132,12 +133,12 @@ export class AuthService {
         userId: user.id,
         action: 'create',
         changedBy: user.id,
-        newValues: {
+        newValues: redactPHIFromObject({
           email: this.encryption.encrypt(normalizedEmail),
           role: user.role,
           firstName: this.encryption.encrypt(registerDto.firstName),
           lastName: this.encryption.encrypt(registerDto.lastName),
-        },
+        }),
         ipAddress,
         userAgent,
       },
@@ -680,7 +681,10 @@ export class AuthService {
           '[Password reset] Resend failed:',
           error.message ?? JSON.stringify(error),
         );
-        console.error('[Password reset] Full Resend error:', JSON.stringify(error));
+        console.error(
+          '[Password reset] Full Resend error:',
+          JSON.stringify(error),
+        );
         if (isProduction) {
           console.error(
             '[Password reset] Fix: Use MAIL_FROM=ClearCare <onboarding@resend.dev> (or verify your domain in Resend dashboard).',
@@ -701,7 +705,7 @@ export class AuthService {
         );
       } else {
         console.log(
-          `[Password reset] Email not configured. Would send to ${to}. Reset link (1h): ${resetLink}`,
+          `[Password reset] Mail not configured. Would send to ${redactPHIFromString(to)}. Reset link (1h): ${redactPHIFromString(resetLink)}`,
         );
       }
       return;
@@ -711,7 +715,7 @@ export class AuthService {
     const cleanUser = user.replace(/^["']|["']$/g, '');
     if (!isProduction) {
       console.log(
-        `[Password reset] Sending to ${to} via ${host}:${port} (SMTP_USER=${cleanUser})`,
+        `[Password reset] Sending to ${redactPHIFromString(to)} via ${host}:${port} (SMTP_USER=${redactPHIFromString(cleanUser)})`,
       );
     }
     try {
@@ -751,14 +755,15 @@ export class AuthService {
    * Send restore notification email. Uses Resend or SMTP like invitation/password reset.
    * Called by admin when a soft-deleted user is restored.
    */
-  async sendRestoreNotificationEmail(to: string, firstName: string): Promise<void> {
+  async sendRestoreNotificationEmail(
+    to: string,
+    firstName: string,
+  ): Promise<void> {
     const loginUrl =
       process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
     const redirect = process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim();
     const mailTo =
-      process.env.NODE_ENV !== 'production' && redirect
-        ? redirect
-        : to;
+      process.env.NODE_ENV !== 'production' && redirect ? redirect : to;
     const host = process.env.SMTP_HOST?.trim();
     const port = process.env.SMTP_PORT?.trim();
     const user = process.env.SMTP_USER?.trim();
@@ -813,7 +818,7 @@ export class AuthService {
         );
       } else {
         console.log(
-          `[Restore notification] Email not configured. Would send to ${mailTo}: account restored for ${to}.`,
+          `[Restore notification] Mail not configured. Would send to ${redactPHIFromString(mailTo)}: account restored for ${redactPHIFromString(to)}.`,
         );
       }
       return;
@@ -877,8 +882,10 @@ export class AuthService {
     );
 
     if (!mailTo) {
+      const invitee = redactPHIFromString(invitedUserEmail);
+      const tempPw = redactPHIFromString(temporaryPassword);
       console.log(
-        `[Invitation] No recipient. Invited: ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+        `[Invitation] No recipient. Invited: ${invitee}, temp pw (valid 1 day): ${tempPw}`,
       );
       return;
     }
@@ -888,7 +895,7 @@ export class AuthService {
     if (resendKey) {
       const from = AuthService.getMailFrom();
       console.log(
-        `[Invitation] Sending via Resend to ${mailTo} (from: ${from})`,
+        `[Invitation] Sending via Resend to ${redactPHIFromString(mailTo)} (from: ${redactPHIFromString(from)})`,
       );
       const resend = new Resend(resendKey);
       const { data, error } = await resend.emails.send({
@@ -911,7 +918,7 @@ export class AuthService {
         return;
       }
       console.log(
-        `[Invitation] Sent via Resend to ${mailTo} (id: ${data?.id ?? 'n/a'})`,
+        `[Invitation] Sent via Resend to ${redactPHIFromString(mailTo)} (id: ${data?.id ?? 'n/a'})`,
       );
       return;
     }
@@ -922,8 +929,11 @@ export class AuthService {
           '[Invitation] PRODUCTION: No email sent. Set RESEND_API_KEY (recommended on Render) or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.',
         );
       } else {
+        const toAddr = redactPHIFromString(mailTo);
+        const invitee = redactPHIFromString(invitedUserEmail);
+        const tempPw = redactPHIFromString(temporaryPassword);
         console.log(
-          `[Invitation] Email not configured. Would send to ${mailTo}: invited ${invitedUserEmail}, temp password (valid 1 day): ${temporaryPassword}`,
+          `[Invitation] Mail not configured. Would send to ${toAddr}: invited ${invitee}, temp pw (valid 1 day): ${tempPw}`,
         );
       }
       return;

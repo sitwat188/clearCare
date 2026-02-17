@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { EncryptionService } from '../common/encryption/encryption.service';
+import { redactPHIFromObject } from '../common/redact-phi';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -123,12 +124,12 @@ export class UsersService {
         userId: user.id,
         action: 'update',
         changedBy: requestingUserId,
-        oldValues: oldValuesEnc,
-        newValues: {
+        oldValues: redactPHIFromObject(oldValuesEnc),
+        newValues: redactPHIFromObject({
           email: updatedUser.email,
           firstName: updatedUser.firstName,
           lastName: updatedUser.lastName,
-        },
+        }),
         ipAddress,
         userAgent,
       },
