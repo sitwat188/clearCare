@@ -18,12 +18,14 @@ datasource db {
 // ============================================================================
 
 // User model with soft delete, timestamps, and 2FA support
+// email, firstName, lastName are encrypted at rest; lookup by emailHash for login/invite
 model User {
-  id           String @id @default(uuid())
-  email        String @unique
-  passwordHash String @map("password_hash")
-  firstName    String @map("first_name")
-  lastName     String @map("last_name")
+  id           String  @id @default(uuid())
+  emailHash    String? @unique @map("email_hash") // SHA-256 of normalized email for lookup
+  email        String  @map("email") // Encrypted
+  passwordHash String  @map("password_hash")
+  firstName    String  @map("first_name") // Encrypted
+  lastName     String  @map("last_name") // Encrypted
   role         String // 'patient' | 'provider' | 'administrator'
 
   // 2FA fields
@@ -57,7 +59,7 @@ model User {
   complianceRecordsUpdated    ComplianceRecord[]      @relation("ComplianceRecordsUpdated")
   instructionTemplates        InstructionTemplate[]
 
-  @@index([email])
+  @@index([emailHash])
   @@index([deletedAt]) // For efficient soft delete queries
   @@map("users")
 }
@@ -130,14 +132,30 @@ model Patient {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  user             User              @relation(fields: [userId], references: [id])
-  patientHistory   PatientHistory[]
-  instructions     CareInstruction[]
-  patientProviders PatientProvider[]
+  user                  User                     @relation(fields: [userId], references: [id])
+  patientHistory        PatientHistory[]
+  instructions          CareInstruction[]
+  patientProviders      PatientProvider[]
+  healthConnections     PatientHealthConnection[]
 
   @@index([userId])
   @@index([deletedAt])
   @@map("patients")
+}
+
+// Fasten Connect (and similar) external health connections per patient
+model PatientHealthConnection {
+  id               String   @id @default(uuid())
+  patientId        String   @map("patient_id")
+  orgConnectionId  String   @unique @map("org_connection_id") // Fasten org_connection_id from redirect
+  sourceName       String?  @map("source_name") // e.g. "Epic at Hospital X"
+  connectedAt      DateTime @default(now()) @map("connected_at")
+  lastSyncedAt     DateTime? @map("last_synced_at")
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("patient_health_connections")
 }
 
 // Junction: patient – provider (many-to-many), normalized from former assignedProviderIds array

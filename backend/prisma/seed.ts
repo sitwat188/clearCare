@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -6,17 +7,25 @@ const prisma = new PrismaClient();
 const SALT_ROUNDS = 12;
 const SEED_PASSWORD = 'Password123!';
 
+/** Same as backend EncryptionService.hashEmailForLookup (SHA-256 of normalized email). */
+function hashEmail(email: string): string {
+  return createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, SALT_ROUNDS);
 
   // ---------------------------------------------------------------------------
   // Users: match frontend mock (admin@example.com, provider1@example.com, etc.)
+  // Lookup by emailHash; seed stores plaintext (app encrypts on first login/update).
   // ---------------------------------------------------------------------------
+  const adminEmail = 'admin@example.com';
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@example.com' },
+    where: { emailHash: hashEmail(adminEmail) },
     update: {},
     create: {
-      email: 'admin@example.com',
+      emailHash: hashEmail(adminEmail),
+      email: adminEmail,
       passwordHash,
       firstName: 'Admin',
       lastName: 'User',
@@ -24,11 +33,13 @@ async function main() {
     },
   });
 
+  const providerEmail = 'provider1@example.com';
   const provider = await prisma.user.upsert({
-    where: { email: 'provider1@example.com' },
+    where: { emailHash: hashEmail(providerEmail) },
     update: {},
     create: {
-      email: 'provider1@example.com',
+      emailHash: hashEmail(providerEmail),
+      email: providerEmail,
       passwordHash,
       firstName: 'Dr. Jane',
       lastName: 'Smith',
@@ -36,11 +47,13 @@ async function main() {
     },
   });
 
+  const patient1Email = 'patient1@example.com';
   const patient1User = await prisma.user.upsert({
-    where: { email: 'patient1@example.com' },
+    where: { emailHash: hashEmail(patient1Email) },
     update: {},
     create: {
-      email: 'patient1@example.com',
+      emailHash: hashEmail(patient1Email),
+      email: patient1Email,
       passwordHash,
       firstName: 'John',
       lastName: 'Doe',
@@ -48,11 +61,13 @@ async function main() {
     },
   });
 
+  const patient2Email = 'sarah.patient@example.com';
   const patient2User = await prisma.user.upsert({
-    where: { email: 'sarah.patient@example.com' },
+    where: { emailHash: hashEmail(patient2Email) },
     update: {},
     create: {
-      email: 'sarah.patient@example.com',
+      emailHash: hashEmail(patient2Email),
+      email: patient2Email,
       passwordHash,
       firstName: 'Sarah',
       lastName: 'Johnson',
@@ -60,11 +75,13 @@ async function main() {
     },
   });
 
+  const patient3Email = 'robert.patient@example.com';
   const patient3User = await prisma.user.upsert({
-    where: { email: 'robert.patient@example.com' },
+    where: { emailHash: hashEmail(patient3Email) },
     update: {},
     create: {
-      email: 'robert.patient@example.com',
+      emailHash: hashEmail(patient3Email),
+      email: patient3Email,
       passwordHash,
       firstName: 'Robert',
       lastName: 'Williams',
@@ -73,11 +90,11 @@ async function main() {
   });
 
   console.log('Seeded users (mock emails):', {
-    admin: admin.email,
-    provider: provider.email,
-    patient1: patient1User.email,
-    patient2: patient2User.email,
-    patient3: patient3User.email,
+    admin: adminEmail,
+    provider: providerEmail,
+    patient1: patient1Email,
+    patient2: patient2Email,
+    patient3: patient3Email,
   });
 
   // ---------------------------------------------------------------------------

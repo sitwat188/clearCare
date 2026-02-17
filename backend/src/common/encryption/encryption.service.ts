@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   createCipheriv,
   createDecipheriv,
+  createHash,
   randomBytes,
   scryptSync,
 } from 'crypto';
@@ -84,5 +85,15 @@ export class EncryptionService {
     } catch {
       return cipherText;
     }
+  }
+
+  /**
+   * Deterministic hash of email for lookup (login, invite, uniqueness).
+   * Normalizes: lower-case, trim. Returns hex string.
+   */
+  hashEmailForLookup(email: string | null | undefined): string {
+    if (email == null || email === '') return '';
+    const normalized = email.toLowerCase().trim();
+    return createHash('sha256').update(normalized).digest('hex');
   }
 }

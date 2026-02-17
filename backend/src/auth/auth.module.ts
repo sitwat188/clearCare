@@ -6,10 +6,12 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
+import { EncryptionModule } from '../common/encryption/encryption.module';
 
 @Module({
   imports: [
     PrismaModule,
+    EncryptionModule,
     UsersModule,
     PassportModule,
     JwtModule.register({

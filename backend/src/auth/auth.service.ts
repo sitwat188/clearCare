@@ -25,6 +25,7 @@ import {
   getRestoreNotificationEmailHtml,
   getInvitationEmailHtml,
 } from '../email-templates';
+import { EncryptionService } from '../common/encryption/encryption.service';
 
 const TWO_FACTOR_APP_NAME = 'ClearCare';
 const BACKUP_CODES_COUNT = 8;
@@ -65,17 +66,38 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private usersService: UsersService,
+    private encryption: EncryptionService,
   ) {}
+
+  /** Decrypt email, firstName, lastName for API response / tokens (supports legacy plaintext rows). */
+  private decryptUser<T extends { email: string; firstName: string; lastName: string }>(
+    user: T,
+  ): T & { email: string; firstName: string; lastName: string } {
+    return {
+      ...user,
+      email: this.encryption.decrypt(user.email),
+      firstName: this.encryption.decrypt(user.firstName),
+      lastName: this.encryption.decrypt(user.lastName),
+    };
+  }
 
   async register(
     registerDto: RegisterDto,
     ipAddress?: string,
     userAgent?: string,
   ) {
-    // Check if user already exists (including soft-deleted)
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: registerDto.email.toLowerCase() },
-    });
+    const normalizedEmail = registerDto.email.toLowerCase().trim();
+    const emailHash = this.encryption.hashEmailForLookup(normalizedEmail);
+    const existingByHash = emailHash
+      ? await this.prisma.user.findFirst({
+          where: { emailHash, deletedAt: null },
+        })
+      : null;
+    const existingUser =
+      existingByHash ??
+      (await this.prisma.user.findFirst({
+        where: { email: normalizedEmail, deletedAt: null },
+      }));
 
     if (existingUser) {
       if (existingUser.deletedAt) {
@@ -91,47 +113,49 @@ export class AuthService {
       throw new BadRequestException('Creating Administrator users is disabled');
     }
 
-    // Hash password
-    const saltRounds = 12; // HIPAA: Strong password hashing
+    const saltRounds = 12;
     const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
 
-    // Create user
     const user = await this.prisma.user.create({
       data: {
-        email: registerDto.email.toLowerCase(),
+        emailHash,
+        email: this.encryption.encrypt(normalizedEmail),
         passwordHash,
-        firstName: registerDto.firstName,
-        lastName: registerDto.lastName,
+        firstName: this.encryption.encrypt(registerDto.firstName),
+        lastName: this.encryption.encrypt(registerDto.lastName),
         role: registerDto.role,
       },
     });
 
-    // Create user history entry
     await this.prisma.userHistory.create({
       data: {
         userId: user.id,
         action: 'create',
         changedBy: user.id,
         newValues: {
-          email: user.email,
+          email: this.encryption.encrypt(normalizedEmail),
           role: user.role,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: this.encryption.encrypt(registerDto.firstName),
+          lastName: this.encryption.encrypt(registerDto.lastName),
         },
         ipAddress,
         userAgent,
       },
     });
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const decrypted = this.decryptUser(user);
+    const tokens = await this.generateTokens(
+      user.id,
+      decrypted.email,
+      user.role,
+    );
 
     return {
       user: {
         id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        email: decrypted.email,
+        firstName: decrypted.firstName,
+        lastName: decrypted.lastName,
         role: user.role,
         permissions: ROLE_PERMISSIONS[user.role] || [],
         createdAt: user.createdAt,
@@ -141,13 +165,41 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string) {
-    // Find user (exclude soft-deleted)
-    const user = await this.prisma.user.findFirst({
-      where: {
-        email: loginDto.email.toLowerCase(),
-        deletedAt: null,
-      },
-    });
+    const normalized = loginDto.email.toLowerCase().trim();
+    const emailHash = this.encryption.hashEmailForLookup(normalized);
+    let user = emailHash
+      ? await this.prisma.user.findFirst({
+          where: { emailHash, deletedAt: null },
+        })
+      : null;
+    if (!user) {
+      user = await this.prisma.user.findFirst({
+        where: { email: normalized, deletedAt: null },
+      });
+      if (user && !user.emailHash) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            emailHash: this.encryption.hashEmailForLookup(
+              this.encryption.decrypt(user.email) || user.email,
+            ),
+            email: this.encryption.encrypt(
+              this.encryption.decrypt(user.email) || user.email,
+            ),
+            firstName: this.encryption.encrypt(
+              this.encryption.decrypt(user.firstName) || user.firstName,
+            ),
+            lastName: this.encryption.encrypt(
+              this.encryption.decrypt(user.lastName) || user.lastName,
+            ),
+          },
+        });
+        const updated = await this.prisma.user.findFirst({
+          where: { id: user.id },
+        });
+        if (updated) user = updated;
+      }
+    }
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -205,8 +257,12 @@ export class AuthService {
       },
     });
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const decrypted = this.decryptUser(user);
+    const tokens = await this.generateTokens(
+      user.id,
+      decrypted.email,
+      user.role,
+    );
     const mustChangePassword = !!(
       user.mustChangePassword &&
       user.temporaryPasswordExpiresAt &&
@@ -216,9 +272,9 @@ export class AuthService {
     return {
       user: {
         id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        email: decrypted.email,
+        firstName: decrypted.firstName,
+        lastName: decrypted.lastName,
         role: user.role,
         permissions: ROLE_PERMISSIONS[user.role] || [],
         lastLoginAt: user.lastLoginAt,
@@ -318,7 +374,12 @@ export class AuthService {
       },
     });
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const decrypted = this.decryptUser(user);
+    const tokens = await this.generateTokens(
+      user.id,
+      decrypted.email,
+      user.role,
+    );
     const mustChangePassword = !!(
       user.mustChangePassword &&
       user.temporaryPasswordExpiresAt &&
@@ -327,9 +388,9 @@ export class AuthService {
     return {
       user: {
         id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        email: decrypted.email,
+        firstName: decrypted.firstName,
+        lastName: decrypted.lastName,
         role: user.role,
         permissions: ROLE_PERMISSIONS[user.role] || [],
         lastLoginAt: user.lastLoginAt,
@@ -354,7 +415,7 @@ export class AuthService {
     }
 
     const secret = speakeasy.generateSecret({
-      name: `${TWO_FACTOR_APP_NAME} (${user.email})`,
+      name: `${TWO_FACTOR_APP_NAME} (${this.encryption.decrypt(user.email)})`,
       length: 20,
     });
     if (!secret.base32) {
@@ -490,11 +551,12 @@ export class AuthService {
       return null;
     }
 
+    const decrypted = this.decryptUser(user);
     return {
       id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      email: decrypted.email,
+      firstName: decrypted.firstName,
+      lastName: decrypted.lastName,
       role: user.role,
       permissions: ROLE_PERMISSIONS[user.role] || [],
       twoFactorEnabled: user.twoFactorEnabled,
@@ -520,7 +582,8 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
-      return this.generateTokens(user.id, user.email, user.role);
+      const decrypted = this.decryptUser(user);
+      return this.generateTokens(user.id, decrypted.email, user.role);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -528,9 +591,17 @@ export class AuthService {
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const email = dto.email.toLowerCase().trim();
-    const user = await this.prisma.user.findFirst({
-      where: { email, deletedAt: null },
-    });
+    const emailHash = this.encryption.hashEmailForLookup(email);
+    let user = emailHash
+      ? await this.prisma.user.findFirst({
+          where: { emailHash, deletedAt: null },
+        })
+      : null;
+    if (!user) {
+      user = await this.prisma.user.findFirst({
+        where: { email, deletedAt: null },
+      });
+    }
 
     if (!user) {
       throw new NotFoundException('No account found with this email address.');

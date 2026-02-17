@@ -50,7 +50,12 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    return {
+      ...user,
+      email: this.encryption.decrypt(user.email),
+      firstName: this.encryption.decrypt(user.firstName),
+      lastName: this.encryption.decrypt(user.lastName),
+    };
   }
 
   /**
@@ -78,22 +83,31 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    // Get old values for history
-    const oldValues = {
+    const oldValuesEnc = {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
     };
+    const updateData: {
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+      emailHash?: string;
+      updatedAt: Date;
+    } = { updatedAt: new Date() };
+    if (updateDto.email) {
+      const normalized = updateDto.email.toLowerCase().trim();
+      updateData.emailHash = this.encryption.hashEmailForLookup(normalized);
+      updateData.email = this.encryption.encrypt(normalized);
+    }
+    if (updateDto.firstName !== undefined)
+      updateData.firstName = this.encryption.encrypt(updateDto.firstName);
+    if (updateDto.lastName !== undefined)
+      updateData.lastName = this.encryption.encrypt(updateDto.lastName);
 
-    // Update user
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
-      data: {
-        ...(updateDto.email && { email: updateDto.email.toLowerCase() }),
-        ...(updateDto.firstName && { firstName: updateDto.firstName }),
-        ...(updateDto.lastName && { lastName: updateDto.lastName }),
-        updatedAt: new Date(),
-      },
+      data: updateData,
       select: {
         id: true,
         email: true,
@@ -104,13 +118,12 @@ export class UsersService {
       },
     });
 
-    // Create history entry
     await this.prisma.userHistory.create({
       data: {
         userId: user.id,
         action: 'update',
         changedBy: requestingUserId,
-        oldValues,
+        oldValues: oldValuesEnc,
         newValues: {
           email: updatedUser.email,
           firstName: updatedUser.firstName,
@@ -121,7 +134,12 @@ export class UsersService {
       },
     });
 
-    return updatedUser;
+    return {
+      ...updatedUser,
+      email: this.encryption.decrypt(updatedUser.email),
+      firstName: this.encryption.decrypt(updatedUser.firstName),
+      lastName: this.encryption.decrypt(updatedUser.lastName),
+    };
   }
 
   /**

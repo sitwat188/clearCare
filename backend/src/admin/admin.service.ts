@@ -139,9 +139,9 @@ export class AdminService {
     const deletedAt = user.deletedAt;
     return {
       id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      email: this.encryption.decrypt(user.email),
+      firstName: this.encryption.decrypt(user.firstName),
+      lastName: this.encryption.decrypt(user.lastName),
       role: user.role,
       permissions: this.getPermissionsForRole(user.role),
       createdAt: user.createdAt.toISOString(),
@@ -208,9 +208,13 @@ export class AdminService {
       throw new BadRequestException('Creating Administrator users is disabled');
     }
     const email = dto.email.toLowerCase().trim();
-    const existing = await this.prisma.user.findUnique({
-      where: { email },
-    });
+    const emailHash = this.encryption.hashEmailForLookup(email);
+    const existingByHash = emailHash
+      ? await this.prisma.user.findFirst({ where: { emailHash } })
+      : null;
+    const existing =
+      existingByHash ??
+      (await this.prisma.user.findFirst({ where: { email } }));
     if (existing) {
       if (!existing.deletedAt) {
         throw new ConflictException('A user with this email already exists');
@@ -232,10 +236,11 @@ export class AdminService {
     );
 
     const createData = {
-      email,
+      emailHash,
+      email: this.encryption.encrypt(email),
       passwordHash,
-      firstName: dto.firstName.trim(),
-      lastName: dto.lastName.trim(),
+      firstName: this.encryption.encrypt(dto.firstName.trim()),
+      lastName: this.encryption.encrypt(dto.lastName.trim()),
       role: dto.role,
       mustChangePassword: true,
       temporaryPasswordExpiresAt,
@@ -253,9 +258,8 @@ export class AdminService {
       },
     });
 
-    // Send invitation email in background (avoids timeout when SMTP is blocked, e.g. on Render)
     void this.authService
-      .sendInvitationEmail(user.email, user.firstName, rawPassword)
+      .sendInvitationEmail(email, dto.firstName.trim(), rawPassword)
       .catch(() => {});
 
     if (dto.role === 'patient') {
@@ -270,7 +274,11 @@ export class AdminService {
       });
       // Sync to Medplum FHIR when configured (non-blocking; failures are logged only)
       if (this.medplumService.isConnected()) {
-        this.syncPatientToMedplum(user).catch((err) => {
+        this.syncPatientToMedplum({
+          id: user.id,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+        }).catch((err) => {
           this.logger.warn(
             `Medplum Patient create failed for user ${user.id}: ${err?.message ?? err}`,
           );
@@ -290,9 +298,7 @@ export class AdminService {
         details: { role: user.role },
       },
     });
-    this.logger.log(
-      `Audit log written: create user ${user.id} (${user.email})`,
-    );
+    this.logger.log(`Audit log written: create user ${user.id} (${email})`);
 
     return this.toUserResponse(user);
   }
@@ -357,10 +363,14 @@ export class AdminService {
 
     const updateData: Record<string, unknown> = {};
     if (dto.firstName !== undefined)
-      updateData.firstName = dto.firstName.trim();
-    if (dto.lastName !== undefined) updateData.lastName = dto.lastName.trim();
-    if (dto.email !== undefined)
-      updateData.email = dto.email.toLowerCase().trim();
+      updateData.firstName = this.encryption.encrypt(dto.firstName.trim());
+    if (dto.lastName !== undefined)
+      updateData.lastName = this.encryption.encrypt(dto.lastName.trim());
+    if (dto.email !== undefined) {
+      const normalized = dto.email.toLowerCase().trim();
+      updateData.emailHash = this.encryption.hashEmailForLookup(normalized);
+      updateData.email = this.encryption.encrypt(normalized);
+    }
     if (dto.role !== undefined) updateData.role = dto.role;
     if (dto.password !== undefined) {
       updateData.passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
@@ -427,7 +437,9 @@ export class AdminService {
         status: 'success',
       },
     });
-    this.logger.log(`Audit log written: delete user ${id} (${user.email})`);
+    this.logger.log(
+      `Audit log written: delete user ${id} (${this.encryption.decrypt(user.email)})`,
+    );
 
     // HIPAA: Soft-delete linked Patient so PHI is excluded from all reads
     const patient = await this.prisma.patient.findFirst({
@@ -500,7 +512,9 @@ export class AdminService {
         status: 'success',
       },
     });
-    this.logger.log(`Audit log written: restore user ${id} (${user.email})`);
+    this.logger.log(
+      `Audit log written: restore user ${id} (${this.encryption.decrypt(user.email)})`,
+    );
 
     const patient = await this.prisma.patient.findFirst({
       where: { userId: id },
@@ -527,12 +541,14 @@ export class AdminService {
       );
     }
 
-    // Notify user that their account was restored (Resend or SMTP; non-blocking)
+    const decryptedEmail = this.encryption.decrypt(user.email);
+    const decryptedFirstName =
+      this.encryption.decrypt(user.firstName) ?? 'User';
     void this.authService
-      .sendRestoreNotificationEmail(user.email, user.firstName ?? 'User')
+      .sendRestoreNotificationEmail(decryptedEmail, decryptedFirstName)
       .catch((err: unknown) =>
         this.logger.warn(
-          `Restore notification email failed for ${user.email}: ${err instanceof Error ? err.message : String(err)}`,
+          `Restore notification email failed for ${decryptedEmail}: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );
 
@@ -661,18 +677,21 @@ export class AdminService {
           })
         : [];
     const resourceNameByUserId = new Map(
-      resourceUsers.map((u) => [u.id, u.email]),
+      resourceUsers.map((u) => [u.id, this.encryption.decrypt(u.email)]),
     );
 
     return {
       data: items.map((log) => {
+        const userEmail =
+          log.user != null
+            ? this.encryption.decrypt(log.user.email)
+            : '(deleted user)';
         const userName =
           log.user != null
-            ? `${log.user.firstName ?? ''} ${log.user.lastName ?? ''}`.trim() ||
-              log.user.email ||
+            ? `${this.encryption.decrypt(log.user.firstName) ?? ''} ${this.encryption.decrypt(log.user.lastName) ?? ''}`.trim() ||
+              userEmail ||
               log.userId
             : '(deleted user)';
-        const userEmail = log.user?.email ?? '(deleted user)';
         const resourceName =
           log.resourceType === 'user' && log.resourceId != null
             ? (resourceNameByUserId.get(log.resourceId) ?? null)
