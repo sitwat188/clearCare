@@ -32,15 +32,29 @@ export class FastenConnectService {
   private authHeader: string | null = null;
 
   constructor(private config: ConfigService) {
-    this.baseUrl =
-      this.config.get<string>('FASTEN_BASE_URL')?.replace(/\/+$/, '') ||
+    const rawBase =
+      this.getEnvValue('FASTEN_BASE_URL')?.replace(/\/+$/, '') ||
       DEFAULT_BASE_URL;
+    // Accept either ".../v1" or "..." and normalize to include "/v1"
+    this.baseUrl = rawBase.match(/\/v\d+$/) ? rawBase : `${rawBase}/v1`;
     this.initAuth();
   }
 
+  /**
+   * Read env var from ConfigService, but also tolerate accidental whitespace in .env keys
+   * (e.g. "  FASTEN_PUBLIC_ID=...") by searching process.env for a trimmed key match.
+   */
+  private getEnvValue(name: string): string | undefined {
+    const direct = this.config.get<string>(name);
+    if (direct != null) return direct;
+    const key = Object.keys(process.env).find((k) => k.trim() === name);
+    if (!key) return undefined;
+    return process.env[key];
+  }
+
   private initAuth(): void {
-    const publicId = this.config.get<string>('FASTEN_PUBLIC_ID')?.trim();
-    const privateKey = this.config.get<string>('FASTEN_PRIVATE_KEY')?.trim();
+    const publicId = this.getEnvValue('FASTEN_PUBLIC_ID')?.trim();
+    const privateKey = this.getEnvValue('FASTEN_PRIVATE_KEY')?.trim();
     if (!publicId || !privateKey) {
       this.logger.warn(
         'Fasten Connect not configured (FASTEN_PUBLIC_ID, FASTEN_PRIVATE_KEY). Health connections disabled.',
@@ -54,6 +68,26 @@ export class FastenConnectService {
 
   isConfigured(): boolean {
     return this.authHeader != null;
+  }
+
+  /**
+   * Build URL to start Fasten Connect flow. User is redirected here; after auth, Fasten redirects back to redirectUri with org_connection_id.
+   * Requires FASTEN_PUBLIC_ID and optional catalog ids (FASTEN_DEFAULT_ENDPOINT_ID, FASTEN_DEFAULT_BRAND_ID, FASTEN_DEFAULT_PORTAL_ID).
+   */
+  getConnectUrl(redirectUri: string): string | null {
+    const publicId = this.getEnvValue('FASTEN_PUBLIC_ID')?.trim();
+    if (!publicId) return null;
+    const endpointId = this.getEnvValue('FASTEN_DEFAULT_ENDPOINT_ID')?.trim();
+    const brandId = this.getEnvValue('FASTEN_DEFAULT_BRAND_ID')?.trim();
+    const portalId = this.getEnvValue('FASTEN_DEFAULT_PORTAL_ID')?.trim();
+    const params = new URLSearchParams({
+      public_id: publicId,
+      redirect_uri: redirectUri,
+    });
+    if (endpointId) params.set('endpoint_id', endpointId);
+    if (brandId) params.set('brand_id', brandId);
+    if (portalId) params.set('portal_id', portalId);
+    return `${this.baseUrl}/bridge/connect?${params.toString()}`;
   }
 
   async getConnectionStatus(
@@ -90,7 +124,12 @@ export class FastenConnectService {
   async requestEhiExport(
     orgConnectionId: string,
   ): Promise<FastenEhiExportResponse | null> {
-    if (!this.authHeader) return null;
+    if (!this.authHeader) {
+      this.logger.warn(
+        'Fasten requestEhiExport skipped: missing FASTEN_PUBLIC_ID/FASTEN_PRIVATE_KEY',
+      );
+      return null;
+    }
     const url = `${this.baseUrl}/bridge/fhir/ehi-export`;
     try {
       const res = await fetch(url, {

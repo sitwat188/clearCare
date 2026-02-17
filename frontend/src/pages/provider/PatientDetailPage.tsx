@@ -4,7 +4,7 @@
  */
 
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Typography,
   Box,
@@ -16,6 +16,10 @@ import {
   Chip,
   Button,
   Alert,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -23,23 +27,39 @@ import {
   Add as AddIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
+  Download as ExportIcon,
+  InsertLink as HealthIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import type { RootState } from '../../store/store';
 import { useSelector } from 'react-redux';
 import { patientService } from '../../services/patientService';
+import { healthConnectionsService } from '../../services/healthConnectionsService';
 import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
 
 const ProviderPatientDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const user = useSelector((state: RootState) => state.auth.user);
 
   const { data: patient, isLoading, error } = useQuery({
     queryKey: ['provider-patient', id],
     queryFn: () => patientService.getPatient(id || ''),
     enabled: !!id && !!user?.id,
+  });
+
+  const { data: healthConnections = [] } = useQuery({
+    queryKey: ['health-connections-patient', id],
+    queryFn: () => healthConnectionsService.listForPatient(id || ''),
+    enabled: !!id && !!patient,
+  });
+
+  const requestExportMutation = useMutation({
+    mutationFn: ({ patientId, orgConnectionId }: { patientId: string; orgConnectionId: string }) =>
+      healthConnectionsService.requestEhiExport(patientId, orgConnectionId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['health-connections-patient', id] }),
   });
 
   if (isLoading) {
@@ -123,7 +143,7 @@ const ProviderPatientDetail = () => {
           </Card>
         </Grid>
         <Grid item xs={12} md={8}>
-          <Card>
+          <Card sx={{ mb: 3 }}>
             <CardContent>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
                 Actions
@@ -148,6 +168,51 @@ const ProviderPatientDetail = () => {
                   Create instruction
                 </Button>
               </Box>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <HealthIcon fontSize="small" />
+                Health connections
+              </Typography>
+              {healthConnections.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  This patient has not connected any health records yet.
+                </Typography>
+              ) : (
+                <List disablePadding>
+                  {healthConnections.map((conn) => (
+                    <ListItem key={conn.id} divider sx={{ py: 1.5 }}>
+                      <ListItemText
+                        primary={conn.sourceName || 'Health record'}
+                        secondary={`Connected ${format(new Date(conn.connectedAt), 'MMM d, yyyy')}`}
+                        primaryTypographyProps={{ fontWeight: 600 }}
+                      />
+                      <ListItemSecondaryAction>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={
+                            requestExportMutation.isPending ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <ExportIcon fontSize="small" />
+                            )
+                          }
+                          onClick={() =>
+                            requestExportMutation.mutate({ patientId: patient.id, orgConnectionId: conn.orgConnectionId })
+                          }
+                          disabled={requestExportMutation.isPending}
+                        >
+                          Request export
+                        </Button>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  ))}
+                </List>
+              )}
             </CardContent>
           </Card>
         </Grid>

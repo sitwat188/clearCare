@@ -32,6 +32,14 @@ export class HealthConnectionsMeController {
     return this.healthConnections.listMyConnections(userId, role);
   }
 
+  /**
+   * GET connect-url: URL to start Fasten Connect flow (redirect user here; they return to frontend callback with org_connection_id).
+   */
+  @Get('connect-url')
+   async getConnectUrl() {
+    return this.healthConnections.getConnectUrl();
+  }
+
   @Post()
   async addConnection(
     @Body() dto: AddConnectionDto,

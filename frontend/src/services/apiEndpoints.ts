@@ -12,6 +12,7 @@ import type { ComplianceRecord, ComplianceMetrics } from '../types/compliance.ty
 import type { Notification } from '../types/notification.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
 import type { FhirPatient, FhirBundle, FhirPractitioner, FhirTask } from '../types/medplum.types';
+import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, FastenEhiExportResponse } from '../types/health-connections.types';
 
 /**
  * Make API request. Expects backend to return ApiResponse<T> in response.data.
@@ -599,6 +600,86 @@ export const medplumEndpoints = {
 };
 
 // ============================================================================
+// HEALTH CONNECTIONS (Fasten Connect – patient "me")
+// ============================================================================
+
+export const healthConnectionsEndpoints = {
+  /**
+   * GET /api/v1/patients/me/health-connections
+   */
+  listMyConnections: async (): Promise<ApiResponse<HealthConnection[]>> => {
+    return makeApiRequest('get', '/patients/me/health-connections');
+  },
+
+  /**
+   * GET /api/v1/patients/me/health-connections/connect-url
+   */
+  getConnectUrl: async (): Promise<ApiResponse<{ url: string | null }>> => {
+    return makeApiRequest('get', '/patients/me/health-connections/connect-url');
+  },
+
+  /**
+   * POST /api/v1/patients/me/health-connections
+   */
+  addConnection: async (orgConnectionId: string, sourceName?: string): Promise<ApiResponse<AddConnectionResponse>> => {
+    return makeApiRequest('post', '/patients/me/health-connections', { orgConnectionId, sourceName });
+  },
+
+  /**
+   * DELETE /api/v1/patients/me/health-connections/:orgConnectionId
+   */
+  removeConnection: async (orgConnectionId: string): Promise<ApiResponse<{ success: boolean }>> => {
+    return makeApiRequest('delete', `/patients/me/health-connections/${encodeURIComponent(orgConnectionId)}`);
+  },
+
+  /**
+   * GET /api/v1/patients/me/health-connections/:orgConnectionId/status
+   */
+  getConnectionStatus: async (orgConnectionId: string): Promise<ApiResponse<FastenConnectionStatus | null>> => {
+    return makeApiRequest('get', `/patients/me/health-connections/${encodeURIComponent(orgConnectionId)}/status`);
+  },
+};
+
+// ============================================================================
+// HEALTH CONNECTIONS FOR PATIENT (provider / admin – by patientId)
+// ============================================================================
+
+export const healthConnectionsPatientEndpoints = {
+  /**
+   * GET /api/v1/patients/:patientId/health-connections
+   */
+  listForPatient: async (patientId: string): Promise<ApiResponse<HealthConnection[]>> => {
+    return makeApiRequest('get', `/patients/${patientId}/health-connections`);
+  },
+
+  /**
+   * GET /api/v1/patients/:patientId/health-connections/:orgConnectionId/status
+   */
+  getConnectionStatus: async (
+    patientId: string,
+    orgConnectionId: string,
+  ): Promise<ApiResponse<FastenConnectionStatus | null>> => {
+    return makeApiRequest(
+      'get',
+      `/patients/${patientId}/health-connections/${encodeURIComponent(orgConnectionId)}/status`,
+    );
+  },
+
+  /**
+   * POST /api/v1/patients/:patientId/health-connections/:orgConnectionId/request-export
+   */
+  requestEhiExport: async (
+    patientId: string,
+    orgConnectionId: string,
+  ): Promise<ApiResponse<FastenEhiExportResponse | null>> => {
+    return makeApiRequest(
+      'post',
+      `/patients/${patientId}/health-connections/${encodeURIComponent(orgConnectionId)}/request-export`,
+    );
+  },
+};
+
+// ============================================================================
 // NOTIFICATION ENDPOINTS (Shared across roles)
 // ============================================================================
 
@@ -646,6 +727,8 @@ export const apiEndpoints = {
   provider: providerEndpoints,
   admin: adminEndpoints,
   medplum: medplumEndpoints,
+  healthConnections: healthConnectionsEndpoints,
+  healthConnectionsPatient: healthConnectionsPatientEndpoints,
   notifications: notificationEndpoints,
 };
 

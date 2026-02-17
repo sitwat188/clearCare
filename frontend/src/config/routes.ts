@@ -19,6 +19,8 @@ export const ROUTES = {
     COMPLIANCE: '/patient/compliance',
     HISTORY: '/patient/history',
     NOTIFICATIONS: '/patient/notifications',
+    HEALTH_CONNECTIONS: '/patient/health-connections',
+    HEALTH_CONNECTIONS_CALLBACK: '/patient/health-connections/callback',
     PROFILE: '/patient/profile',
     SETTINGS: '/patient/settings',
   },

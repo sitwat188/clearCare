@@ -17,6 +17,8 @@ import PatientInstructionDetail from './pages/patient/InstructionDetailPage';
 import PatientCompliance from './pages/patient/CompliancePage';
 import PatientHistory from './pages/patient/HistoryPage';
 import PatientNotifications from './pages/patient/NotificationsPage';
+import HealthConnectionsPage from './pages/patient/HealthConnectionsPage';
+import HealthConnectionsCallbackPage from './pages/patient/HealthConnectionsCallbackPage';
 
 // Shared pages
 import ProfilePage from './pages/shared/ProfilePage';
@@ -81,6 +83,8 @@ function App() {
                       <Route path="/patient/compliance" element={<PatientCompliance />} />
                       <Route path="/patient/history" element={<PatientHistory />} />
                       <Route path="/patient/notifications" element={<PatientNotifications />} />
+                      <Route path="/patient/health-connections" element={<HealthConnectionsPage />} />
+                      <Route path="/patient/health-connections/callback" element={<HealthConnectionsCallbackPage />} />
                       <Route path="/patient/profile" element={<ProfilePage />} />
                       <Route path="/patient/settings" element={<SettingsPage />} />
                     </>

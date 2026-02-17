@@ -42,6 +42,7 @@ import {
   Settings as SettingsIcon,
   AccountCircle,
   LocalHospital as LogoIcon,
+  InsertLink as HealthConnectionsIcon,
   Notifications as NotificationsIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
@@ -106,6 +107,7 @@ const Sidebar = () => {
     { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.PATIENT.DASHBOARD },
     { text: t('nav.myInstructions'), icon: <InstructionsIcon />, path: ROUTES.PATIENT.INSTRUCTIONS },
     { text: t('nav.compliance'), icon: <ComplianceIcon />, path: ROUTES.PATIENT.COMPLIANCE },
+    { text: t('nav.healthConnections'), icon: <HealthConnectionsIcon />, path: ROUTES.PATIENT.HEALTH_CONNECTIONS },
     { text: t('nav.history'), icon: <HistoryIcon />, path: ROUTES.PATIENT.HISTORY },
     { text: t('nav.notifications'), icon: <NotificationsIcon />, path: ROUTES.PATIENT.NOTIFICATIONS },
   ];

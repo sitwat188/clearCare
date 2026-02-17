@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { FastenConnectService } from './fasten-connect.service';
 import type { FastenConnectionStatus } from './fasten-connect.service';
@@ -16,7 +17,21 @@ export class HealthConnectionsService {
   constructor(
     private prisma: PrismaService,
     private fasten: FastenConnectService,
+    private config: ConfigService,
   ) {}
+
+  /**
+   * URL to start Fasten Connect flow (redirect_uri = frontend callback). Returns null if not configured.
+   */
+  getConnectUrl(): { url: string | null } {
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL')?.replace(/\/+$/, '') ||
+      'http://localhost:5173';
+    const callbackPath = '/patient/health-connections/callback';
+    const redirectUri = `${frontendUrl}${callbackPath.startsWith('/') ? callbackPath : `/${callbackPath}`}`;
+    const url = this.fasten.getConnectUrl(redirectUri);
+    return { url };
+  }
 
   /**
    * Resolve patient record for the current user (must be role patient).
@@ -92,7 +107,32 @@ export class HealthConnectionsService {
           'This connection is already linked to another patient',
         );
       }
-      return this.toConnectionResponse(existing);
+      // Even if we already have the connection saved, trigger export again.
+      // Fasten's bulk export endpoint is idempotent per org_connection_id.
+      const response = this.toConnectionResponse(existing);
+      if (!this.fasten.isConfigured()) {
+        this.logger.warn(
+          `Fasten not configured; skipping EHI export for orgConnectionId=${trimmed}`,
+        );
+        return response;
+      }
+      try {
+        const result = await this.fasten.requestEhiExport(trimmed);
+        if (result) {
+          return {
+            ...response,
+            ehiExport: { taskId: result.task_id, status: result.status },
+          };
+        }
+        this.logger.warn(
+          `EHI export request returned null: patient=${patient.id} orgConnectionId=${trimmed}`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `EHI export request failed (connection already saved): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      return response;
     }
     const connection = await this.prisma.patientHealthConnection.create({
       data: {
@@ -104,7 +144,37 @@ export class HealthConnectionsService {
     this.logger.log(
       `Health connection added: patient=${patient.id} orgConnectionId=${trimmed}`,
     );
-    return this.toConnectionResponse(connection);
+
+    // Trigger bulk (EHI) export immediately after connect so records are requested right away.
+    let ehiExport: { taskId: string; status: string } | undefined;
+    if (!this.fasten.isConfigured()) {
+      this.logger.warn(
+        `Fasten not configured; skipping EHI export for orgConnectionId=${trimmed}`,
+      );
+    } else {
+      try {
+        const result = await this.fasten.requestEhiExport(trimmed);
+        if (result) {
+          ehiExport = { taskId: result.task_id, status: result.status };
+          this.logger.log(
+            `EHI export requested: patient=${patient.id} orgConnectionId=${trimmed} taskId=${result.task_id}`,
+          );
+        } else {
+          this.logger.warn(
+            `EHI export request returned null: patient=${patient.id} orgConnectionId=${trimmed}`,
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `EHI export request failed (connection still saved): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return {
+      ...this.toConnectionResponse(connection),
+      ...(ehiExport && { ehiExport }),
+    };
   }
 
   /**
