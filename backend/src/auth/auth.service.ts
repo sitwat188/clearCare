@@ -649,6 +649,7 @@ export class AuthService {
   /**
    * When MAIL_OVERRIDE_TO is set, all transactional mail is sent to this address
    * instead of the intended recipient.
+   */
   private static getEffectiveMailTo(originalTo: string): string {
     const override = process.env.MAIL_OVERRIDE_TO?.trim();
     return override || originalTo;
