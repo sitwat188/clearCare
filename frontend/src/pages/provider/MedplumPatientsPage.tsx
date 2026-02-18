@@ -19,6 +19,7 @@ import {
   Chip,
   Button,
   Alert,
+  Tooltip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -193,12 +194,14 @@ const MedplumPatientsPage = () => {
             const identifier = getFirstIdentifier(p);
             const phone = getPhone(p);
             return (
-              <Grid item xs={12} sm={6} md={4} key={id}>
+              <Grid item xs={12} sm={6} md={4} lg={3} key={id}>
                 <Card
                   sx={{
                     height: '100%',
                     cursor: 'pointer',
                     transition: 'all 0.3s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
                     '&:hover': {
                       transform: 'translateY(-4px)',
                       boxShadow: 4,
@@ -209,48 +212,60 @@ const MedplumPatientsPage = () => {
                   }}
                   onClick={() => navigate(detailRoute(id))}
                 >
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 2, minWidth: 0 }}>
                       <Avatar
                         sx={{
-                          width: 64,
-                          height: 64,
+                          width: 56,
+                          height: 56,
+                          flexShrink: 0,
                           bgcolor: 'primary.main',
-                          fontSize: '1.5rem',
+                          fontSize: '1.25rem',
                           fontWeight: 700,
                         }}
                       >
                         {displayName[0]?.toUpperCase() || <PatientsIcon />}
                       </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }} noWrap title={displayName}>
                           {displayName}
                         </Typography>
                         {identifier && (
-                          <Chip
-                            label={identifier}
-                            size="small"
-                            sx={{ fontSize: '0.75rem' }}
-                            icon={<IdentifierIcon sx={{ fontSize: 16 }} />}
-                          />
+                          <Tooltip title={identifier} placement="top" enterDelay={300}>
+                            <Chip
+                              label={identifier}
+                              size="small"
+                              icon={<IdentifierIcon sx={{ fontSize: 16 }} />}
+                              sx={{
+                                fontSize: '0.75rem',
+                                maxWidth: '100%',
+                                '& .MuiChip-label': {
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                },
+                              }}
+                            />
+                          </Tooltip>
                         )}
                       </Box>
                     </Box>
-                    <Box sx={{ mb: 2 }}>
+                    <Box sx={{ mb: 2, minWidth: 0 }}>
                       {phone && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                          <Typography variant="body2" color="text.secondary">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
+                          <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+                          <Typography variant="body2" color="text.secondary" noWrap title={phone}>
                             {phone}
                           </Typography>
                         </Box>
                       )}
                       {p.birthDate && (
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary" component="span" display="block">
                           DOB: {format(new Date(p.birthDate), 'MMM dd, yyyy')}
                         </Typography>
                       )}
                     </Box>
+                    <Box sx={{ flex: 1, minHeight: 8 }} />
                     <Button
                       fullWidth
                       variant="outlined"

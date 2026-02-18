@@ -297,15 +297,15 @@ const AdminUsers = () => {
           <Grid item xs={12} md={8}>
             <Card>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                  <Avatar sx={{ width: 64, height: 64, bgcolor: 'primary.main', fontSize: '1.5rem' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, minWidth: 0 }}>
+                  <Avatar sx={{ width: 64, height: 64, bgcolor: 'primary.main', fontSize: '1.5rem', flexShrink: 0 }}>
                     {user.firstName[0]}{user.lastName[0]}
                   </Avatar>
-                  <Box>
-                    <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 700 }} noWrap>
                       {user.firstName} {user.lastName}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {user.email}
                     </Typography>
                   </Box>
@@ -513,10 +513,10 @@ const AdminUsers = () => {
       </Card>
 
       {/* Users Table */}
-      <Card>
-        <CardContent>
-          <TableContainer>
-            <Table>
+      <Card sx={{ overflow: 'hidden' }}>
+        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+          <TableContainer sx={{ overflowX: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 800 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>User</TableCell>

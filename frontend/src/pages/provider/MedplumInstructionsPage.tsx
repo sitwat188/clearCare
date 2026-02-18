@@ -17,6 +17,7 @@ import {
   Chip,
   Button,
   Alert,
+  Tooltip,
 } from '@mui/material';
 import { Search as SearchIcon, Assignment as TaskIcon, ArrowForward as ArrowForwardIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
@@ -125,24 +126,60 @@ const MedplumInstructionsPage = () => {
             const forRef = getTaskForDisplay(t);
             const modified = t.lastModified ?? t.authoredOn ?? t.meta?.lastUpdated;
             return (
-              <Grid item xs={12} sm={6} md={4} key={id}>
+              <Grid item xs={12} sm={6} md={4} lg={3} key={id}>
                 <Card
-                  sx={{ height: '100%', cursor: 'pointer', '&:hover': { transform: 'translateY(-4px)', boxShadow: 4 }, border: '1px solid', borderColor: 'divider' }}
+                  sx={{
+                    height: '100%',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    '&:hover': { transform: 'translateY(-4px)', boxShadow: 4, borderColor: 'primary.main' },
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
                   onClick={() => navigate(detailRoute(id))}
                 >
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
-                      <TaskIcon color="action" sx={{ mt: 0.25 }} />
-                      <Typography variant="subtitle1" sx={{ fontWeight: 600, flex: 1 }} noWrap>
-                        {description.length > 60 ? description.slice(0, 60) + '…' : description}
+                  <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1, minWidth: 0 }}>
+                      <TaskIcon color="action" sx={{ mt: 0.25, flexShrink: 0 }} />
+                      <Tooltip title={description} placement="top" enterDelay={300}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600, flex: 1, minWidth: 0 }} noWrap>
+                          {description}
+                        </Typography>
+                      </Tooltip>
+                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, minWidth: 0 }}>
+                      <Chip
+                        label={status}
+                        size="small"
+                        color={status === 'completed' ? 'success' : status === 'in-progress' ? 'primary' : 'default'}
+                        sx={{
+                          maxWidth: '100%',
+                          '& .MuiChip-label': {
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          },
+                        }}
+                      />
+                    </Box>
+                    {forRef !== '—' && (
+                      <Tooltip title={forRef} placement="top" enterDelay={300}>
+                        <Typography variant="caption" color="text.secondary" display="block" noWrap sx={{ mb: 0.5 }}>
+                          For: {forRef}
+                        </Typography>
+                      </Tooltip>
+                    )}
+                    {modified && (
+                      <Typography variant="caption" color="text.secondary" display="block" component="span">
+                        Updated: {format(new Date(modified), 'MMM d, yyyy')}
                       </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                      <Chip label={status} size="small" color={status === 'completed' ? 'success' : status === 'in-progress' ? 'primary' : 'default'} />
-                    </Box>
-                    {forRef !== '—' && <Typography variant="caption" color="text.secondary" display="block">For: {forRef}</Typography>}
-                    {modified && <Typography variant="caption" color="text.secondary" display="block">Updated: {format(new Date(modified), 'MMM d, yyyy')}</Typography>}
-                    <Button fullWidth variant="outlined" endIcon={<ArrowForwardIcon />} sx={{ mt: 2 }} onClick={(e) => { e.stopPropagation(); navigate(detailRoute(id)); }}>View Details</Button>
+                    )}
+                    <Box sx={{ flex: 1, minHeight: 8 }} />
+                    <Button fullWidth variant="outlined" endIcon={<ArrowForwardIcon />} onClick={(e) => { e.stopPropagation(); navigate(detailRoute(id)); }}>
+                      View Details
+                    </Button>
                   </CardContent>
                 </Card>
               </Grid>

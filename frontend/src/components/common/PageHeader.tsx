@@ -85,8 +85,18 @@ const PageHeader = ({
         },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2.5, flex: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 2,
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2.5, flex: '1 1 auto', minWidth: 0 }}>
           {shouldShowBack && (
             <IconButton
               onClick={handleBack}
@@ -111,7 +121,7 @@ const PageHeader = ({
               <ArrowBackIcon />
             </IconButton>
           )}
-          <Box sx={{ flex: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
               variant="h4"
               sx={{
@@ -121,9 +131,10 @@ const PageHeader = ({
                 backgroundClip: 'text',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
-                fontSize: { xs: '1.75rem', sm: '2rem' },
+                fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2rem' },
                 lineHeight: 1.2,
                 letterSpacing: '-0.02em',
+                wordBreak: 'break-word',
               }}
             >
               {title}
@@ -135,7 +146,8 @@ const PageHeader = ({
                   color: 'text.secondary',
                   fontSize: '0.95rem',
                   lineHeight: 1.6,
-                  maxWidth: '80%',
+                  maxWidth: { xs: '100%', sm: '80%' },
+                  wordBreak: 'break-word',
                 }}
               >
                 {subtitle}
@@ -151,6 +163,7 @@ const PageHeader = ({
               gap: 1.5,
               position: 'relative',
               zIndex: 1,
+              flexShrink: 0,
             }}
           >
             {action}

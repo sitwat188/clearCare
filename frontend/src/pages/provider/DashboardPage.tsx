@@ -360,6 +360,7 @@ const ProviderDashboard = () => {
                         border: '1px solid',
                         borderColor: 'divider',
                         cursor: 'pointer',
+                        minWidth: 0,
                         '&:hover': {
                           bgcolor: alpha('#2563eb', 0.05),
                           borderColor: 'primary.main',
@@ -368,8 +369,8 @@ const ProviderDashboard = () => {
                       }}
                       onClick={() => navigate(ROUTES.PROVIDER.INSTRUCTION_DETAIL(instruction.id))}
                     >
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 600, flex: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1, gap: 1, minWidth: 0 }}>
+                        <Typography variant="body1" sx={{ fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {instruction.title}
                         </Typography>
                         <Chip

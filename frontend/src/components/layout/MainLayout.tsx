@@ -38,17 +38,13 @@ const MainLayout = ({ children }: MainLayoutProps) => {
         component="main"
         sx={{
           flexGrow: 1,
-          marginLeft: { sm: `${sidebarWidth}px` },
-          width: { sm: `calc(100% - ${sidebarWidth}px)` },
+          minWidth: 0,
+          marginLeft: `${sidebarWidth}px`,
+          width: `calc(100% - ${sidebarWidth}px)`,
           transition: 'margin-left 0.3s ease, width 0.3s ease',
         }}
       >
-        <Box
-          sx={{
-            flexGrow: 1,
-            p: 3,
-          }}
-        >
+        <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, minWidth: 0 }}>
           <Container maxWidth="xl">{children}</Container>
         </Box>
       </Box>

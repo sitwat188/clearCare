@@ -18,6 +18,7 @@ import {
   Chip,
   Button,
   Alert,
+  Tooltip,
 } from '@mui/material';
 import { Search as SearchIcon, Person as PersonIcon, ArrowForward as ArrowForwardIcon, Phone as PhoneIcon, Badge as IdentifierIcon } from '@mui/icons-material';
 import { medplumService } from '../../services/medplumService';
@@ -133,27 +134,67 @@ const MedplumProvidersPage = () => {
             const identifier = getFirstIdentifier(p);
             const phone = getPhone(p);
             return (
-              <Grid item xs={12} sm={6} md={4} key={id}>
+              <Grid item xs={12} sm={6} md={4} lg={3} key={id}>
                 <Card
-                  sx={{ height: '100%', cursor: 'pointer', transition: 'all 0.3s ease', '&:hover': { transform: 'translateY(-4px)', boxShadow: 4, borderColor: 'primary.main' }, border: '1px solid', borderColor: 'divider' }}
+                  sx={{
+                    height: '100%',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    '&:hover': { transform: 'translateY(-4px)', boxShadow: 4, borderColor: 'primary.main' },
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
                   onClick={() => navigate(detailRoute(id))}
                 >
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                      <Avatar sx={{ width: 64, height: 64, bgcolor: 'primary.main', fontSize: '1.5rem', fontWeight: 700 }}>
+                  <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 2, minWidth: 0 }}>
+                      <Avatar
+                        sx={{
+                          width: 56,
+                          height: 56,
+                          flexShrink: 0,
+                          bgcolor: 'primary.main',
+                          fontSize: '1.25rem',
+                          fontWeight: 700,
+                        }}
+                      >
                         {displayName[0]?.toUpperCase() || <PersonIcon />}
                       </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>{displayName}</Typography>
-                        {identifier && <Chip label={identifier} size="small" sx={{ fontSize: '0.75rem' }} icon={<IdentifierIcon sx={{ fontSize: 16 }} />} />}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }} noWrap title={displayName}>
+                          {displayName}
+                        </Typography>
+                        {identifier && (
+                          <Tooltip title={identifier} placement="top" enterDelay={300}>
+                            <Chip
+                              label={identifier}
+                              size="small"
+                              icon={<IdentifierIcon sx={{ fontSize: 16 }} />}
+                              sx={{
+                                fontSize: '0.75rem',
+                                maxWidth: '100%',
+                                '& .MuiChip-label': {
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                },
+                              }}
+                            />
+                          </Tooltip>
+                        )}
                       </Box>
                     </Box>
                     {phone && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                        <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="text.secondary">{phone}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, minWidth: 0 }}>
+                        <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+                        <Typography variant="body2" color="text.secondary" noWrap title={phone}>
+                          {phone}
+                        </Typography>
                       </Box>
                     )}
+                    <Box sx={{ flex: 1, minHeight: 8 }} />
                     <Button fullWidth variant="outlined" endIcon={<ArrowForwardIcon />} onClick={(e) => { e.stopPropagation(); navigate(detailRoute(id)); }}>
                       View Details
                     </Button>

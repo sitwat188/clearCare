@@ -138,8 +138,8 @@ const ProviderPatients = () => {
                     >
                       {patient.firstName?.[0] || <PatientsIcon />}
                     </Avatar>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }} noWrap>
                         {patient.firstName} {patient.lastName}
                       </Typography>
                       <Chip
@@ -150,16 +150,16 @@ const ProviderPatients = () => {
                     </Box>
                   </Box>
 
-                  <Box sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <EmailIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
+                  <Box sx={{ mb: 2, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
+                      <EmailIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {patient.email}
                       </Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
+                      <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {patient.phone}
                       </Typography>
                     </Box>

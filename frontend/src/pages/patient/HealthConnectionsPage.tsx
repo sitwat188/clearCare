@@ -16,7 +16,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
   IconButton,
   Chip,
   Dialog,
@@ -249,16 +248,34 @@ const HealthConnectionsPage = () => {
         <Card>
           <List disablePadding>
             {connections.map((conn) => (
-              <ListItem key={conn.id} divider sx={{ py: 2 }}>
+              <ListItem
+                key={conn.id}
+                divider
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  py: 2,
+                  gap: 1.5,
+                }}
+              >
                 <ListItemText
                   primary={conn.sourceName || 'Health record'}
-                  secondary={
-                    <>Connected {format(new Date(conn.connectedAt), 'MMM d, yyyy')}</>
-                  }
+                  secondary={<>Connected {format(new Date(conn.connectedAt), 'MMM d, yyyy')}</>}
                   primaryTypographyProps={{ fontWeight: 600 }}
+                  sx={{ flex: '1 1 auto', minWidth: 0 }}
                 />
-                <ListItemSecondaryAction>
-                  <Chip label="Connected" size="small" color="success" sx={{ mr: 1 }} />
+                <Box
+                  sx={{
+                    flex: '0 0 auto',
+                    width: { xs: '100%', sm: 'auto' },
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    mt: { xs: 1, sm: 0 },
+                  }}
+                >
+                  <Chip label="Connected" size="small" color="success" />
                   <IconButton
                     edge="end"
                     aria-label="Remove"
@@ -269,7 +286,7 @@ const HealthConnectionsPage = () => {
                   >
                     <DeleteIcon />
                   </IconButton>
-                </ListItemSecondaryAction>
+                </Box>
               </ListItem>
             ))}
           </List>

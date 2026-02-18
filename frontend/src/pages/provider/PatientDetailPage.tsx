@@ -19,7 +19,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -95,8 +94,8 @@ const ProviderPatientDetail = () => {
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
+          <Card sx={{ height: '100%', minWidth: 0 }}>
+            <CardContent sx={{ minWidth: 0 }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2 }}>
                 <Avatar
                   sx={{
@@ -115,19 +114,19 @@ const ProviderPatientDetail = () => {
                   {patient.firstName} {patient.lastName}
                 </Typography>
                 <Chip label={`MRN: ${patient.medicalRecordNumber}`} size="small" sx={{ mb: 2 }} />
-                <Box sx={{ width: '100%', textAlign: 'left' }}>
+                <Box sx={{ width: '100%', textAlign: 'left', minWidth: 0 }}>
                   {patient.email && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <EmailIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
+                      <EmailIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {patient.email}
                       </Typography>
                     </Box>
                   )}
                   {patient.phone && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
+                      <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {patient.phone}
                       </Typography>
                     </Box>
@@ -184,13 +183,30 @@ const ProviderPatientDetail = () => {
               ) : (
                 <List disablePadding>
                   {healthConnections.map((conn) => (
-                    <ListItem key={conn.id} divider sx={{ py: 1.5 }}>
+                    <ListItem
+                      key={conn.id}
+                      divider
+                      sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        py: 1.5,
+                        gap: 1.5,
+                      }}
+                    >
                       <ListItemText
                         primary={conn.sourceName || 'Health record'}
                         secondary={`Connected ${format(new Date(conn.connectedAt), 'MMM d, yyyy')}`}
                         primaryTypographyProps={{ fontWeight: 600 }}
+                        sx={{ flex: '1 1 auto', minWidth: 0 }}
                       />
-                      <ListItemSecondaryAction>
+                      <Box
+                        sx={{
+                          flex: '0 0 auto',
+                          width: { xs: '100%', sm: 'auto' },
+                          mt: { xs: 1, sm: 0 },
+                        }}
+                      >
                         <Button
                           size="small"
                           variant="outlined"
@@ -205,10 +221,11 @@ const ProviderPatientDetail = () => {
                             requestExportMutation.mutate({ patientId: patient.id, orgConnectionId: conn.orgConnectionId })
                           }
                           disabled={requestExportMutation.isPending}
+                          fullWidth={false}
                         >
                           Request export
                         </Button>
-                      </ListItemSecondaryAction>
+                      </Box>
                     </ListItem>
                   ))}
                 </List>

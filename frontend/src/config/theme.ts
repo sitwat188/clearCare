@@ -157,6 +157,7 @@ export const theme = createTheme({
           borderRadius: 16,
           boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.08)',
           transition: 'all 0.3s ease-in-out',
+          overflow: 'hidden',
           '&:hover': {
             boxShadow: '0px 8px 30px rgba(0, 0, 0, 0.12)',
             transform: 'translateY(-2px)',
