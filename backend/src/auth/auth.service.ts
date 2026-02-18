@@ -647,6 +647,14 @@ export class AuthService {
   }
 
   /**
+   * When MAIL_OVERRIDE_TO is set, all transactional mail is sent to this address
+   * instead of the intended recipient.
+  private static getEffectiveMailTo(originalTo: string): string {
+    const override = process.env.MAIL_OVERRIDE_TO?.trim();
+    return override || originalTo;
+  }
+
+  /**
    * Send password reset email. Uses Resend (HTTP) if RESEND_API_KEY is set (works on Render);
    * otherwise uses SMTP. If neither is configured, logs the link to console.
    */
@@ -656,6 +664,7 @@ export class AuthService {
     expiresAt: Date,
     requestedForEmail: string,
   ): Promise<void> {
+    const effectiveTo = AuthService.getEffectiveMailTo(to);
     const isProduction = process.env.NODE_ENV === 'production';
     const resendKey = process.env.RESEND_API_KEY?.trim();
     const host = process.env.SMTP_HOST?.trim();
@@ -666,13 +675,13 @@ export class AuthService {
     if (resendKey) {
       const from = AuthService.getMailFrom();
       console.log(
-        `[Password reset] Sending via Resend to ${to} (from: ${from})`,
+        `[Password reset] Sending via Resend to ${redactPHIFromString(effectiveTo)} (from: ${from})`,
       );
       const resend = new Resend(resendKey);
       const html = getPasswordResetEmailHtml(requestedForEmail, resetLink);
       const { data, error } = await resend.emails.send({
         from,
-        to,
+        to: effectiveTo,
         subject: 'Reset your password - ClearCare+',
         html,
       });
@@ -693,7 +702,7 @@ export class AuthService {
         return;
       }
       console.log(
-        `[Password reset] Sent via Resend to ${to} (id: ${data?.id ?? 'n/a'})`,
+        `[Password reset] Sent via Resend to ${redactPHIFromString(effectiveTo)} (id: ${data?.id ?? 'n/a'})`,
       );
       return;
     }
@@ -705,7 +714,7 @@ export class AuthService {
         );
       } else {
         console.log(
-          `[Password reset] Mail not configured. Would send to ${redactPHIFromString(to)}. Reset link (1h): ${redactPHIFromString(resetLink)}`,
+          `[Password reset] Mail not configured. Would send to ${redactPHIFromString(effectiveTo)}. Reset link (1h): ${redactPHIFromString(resetLink)}`,
         );
       }
       return;
@@ -715,7 +724,7 @@ export class AuthService {
     const cleanUser = user.replace(/^["']|["']$/g, '');
     if (!isProduction) {
       console.log(
-        `[Password reset] Sending to ${redactPHIFromString(to)} via ${host}:${port} (SMTP_USER=${redactPHIFromString(cleanUser)})`,
+        `[Password reset] Sending to ${redactPHIFromString(effectiveTo)} via ${host}:${port} (SMTP_USER=${redactPHIFromString(cleanUser)})`,
       );
     }
     try {
@@ -730,7 +739,7 @@ export class AuthService {
       const text = `A password reset was requested for ${requestedForEmail}. Use this link to reset your password (expires ${expiresAt.toISOString()}): ${resetLink}`;
       await transporter.sendMail({
         from,
-        to,
+        to: effectiveTo,
         subject: 'Reset your password - ClearCare+',
         text,
         html,
@@ -778,18 +787,19 @@ export class AuthService {
       console.log(`[Restore notification] No recipient. Would send to ${to}.`);
       return;
     }
+    const effectiveTo = AuthService.getEffectiveMailTo(mailTo);
     const isProduction = process.env.NODE_ENV === 'production';
     const resendKey = process.env.RESEND_API_KEY?.trim();
 
     if (resendKey) {
       const from = AuthService.getMailFrom();
       console.log(
-        `[Restore notification] Sending via Resend to ${mailTo} (from: ${from})`,
+        `[Restore notification] Sending via Resend to ${redactPHIFromString(effectiveTo)} (from: ${from})`,
       );
       const resend = new Resend(resendKey);
       const { data, error } = await resend.emails.send({
         from,
-        to: mailTo,
+        to: effectiveTo,
         subject,
         html,
       });
@@ -806,7 +816,7 @@ export class AuthService {
         return;
       }
       console.log(
-        `[Restore notification] Sent via Resend to ${mailTo} (id: ${data?.id ?? 'n/a'})`,
+        `[Restore notification] Sent via Resend to ${redactPHIFromString(effectiveTo)} (id: ${data?.id ?? 'n/a'})`,
       );
       return;
     }
@@ -818,7 +828,7 @@ export class AuthService {
         );
       } else {
         console.log(
-          `[Restore notification] Mail not configured. Would send to ${redactPHIFromString(mailTo)}: account restored for ${redactPHIFromString(to)}.`,
+          `[Restore notification] Mail not configured. Would send to ${redactPHIFromString(effectiveTo)}: account restored for ${redactPHIFromString(to)}.`,
         );
       }
       return;
@@ -835,13 +845,13 @@ export class AuthService {
       const from = AuthService.getMailFrom();
       await transporter.sendMail({
         from,
-        to: mailTo,
+        to: effectiveTo,
         subject,
         text,
         html,
       });
     } catch (err) {
-      console.error('[Restore notification] Failed to send to', mailTo, err);
+      console.error('[Restore notification] Failed to send to', effectiveTo, err);
       if (isProduction) {
         console.error(
           '[Restore notification] PRODUCTION: On Render, use RESEND_API_KEY instead.',
@@ -889,18 +899,19 @@ export class AuthService {
       );
       return;
     }
+    const effectiveTo = AuthService.getEffectiveMailTo(mailTo);
     const isProduction = process.env.NODE_ENV === 'production';
     const resendKey = process.env.RESEND_API_KEY?.trim();
 
     if (resendKey) {
       const from = AuthService.getMailFrom();
       console.log(
-        `[Invitation] Sending via Resend to ${redactPHIFromString(mailTo)} (from: ${redactPHIFromString(from)})`,
+        `[Invitation] Sending via Resend to ${redactPHIFromString(effectiveTo)} (from: ${redactPHIFromString(from)})`,
       );
       const resend = new Resend(resendKey);
       const { data, error } = await resend.emails.send({
         from,
-        to: mailTo,
+        to: effectiveTo,
         subject,
         html,
       });
@@ -918,7 +929,7 @@ export class AuthService {
         return;
       }
       console.log(
-        `[Invitation] Sent via Resend to ${redactPHIFromString(mailTo)} (id: ${data?.id ?? 'n/a'})`,
+        `[Invitation] Sent via Resend to ${redactPHIFromString(effectiveTo)} (id: ${data?.id ?? 'n/a'})`,
       );
       return;
     }
@@ -929,7 +940,7 @@ export class AuthService {
           '[Invitation] PRODUCTION: No email sent. Set RESEND_API_KEY (recommended on Render) or SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.',
         );
       } else {
-        const toAddr = redactPHIFromString(mailTo);
+        const toAddr = redactPHIFromString(effectiveTo);
         const invitee = redactPHIFromString(invitedUserEmail);
         const tempPw = redactPHIFromString(temporaryPassword);
         console.log(
@@ -950,13 +961,13 @@ export class AuthService {
       const from = AuthService.getMailFrom();
       await transporter.sendMail({
         from,
-        to: mailTo,
+        to: effectiveTo,
         subject,
         text,
         html,
       });
     } catch (err) {
-      console.error('[Invitation] Failed to send to', mailTo, err);
+      console.error('[Invitation] Failed to send to', effectiveTo, err);
       if (isProduction) {
         console.error(
           '[Invitation] PRODUCTION: On Render, SMTP is often blocked. Use RESEND_API_KEY instead.',
