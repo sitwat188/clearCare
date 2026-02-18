@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EncryptionModule } from '../common/encryption/encryption.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ProvidersController } from './providers.controller';
@@ -9,7 +10,13 @@ import { TemplatesService } from './templates.service';
 import { ReportsService } from './reports.service';
 
 @Module({
-  imports: [PrismaModule, PatientsModule, ComplianceModule, InstructionsModule],
+  imports: [
+    PrismaModule,
+    EncryptionModule,
+    PatientsModule,
+    ComplianceModule,
+    InstructionsModule,
+  ],
   controllers: [ProvidersController],
   providers: [TemplatesService, ReportsService, RolesGuard],
 })

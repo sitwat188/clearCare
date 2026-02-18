@@ -3,14 +3,19 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private encryption: EncryptionService,
+  ) {}
 
   /**
    * Create a notification for a user (e.g. provider_assigned, instruction_assigned).
+   * Title and message are encrypted at rest (may contain PHI).
    */
   async createNotification(params: {
     userId: string;
@@ -26,8 +31,8 @@ export class NotificationsService {
       data: {
         userId: params.userId,
         type: params.type,
-        title: params.title,
-        message: params.message,
+        title: this.encryption.encrypt(params.title),
+        message: this.encryption.encrypt(params.message),
         priority: params.priority ?? 'medium',
         actionUrl: params.actionUrl ?? undefined,
         actionLabel: params.actionLabel ?? undefined,
@@ -37,13 +42,18 @@ export class NotificationsService {
   }
 
   /**
-   * Get all notifications for the current user
+   * Get all notifications for the current user (title and message decrypted).
    */
   async getNotifications(userId: string) {
-    return this.prisma.notification.findMany({
+    const list = await this.prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+    return list.map((n) => ({
+      ...n,
+      title: this.encryption.decrypt(n.title),
+      message: this.encryption.decrypt(n.message),
+    }));
   }
 
   /**
@@ -61,10 +71,15 @@ export class NotificationsService {
         'You can only update your own notifications',
       );
     }
-    return this.prisma.notification.update({
+    const updated = await this.prisma.notification.update({
       where: { id: notificationId },
       data: { read: true },
     });
+    return {
+      ...updated,
+      title: this.encryption.decrypt(updated.title),
+      message: this.encryption.decrypt(updated.message),
+    };
   }
 
   /**
