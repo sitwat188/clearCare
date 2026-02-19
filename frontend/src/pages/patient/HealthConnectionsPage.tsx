@@ -24,13 +24,30 @@ import {
   DialogActions,
   Link,
 } from '@mui/material';
-import { Link as LinkIcon, Delete as DeleteIcon, LocalHospital as HealthIcon } from '@mui/icons-material';
+import { Link as LinkIcon, Delete as DeleteIcon, LocalHospital as HealthIcon, Science as LabIcon, Medication as MedIcon, Assignment as ConditionIcon, Event as EncounterIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
 import PageHeader from '../../components/common/PageHeader';
 import { healthConnectionsService } from '../../services/healthConnectionsService';
-import type { HealthConnection } from '../../types/health-connections.types';
+import type { HealthConnection, HealthObservation } from '../../types/health-connections.types';
 
-type StitchEventDetail = { data?: string } | { data?: unknown };
+const observationCategoryLabel = (cat: string | undefined): string => {
+  if (!cat) return 'Other';
+  const c = cat.toLowerCase();
+  if (c === 'laboratory' || c === 'lab') return 'Labs';
+  if (c === 'vital-signs' || c === 'vitals') return 'Vitals';
+  if (c === 'social-history') return 'Social history';
+  return cat;
+};
+
+const groupObservationsByCategory = (observations: HealthObservation[]): { label: string; items: HealthObservation[] }[] => {
+  const groups: Record<string, HealthObservation[]> = { Labs: [], Vitals: [], 'Social history': [], Other: [] };
+  for (const o of observations) {
+    const label = observationCategoryLabel(o.category);
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(o);
+  }
+  return (['Labs', 'Vitals', 'Social history', 'Other'] as const).map((label) => ({ label, items: groups[label] ?? [] })).filter((g) => g.items.length > 0);
+};
 
 const HealthConnectionsPage = () => {
   const queryClient = useQueryClient();
@@ -48,19 +65,41 @@ const HealthConnectionsPage = () => {
 
   const removeMutation = useMutation({
     mutationFn: (orgConnectionId: string) => healthConnectionsService.removeConnection(orgConnectionId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['health-connections-me'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['health-connections-me'] });
+      queryClient.invalidateQueries({ queryKey: ['health-data-me'] });
+    },
   });
 
   const addConnectionMutation = useMutation({
     mutationFn: ({ orgConnectionId, sourceName }: { orgConnectionId: string; sourceName?: string }) =>
       healthConnectionsService.addConnection(orgConnectionId, sourceName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['health-connections-me'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['health-connections-me'] });
+      queryClient.invalidateQueries({ queryKey: ['health-data-me'] });
+    },
   });
+
+  const { data: healthData, isLoading: healthDataLoading } = useQuery({
+    queryKey: ['health-data-me'],
+    queryFn: () => healthConnectionsService.getMyHealthData(),
+    enabled: connections.length > 0,
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      const empty = !d || (d.observations.length === 0 && d.medications.length === 0 && d.conditions.length === 0 && d.encounters.length === 0);
+      const anyPending = connections.some((c) => !c.lastExportFailureReason);
+      return connections.length > 0 && empty && anyPending ? 8_000 : false;
+    },
+  });
+
+  const hasAnyHealthData = healthData && (healthData.observations.length > 0 || healthData.medications.length > 0 || healthData.conditions.length > 0 || healthData.encounters.length > 0);
+  const allConnectionsFailedExport = connections.length > 0 && connections.every((c) => c.lastExportFailureReason);
+  const isWaitingForExport = connections.length > 0 && !allConnectionsFailedExport && healthData && !hasAnyHealthData;
 
   const handleConnect = () => {
     setConnectError(null);
-    if (!fastenPublicId || !fastenPublicId.trim()) {
-      setConnectError('Fasten Stitch is not configured (missing VITE_FASTEN_PUBLIC_ID).');
+    if (!fastenPublicId?.trim()) {
+      setConnectError('Fasten is not configured (missing VITE_FASTEN_PUBLIC_ID).');
       return;
     }
     setOpenStitch(true);
@@ -72,91 +111,75 @@ const HealthConnectionsPage = () => {
     }
   };
 
+  // When Stitch modal is open, attach eventBus listener to fasten-stitch-element. Fasten: event.detail.data is JSON string.
   useEffect(() => {
     if (!openStitch) return;
-    const wrapper = stitchWrapperRef.current;
-    if (!wrapper) return;
-    let cleanup: (() => void) | undefined;
-    const id = setTimeout(() => {
-      const el = wrapper.querySelector('fasten-stitch-element');
-      if (!el) return;
 
-      const onEventBus = (event: Event) => {
-      // Fasten docs: event.detail.data is JSON string
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (event as any)?.detail as StitchEventDetail | undefined;
-      const raw = (detail as { data?: unknown })?.data;
-      const parsed =
-        typeof raw === 'string'
-          ? (() => {
-              try {
-                return JSON.parse(raw) as any;
-              } catch {
-                return null;
-              }
-            })()
-          : raw;
-
-      const eventType = parsed?.event_type as string | undefined;
-      if (!eventType) return;
-
-      const sendConnectionToBackend = (orgConnectionId: string, sourceName?: string) => {
-        addConnectionMutation.mutate(
-          { orgConnectionId, sourceName },
-          {
-            onSuccess: (data) => {
-              setOpenStitch(false);
-              setConnectError(null);
-              if (data?.ehiExport) {
-                setConnectSuccess(
-                  'Connected. Medical record export has been requested; you will be notified when it is ready.',
-                );
-                setTimeout(() => setConnectSuccess(null), 8000);
-              }
-            },
-            onError: (err: any) => setConnectError(err?.message || 'Failed to save connection. Please try again.'),
+    const sendToBackend = (orgConnectionId: string, sourceName?: string) => {
+      addConnectionMutation.mutate(
+        { orgConnectionId, sourceName },
+        {
+          onSuccess: (data) => {
+            setOpenStitch(false);
+            setConnectError(null);
+            if (data?.ehiExport) {
+              setConnectSuccess('Connected. Medical record export has been requested; you will be notified when it is ready.');
+              setTimeout(() => setConnectSuccess(null), 8000);
+            }
           },
-        );
-      };
+          onError: (err: unknown) =>
+            setConnectError((err as { message?: string })?.message || 'Failed to save connection. Please try again.'),
+        },
+      );
+    };
 
-      // Emitted as soon as one connection succeeds (no need to wait for modal close).
+    const onEventBus = (event: Event) => {
+      const raw = (event as CustomEvent<{ data?: string }>)?.detail?.data;
+      if (raw === undefined) return;
+      let parsed: { event_type?: string; data?: { org_connection_id?: string; endpoint_id?: string } | unknown[] };
+      try {
+        parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch {
+        return;
+      }
+      const eventType = parsed?.event_type;
+      const data = parsed?.data;
+
       if (eventType === 'patient.connection_success') {
-        const data = parsed?.data as { org_connection_id?: string; endpoint_id?: string } | undefined;
-        const orgConnectionId = data?.org_connection_id;
-        const endpointId = data?.endpoint_id;
-        if (orgConnectionId) {
-          sendConnectionToBackend(orgConnectionId, endpointId);
-          return;
-        }
+        const d = data as { org_connection_id?: string; endpoint_id?: string } | undefined;
+        const id = d?.org_connection_id;
+        if (id) sendToBackend(id, d?.endpoint_id);
+        return;
       }
-
-      // Emitted when user closes the modal (array of all connections this session).
       if (eventType === 'widget.complete') {
-        const items = Array.isArray(parsed?.data) ? parsed.data : [];
-        const first = items[0];
-        const orgConnectionId = first?.org_connection_id as string | undefined;
-        const endpointId = first?.endpoint_id as string | undefined;
-        if (orgConnectionId) {
-          sendConnectionToBackend(orgConnectionId, endpointId);
-        } else {
-          setOpenStitch(false);
-        }
+        const arr = Array.isArray(data) ? data : data ? [data] : [];
+        const first = arr[0] as { org_connection_id?: string; endpoint_id?: string } | undefined;
+        const id = first?.org_connection_id;
+        if (id) sendToBackend(id, first?.endpoint_id);
+        else setOpenStitch(false);
+        return;
       }
-
       if (eventType === 'patient.connection_failed') {
-        const msg =
-          (parsed?.data?.error_description as string | undefined) ||
-          (parsed?.data?.error as string | undefined) ||
-          'Connection failed. Please try again.';
-        setConnectError(msg);
+        const d = (data as { error_description?: string; error?: string }) ?? {};
+        setConnectError(d.error_description || d.error || 'Connection failed. Please try again.');
       }
     };
 
-      el.addEventListener('eventBus', onEventBus);
-      cleanup = () => el.removeEventListener('eventBus', onEventBus);
-    }, 100);
+    let cleanup: (() => void) | undefined;
+    const tryAttach = () => {
+      const wrapper = stitchWrapperRef.current;
+      const el = wrapper?.querySelector('fasten-stitch-element');
+      if (el && !cleanup) {
+        el.addEventListener('eventBus', onEventBus);
+        cleanup = () => el.removeEventListener('eventBus', onEventBus);
+      }
+    };
+    tryAttach();
+    const t1 = setTimeout(tryAttach, 100);
+    const t2 = setTimeout(tryAttach, 500);
     return () => {
-      clearTimeout(id);
+      clearTimeout(t1);
+      clearTimeout(t2);
       cleanup?.();
     };
   }, [openStitch, addConnectionMutation]);
@@ -261,7 +284,19 @@ const HealthConnectionsPage = () => {
               >
                 <ListItemText
                   primary={conn.sourceName || 'Health record'}
-                  secondary={<>Connected {format(new Date(conn.connectedAt), 'MMM d, yyyy')}</>}
+                  secondary={
+                    <>
+                      Connected {format(new Date(conn.connectedAt), 'MMM d, yyyy')}
+                      {conn.lastSyncedAt && (
+                        <> · Last synced {format(new Date(conn.lastSyncedAt), 'MMM d, yyyy')}</>
+                      )}
+                      {conn.lastExportFailureReason && (
+                        <Typography component="span" variant="caption" color="error" display="block" sx={{ mt: 0.5 }}>
+                          Export failed: {conn.lastExportFailureReason}
+                        </Typography>
+                      )}
+                    </>
+                  }
                   primaryTypographyProps={{ fontWeight: 600 }}
                   sx={{ flex: '1 1 auto', minWidth: 0 }}
                 />
@@ -275,7 +310,13 @@ const HealthConnectionsPage = () => {
                     mt: { xs: 1, sm: 0 },
                   }}
                 >
-                  <Chip label="Connected" size="small" color="success" />
+                  {conn.lastExportFailureReason ? (
+                    <Chip label="Export failed" size="small" color="error" />
+                  ) : conn.lastSyncedAt ? (
+                    <Chip label="Synced" size="small" color="success" />
+                  ) : (
+                    <Chip label="Connected" size="small" color="success" />
+                  )}
                   <IconButton
                     edge="end"
                     aria-label="Remove"
@@ -293,11 +334,174 @@ const HealthConnectionsPage = () => {
         </Card>
       )}
 
+      {connections.length > 0 && (
+        <Card sx={{ mt: 3 }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <HealthIcon fontSize="small" />
+              Data from your connections
+            </Typography>
+            {(healthDataLoading || isWaitingForExport) ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 4 }}>
+                <CircularProgress size={32} />
+                <Typography variant="body2" color="text.secondary" textAlign="center">
+                  {healthDataLoading ? 'Loading your health data…' : "Preparing your health data. Export may take a minute. We'll refresh automatically."}
+                </Typography>
+              </Box>
+            ) : healthData && hasAnyHealthData ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {healthData.observations.length > 0 &&
+                  groupObservationsByCategory(healthData.observations).map(({ label, items }) => (
+                    <Box key={label}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <LabIcon fontSize="small" /> {label} ({items.length})
+                      </Typography>
+                      <List dense disablePadding sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
+                        {items.slice(0, 15).map((o) => (
+                          <ListItem key={o.id} sx={{ py: 0.5 }}>
+                            <ListItemText
+                              primary={o.display || o.code || '—'}
+                              secondary={
+                                [
+                                  o.value,
+                                  o.effectiveAt && format(new Date(o.effectiveAt), 'MMM d, yyyy'),
+                                  o.sourceName && `From ${o.sourceName}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ') || undefined
+                              }
+                              primaryTypographyProps={{ variant: 'body2' }}
+                              secondaryTypographyProps={{ variant: 'caption' }}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                      {items.length > 15 && (
+                        <Typography variant="caption" color="text.secondary">+ {items.length - 15} more</Typography>
+                      )}
+                    </Box>
+                  ))}
+                {healthData.medications.length > 0 && (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <MedIcon fontSize="small" /> Medications ({healthData.medications.length})
+                    </Typography>
+                    <List dense disablePadding sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
+                      {healthData.medications.slice(0, 15).map((m) => {
+                        const isActive = m.status?.toLowerCase() === 'active';
+                        return (
+                          <ListItem key={m.id} sx={{ py: 0.5, opacity: isActive ? 1 : 0.85 }}>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                  <span>{m.name || 'Medication'}</span>
+                                  {m.status && (
+                                    <Chip
+                                      label={m.status}
+                                      size="small"
+                                      color={isActive ? 'success' : 'default'}
+                                      variant="outlined"
+                                      sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
+                                  )}
+                                </Box>
+                              }
+                              secondary={
+                                [m.dosage, m.prescribedAt && format(new Date(m.prescribedAt), 'MMM d, yyyy'), m.sourceName && `From ${m.sourceName}`]
+                                  .filter(Boolean)
+                                  .join(' · ') || undefined
+                              }
+                              primaryTypographyProps={{ variant: 'body2' }}
+                              secondaryTypographyProps={{ variant: 'caption' }}
+                            />
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                    {healthData.medications.length > 15 && (
+                      <Typography variant="caption" color="text.secondary">+ {healthData.medications.length - 15} more</Typography>
+                    )}
+                  </Box>
+                )}
+                {healthData.conditions.length > 0 && (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <ConditionIcon fontSize="small" /> Conditions ({healthData.conditions.length})
+                    </Typography>
+                    <List dense disablePadding sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
+                      {healthData.conditions.slice(0, 15).map((c) => (
+                        <ListItem key={c.id} sx={{ py: 0.5 }}>
+                          <ListItemText
+                            primary={
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                <span>{c.display || c.code || '—'}</span>
+                                {c.clinicalStatus && (
+                                  <Chip
+                                    label={c.clinicalStatus}
+                                    size="small"
+                                    color={c.clinicalStatus.toLowerCase() === 'active' ? 'warning' : 'default'}
+                                    variant="outlined"
+                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                  />
+                                )}
+                              </Box>
+                            }
+                            secondary={[c.onsetAt && format(new Date(c.onsetAt), 'MMM d, yyyy'), c.sourceName && `From ${c.sourceName}`].filter(Boolean).join(' · ') || undefined}
+                            primaryTypographyProps={{ variant: 'body2' }}
+                            secondaryTypographyProps={{ variant: 'caption' }}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                    {healthData.conditions.length > 15 && (
+                      <Typography variant="caption" color="text.secondary">+ {healthData.conditions.length - 15} more</Typography>
+                    )}
+                  </Box>
+                )}
+                {healthData.encounters.length > 0 && (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <EncounterIcon fontSize="small" /> Encounters / visits ({healthData.encounters.length})
+                    </Typography>
+                    <List dense disablePadding sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
+                      {healthData.encounters.slice(0, 10).map((e) => {
+                        const primary = e.reasonText || e.serviceType || e.type || 'Visit';
+                        const start = e.periodStart ? format(new Date(e.periodStart), 'MMM d, yyyy') : null;
+                        const end = e.periodEnd ? format(new Date(e.periodEnd), 'MMM d, yyyy') : null;
+                        const dateRange = start && end && start !== end ? `${start} – ${end}` : start || undefined;
+                        const secondary = [dateRange, e.sourceName && `From ${e.sourceName}`].filter(Boolean).join(' · ') || undefined;
+                        return (
+                          <ListItem key={e.id} sx={{ py: 0.5 }}>
+                            <ListItemText
+                              primary={primary}
+                              secondary={secondary}
+                              primaryTypographyProps={{ variant: 'body2' }}
+                              secondaryTypographyProps={{ variant: 'caption' }}
+                            />
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                    {healthData.encounters.length > 10 && (
+                      <Typography variant="caption" color="text.secondary">+ {healthData.encounters.length - 10} more</Typography>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No health data imported yet. After you connect a source, we request your records; data will appear here once the export is ready (usually within a few minutes).
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Dialog open={openStitch} onClose={() => setOpenStitch(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Connect a health record</DialogTitle>
         <DialogContent dividers>
           {!fastenPublicId ? (
-            <Alert severity="warning">Missing `VITE_FASTEN_PUBLIC_ID`.</Alert>
+            <Alert severity="warning">Missing VITE_FASTEN_PUBLIC_ID.</Alert>
           ) : (
             <Box ref={stitchWrapperRef}>
               <fasten-stitch-element public-id={fastenPublicId} />

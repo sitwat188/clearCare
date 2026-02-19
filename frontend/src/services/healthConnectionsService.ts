@@ -4,7 +4,7 @@
  */
 
 import { apiEndpoints } from './apiEndpoints';
-import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, FastenEhiExportResponse } from '../types/health-connections.types';
+import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, FastenEhiExportResponse, PatientHealthData } from '../types/health-connections.types';
 
 const getData = <T>(res: { success: boolean; data: T }): T => res.data;
 
@@ -60,5 +60,17 @@ export const healthConnectionsService = {
   ): Promise<FastenEhiExportResponse | null> => {
     const res = await apiEndpoints.healthConnectionsPatient.requestEhiExport(patientId, orgConnectionId);
     return getData(res) ?? null;
+  },
+
+  /** Patient: get imported health data (observations, medications, conditions, encounters) */
+  getMyHealthData: async (): Promise<PatientHealthData> => {
+    const res = await apiEndpoints.healthConnections.getMyHealthData();
+    return getData(res) ?? { observations: [], medications: [], conditions: [], encounters: [] };
+  },
+
+  /** Provider/Admin: get health data for a patient */
+  getHealthDataForPatient: async (patientId: string): Promise<PatientHealthData> => {
+    const res = await apiEndpoints.healthConnectionsPatient.getHealthData(patientId);
+    return getData(res) ?? { observations: [], medications: [], conditions: [], encounters: [] };
   },
 };

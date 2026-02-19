@@ -158,4 +158,25 @@ export class FastenConnectService {
       return null;
     }
   }
+
+  /**
+   * Download EHI export file from Fasten (URL from webhook download_links).
+   * Uses same Basic auth as other API calls.
+   */
+  async downloadExportFile(downloadUrl: string): Promise<string> {
+    if (!this.authHeader) {
+      throw new Error('Fasten not configured');
+    }
+    const res = await fetch(downloadUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: this.authHeader,
+        Accept: 'application/fhir+ndjson, application/ndjson, application/json',
+      },
+    });
+    if (!res.ok) {
+      throw new Error(`Download failed: ${res.status} ${res.statusText}`);
+    }
+    return res.text();
+  }
 }

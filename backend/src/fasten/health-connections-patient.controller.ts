@@ -28,6 +28,22 @@ export class HealthConnectionsPatientController {
     );
   }
 
+  /**
+   * GET health-data: imported observations, medications, conditions, encounters for this patient.
+   */
+  @Get('health-data')
+  async getHealthData(
+    @Param('patientId') patientId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.healthConnections.getHealthDataForPatient(
+      patientId,
+      userId,
+      role,
+    );
+  }
+
   @Get(':orgConnectionId/status')
   async getConnectionStatus(
     @Param('patientId') patientId: string,
@@ -44,6 +60,7 @@ export class HealthConnectionsPatientController {
       orgConnectionId,
       userId,
       role,
+      patientId,
     );
   }
 
@@ -63,6 +80,7 @@ export class HealthConnectionsPatientController {
       orgConnectionId,
       userId,
       role,
+      patientId,
     );
   }
 }

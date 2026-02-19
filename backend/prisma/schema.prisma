@@ -137,25 +137,122 @@ model Patient {
   instructions          CareInstruction[]
   patientProviders      PatientProvider[]
   healthConnections     PatientHealthConnection[]
+  healthObservations    PatientHealthObservation[]
+  healthMedications     PatientHealthMedication[]
+  healthConditions       PatientHealthCondition[]
+  healthEncounters      PatientHealthEncounter[]
 
   @@index([userId])
   @@index([deletedAt])
   @@map("patients")
 }
 
-// Fasten Connect (and similar) external health connections per patient
+// Fasten Connect (and similar) external health connections per patient.
+// Same org_connection_id can be linked to multiple patients (e.g. shared test account or family).
 model PatientHealthConnection {
-  id               String   @id @default(uuid())
-  patientId        String   @map("patient_id")
-  orgConnectionId  String   @unique @map("org_connection_id") // Fasten org_connection_id from redirect
-  sourceName       String?  @map("source_name") // e.g. "Epic at Hospital X"
-  connectedAt      DateTime @default(now()) @map("connected_at")
-  lastSyncedAt     DateTime? @map("last_synced_at")
+  id                     String   @id @default(uuid())
+  patientId              String   @map("patient_id")
+  orgConnectionId        String   @map("org_connection_id") // Fasten org_connection_id from redirect
+  sourceName             String?  @map("source_name") // e.g. "Epic at Hospital X"
+  connectedAt            DateTime @default(now()) @map("connected_at")
+  lastSyncedAt           DateTime? @map("last_synced_at")
+  lastExportTaskId       String?  @map("last_export_task_id")
+  lastExportFailureReason String? @map("last_export_failure_reason")
 
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  observations PatientHealthObservation[]
+  medications  PatientHealthMedication[]
+  conditions  PatientHealthCondition[]
+  encounters  PatientHealthEncounter[]
 
+  @@unique([patientId, orgConnectionId])
   @@index([patientId])
+  @@index([orgConnectionId])
   @@map("patient_health_connections")
+}
+
+// Imported health data from Fasten EHI export (FHIR Observation)
+model PatientHealthObservation {
+  id            String   @id @default(uuid())
+  connectionId  String   @map("connection_id")
+  patientId     String   @map("patient_id")
+  fhirId        String?  @map("fhir_id")
+  code          String?  // e.g. LOINC code
+  display       String?  // Human-readable name (e.g. "Glucose")
+  category      String?  // FHIR category: laboratory, vital-signs, social-history, etc.
+  value         String?  // Value + unit as display string
+  unit          String?  // Unit only (for filtering/sorting)
+  effectiveAt   DateTime? @map("effective_at")
+  rawResource   Json?    @map("raw_resource")
+
+  connection PatientHealthConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  patient    Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([patientId])
+  @@index([category])
+  @@map("patient_health_observations")
+}
+
+// Imported health data from Fasten EHI export (FHIR MedicationRequest / MedicationStatement)
+model PatientHealthMedication {
+  id            String   @id @default(uuid())
+  connectionId  String   @map("connection_id")
+  patientId     String   @map("patient_id")
+  fhirId        String?  @map("fhir_id")
+  name          String?
+  dosage        String?  // e.g. "10 mg once daily" from dosageInstruction
+  status        String?
+  prescribedAt  DateTime? @map("prescribed_at")
+  rawResource   Json?    @map("raw_resource")
+
+  connection PatientHealthConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  patient    Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([patientId])
+  @@map("patient_health_medications")
+}
+
+// Imported health data from Fasten EHI export (FHIR Condition)
+model PatientHealthCondition {
+  id            String   @id @default(uuid())
+  connectionId  String   @map("connection_id")
+  patientId     String   @map("patient_id")
+  fhirId        String?  @map("fhir_id")
+  code          String?
+  display       String?
+  clinicalStatus String? @map("clinical_status")
+  onsetAt       DateTime? @map("onset_at")
+  rawResource   Json?    @map("raw_resource")
+
+  connection PatientHealthConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  patient    Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([patientId])
+  @@map("patient_health_conditions")
+}
+
+// Imported health data from Fasten EHI export (FHIR Encounter)
+model PatientHealthEncounter {
+  id            String   @id @default(uuid())
+  connectionId  String   @map("connection_id")
+  patientId     String   @map("patient_id")
+  fhirId        String?  @map("fhir_id")
+  type          String?  // encounter type (e.g. "ambulatory")
+  reasonText    String?  @map("reason_text")  // reason for encounter (e.g. "Annual physical")
+  serviceType   String?  @map("service_type")  // service type when present
+  periodStart   DateTime? @map("period_start")
+  periodEnd     DateTime? @map("period_end")
+  rawResource   Json?    @map("raw_resource")
+
+  connection PatientHealthConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  patient    Patient                @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([patientId])
+  @@map("patient_health_encounters")
 }
 
 // Junction: patient – provider (many-to-many), normalized from former assignedProviderIds array

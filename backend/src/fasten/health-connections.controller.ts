@@ -36,8 +36,19 @@ export class HealthConnectionsMeController {
    * GET connect-url: URL to start Fasten Connect flow (redirect user here; they return to frontend callback with org_connection_id).
    */
   @Get('connect-url')
-   async getConnectUrl() {
+  getConnectUrl() {
     return this.healthConnections.getConnectUrl();
+  }
+
+  /**
+   * GET health-data: imported observations, medications, conditions, encounters from Fasten EHI export.
+   */
+  @Get('health-data')
+  async getMyHealthData(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.healthConnections.getMyHealthData(userId, role);
   }
 
   @Post()

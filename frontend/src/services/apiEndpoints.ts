@@ -12,7 +12,7 @@ import type { ComplianceRecord, ComplianceMetrics } from '../types/compliance.ty
 import type { Notification } from '../types/notification.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
 import type { FhirPatient, FhirBundle, FhirPractitioner, FhirTask } from '../types/medplum.types';
-import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, FastenEhiExportResponse } from '../types/health-connections.types';
+import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, FastenEhiExportResponse, PatientHealthData } from '../types/health-connections.types';
 
 /**
  * Make API request. Expects backend to return ApiResponse<T> in response.data.
@@ -619,6 +619,13 @@ export const healthConnectionsEndpoints = {
   },
 
   /**
+   * GET /api/v1/patients/me/health-connections/health-data
+   */
+  getMyHealthData: async (): Promise<ApiResponse<PatientHealthData>> => {
+    return makeApiRequest('get', '/patients/me/health-connections/health-data');
+  },
+
+  /**
    * POST /api/v1/patients/me/health-connections
    */
   addConnection: async (orgConnectionId: string, sourceName?: string): Promise<ApiResponse<AddConnectionResponse>> => {
@@ -650,6 +657,13 @@ export const healthConnectionsPatientEndpoints = {
    */
   listForPatient: async (patientId: string): Promise<ApiResponse<HealthConnection[]>> => {
     return makeApiRequest('get', `/patients/${patientId}/health-connections`);
+  },
+
+  /**
+   * GET /api/v1/patients/:patientId/health-connections/health-data
+   */
+  getHealthData: async (patientId: string): Promise<ApiResponse<PatientHealthData>> => {
+    return makeApiRequest('get', `/patients/${patientId}/health-connections/health-data`);
   },
 
   /**
