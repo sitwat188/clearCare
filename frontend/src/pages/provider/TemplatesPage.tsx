@@ -58,6 +58,9 @@ export type ProviderTemplate = {
 /** Raw template item from API (getTemplates response). */
 type TemplateApiItem = Pick<ProviderTemplate, 'id' | 'name' | 'type' | 'description' | 'content' | 'createdAt' | 'updatedAt'>;
 
+/** Body for create/update template (matches Partial<ProviderTemplate>). */
+type TemplateMutationBody = Pick<ProviderTemplate, 'name' | 'type' | 'description' | 'content'>;
+
 const ProviderTemplates = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -80,7 +83,7 @@ const ProviderTemplates = () => {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (body: { name: string; type: string; description?: string; content: string }) => {
+    mutationFn: async (body: TemplateMutationBody) => {
       const res = await apiEndpoints.provider.createTemplate(body);
       return res?.data;
     },
@@ -92,7 +95,7 @@ const ProviderTemplates = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: { name: string; type: string; description?: string; content: string } }) => {
+    mutationFn: async ({ id, body }: { id: string; body: TemplateMutationBody }) => {
       const res = await apiEndpoints.provider.updateTemplate(id, body);
       return res?.data;
     },
