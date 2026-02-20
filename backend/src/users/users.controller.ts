@@ -1,12 +1,5 @@
-import {
-  Controller,
-  Get,
-  Put,
-  Body,
-  Param,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -23,10 +16,7 @@ export class UsersController {
    * Must be before :id/profile so "me" is not captured as id
    */
   @Get('me/profile')
-  async getMyProfile(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getMyProfile(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.usersService.getProfile(userId, userId, role);
   }
 
@@ -39,18 +29,11 @@ export class UsersController {
     @Body() updateDto: UpdateProfileDto,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    return this.usersService.updateProfile(
-      userId,
-      updateDto,
-      userId,
-      role,
-      ipAddress,
-      userAgent,
-    );
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.usersService.updateProfile(userId, updateDto, userId, role, ipAddress, userAgent);
   }
 
   /**
@@ -63,11 +46,7 @@ export class UsersController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.usersService.getProfile(
-      userId,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.usersService.getProfile(userId, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -80,10 +59,10 @@ export class UsersController {
     @Body() updateDto: UpdateProfileDto,
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.usersService.updateProfile(
       userId,
       updateDto,

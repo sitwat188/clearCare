@@ -12,17 +12,29 @@ export class TemplatesService {
     private encryption: EncryptionService,
   ) {}
 
-  private decryptTemplate<T extends { name: string; description: string | null; content: string; details?: unknown }>(row: T): T {
+  private decryptTemplate<
+    T extends {
+      name: string;
+      description: string | null;
+      content: string;
+      details?: unknown;
+    },
+  >(row: T): T {
     return {
       ...row,
       name: this.encryption.decrypt(row.name),
       description: row.description ? this.encryption.decrypt(row.description) : null,
       content: this.encryption.decrypt(row.content),
       details:
-        row.details != null && typeof row.details === 'object' && '_encrypted' in row.details && typeof (row.details as { _encrypted: string })._encrypted === 'string'
+        row.details != null &&
+        typeof row.details === 'object' &&
+        '_encrypted' in row.details &&
+        typeof (row.details as { _encrypted: string })._encrypted === 'string'
           ? (() => {
               try {
-                return JSON.parse(this.encryption.decrypt((row.details as { _encrypted: string })._encrypted)) as unknown;
+                return JSON.parse(
+                  this.encryption.decrypt((row.details as { _encrypted: string })._encrypted),
+                ) as unknown;
               } catch {
                 return row.details;
               }
@@ -34,7 +46,9 @@ export class TemplatesService {
   private encryptDetails(details: unknown): Prisma.InputJsonValue | undefined {
     if (details == null) return undefined;
     try {
-      return { _encrypted: this.encryption.encrypt(JSON.stringify(details)) } as Prisma.InputJsonValue;
+      return {
+        _encrypted: this.encryption.encrypt(JSON.stringify(details)),
+      } as Prisma.InputJsonValue;
     } catch {
       return undefined;
     }
@@ -75,13 +89,19 @@ export class TemplatesService {
       where: { id, providerId },
     });
     const data: Prisma.InstructionTemplateUpdateInput = {
-      ...(dto.name !== undefined && { name: this.encryption.encrypt(dto.name) }),
+      ...(dto.name !== undefined && {
+        name: this.encryption.encrypt(dto.name),
+      }),
       ...(dto.type !== undefined && { type: dto.type }),
       ...(dto.description !== undefined && {
         description: dto.description ? this.encryption.encrypt(dto.description) : null,
       }),
-      ...(dto.content !== undefined && { content: this.encryption.encrypt(dto.content) }),
-      ...(dto.details !== undefined && { details: this.encryptDetails(dto.details) }),
+      ...(dto.content !== undefined && {
+        content: this.encryption.encrypt(dto.content),
+      }),
+      ...(dto.details !== undefined && {
+        details: this.encryptDetails(dto.details),
+      }),
     };
     const updated = await this.prisma.instructionTemplate.update({
       where: { id },

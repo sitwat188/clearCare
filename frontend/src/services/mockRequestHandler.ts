@@ -13,7 +13,7 @@ import type { ApiResponse } from '../types/api.types';
  */
 export const handleMockRequest = async (
   config: InternalAxiosRequestConfig
-): Promise<ApiResponse<any> | null> => {
+): Promise<ApiResponse<unknown> | null> => {
   const url = config.url || '';
   const method = (config.method || 'get').toLowerCase();
   // Parse data if it's a string (JSON), otherwise use as-is

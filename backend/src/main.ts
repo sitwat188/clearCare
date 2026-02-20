@@ -17,9 +17,7 @@ function getCorsOrigin(): string | string[] {
 async function bootstrap() {
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) {
-      throw new Error(
-        'JWT_SECRET and JWT_REFRESH_SECRET must be set in production. See .env.example.',
-      );
+      throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be set in production. See .env.example.');
     }
   }
 

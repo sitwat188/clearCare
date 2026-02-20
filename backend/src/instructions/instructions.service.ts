@@ -1,13 +1,23 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInstructionDto } from './dto/create-instruction.dto';
 import { UpdateInstructionDto } from './dto/update-instruction.dto';
 import { AcknowledgeInstructionDto } from './dto/acknowledge-instruction.dto';
+
+/** Shape needed by toInstructionResponse (decrypt + provider/patient names). */
+type InstructionForResponse = {
+  content?: string | null;
+  medicationDetails?: unknown;
+  lifestyleDetails?: unknown;
+  followUpDetails?: unknown;
+  warningDetails?: unknown;
+  provider?: { firstName?: string | null; lastName?: string | null } | null;
+  patient?: {
+    user?: { firstName?: string | null; lastName?: string | null } | null;
+  } | null;
+};
 
 @Injectable()
 export class InstructionsService {
@@ -29,16 +39,9 @@ export class InstructionsService {
     if (!instruction) return instruction;
     const out = { ...instruction };
     if (instruction.content) {
-      (out as { content: string }).content = this.encryption.decrypt(
-        instruction.content,
-      );
+      (out as { content: string }).content = this.encryption.decrypt(instruction.content);
     }
-    const jsonFields = [
-      'medicationDetails',
-      'lifestyleDetails',
-      'followUpDetails',
-      'warningDetails',
-    ] as const;
+    const jsonFields = ['medicationDetails', 'lifestyleDetails', 'followUpDetails', 'warningDetails'] as const;
     for (const key of jsonFields) {
       const val = instruction[key];
       const dec = this.decryptJsonDetails(val);
@@ -48,9 +51,7 @@ export class InstructionsService {
   }
 
   /** Encrypt a JSON-serializable object for storage (PHI in instruction details). */
-  private encryptJsonDetails(
-    val: object | null | undefined,
-  ): Record<string, string> | null {
+  private encryptJsonDetails(val: object | null | undefined): Record<string, string> | null {
     if (val == null) return null;
     try {
       const json = JSON.stringify(val);
@@ -70,9 +71,7 @@ export class InstructionsService {
       typeof (val as { _encrypted: string })._encrypted === 'string'
     ) {
       try {
-        const dec = this.encryption.decrypt(
-          (val as { _encrypted: string })._encrypted,
-        );
+        const dec = this.encryption.decrypt((val as { _encrypted: string })._encrypted);
         return dec ? (JSON.parse(dec) as object) : null;
       } catch {
         return null;
@@ -94,9 +93,7 @@ export class InstructionsService {
   ) {
     // HIPAA: Only providers can create instructions
     if (requestingUserRole !== 'provider') {
-      throw new ForbiddenException(
-        'Only providers can create care instructions',
-      );
+      throw new ForbiddenException('Only providers can create care instructions');
     }
 
     // Verify patient exists and is assigned to provider
@@ -111,9 +108,7 @@ export class InstructionsService {
 
     const assignedProviderIds = patient.patientProviders?.map((pp) => pp.providerId) ?? [];
     if (!assignedProviderIds.includes(requestingUserId)) {
-      throw new ForbiddenException(
-        'You can only create instructions for patients assigned to you',
-      );
+      throw new ForbiddenException('You can only create instructions for patients assigned to you');
     }
 
     // Create instruction (encrypt content at rest; providerName/patientName derived from relations)
@@ -126,26 +121,16 @@ export class InstructionsService {
         priority: createDto.priority || 'medium',
         content: this.encryption.encrypt(createDto.content),
         medicationDetails:
-          this.encryptJsonDetails(createDto.medicationDetails ?? undefined) ??
-          undefined,
+          this.encryptJsonDetails((createDto.medicationDetails ?? undefined) as object | undefined) ?? undefined,
         lifestyleDetails:
-          this.encryptJsonDetails(createDto.lifestyleDetails ?? undefined) ??
-          undefined,
+          this.encryptJsonDetails((createDto.lifestyleDetails ?? undefined) as object | undefined) ?? undefined,
         followUpDetails:
-          this.encryptJsonDetails(createDto.followUpDetails ?? undefined) ??
-          undefined,
+          this.encryptJsonDetails((createDto.followUpDetails ?? undefined) as object | undefined) ?? undefined,
         warningDetails:
-          this.encryptJsonDetails(createDto.warningDetails ?? undefined) ??
-          undefined,
-        assignedDate: createDto.assignedDate
-          ? new Date(createDto.assignedDate)
-          : new Date(),
-        acknowledgmentDeadline: createDto.acknowledgmentDeadline
-          ? new Date(createDto.acknowledgmentDeadline)
-          : null,
-        expirationDate: createDto.expirationDate
-          ? new Date(createDto.expirationDate)
-          : null,
+          this.encryptJsonDetails((createDto.warningDetails ?? undefined) as object | undefined) ?? undefined,
+        assignedDate: createDto.assignedDate ? new Date(createDto.assignedDate) : new Date(),
+        acknowledgmentDeadline: createDto.acknowledgmentDeadline ? new Date(createDto.acknowledgmentDeadline) : null,
+        expirationDate: createDto.expirationDate ? new Date(createDto.expirationDate) : null,
         complianceTrackingEnabled: createDto.complianceTrackingEnabled || false,
         lifestyleTrackingEnabled: createDto.lifestyleTrackingEnabled || false,
         status: 'active',
@@ -180,7 +165,7 @@ export class InstructionsService {
   }
 
   /** Add providerName/patientName from relations and decrypt content */
-  private toInstructionResponse(instruction: any) {
+  private toInstructionResponse(instruction: InstructionForResponse): Record<string, unknown> {
     const decrypted = this.decryptInstruction(instruction);
     const providerName =
       instruction.provider != null
@@ -190,18 +175,14 @@ export class InstructionsService {
       instruction.patient?.user != null
         ? `${instruction.patient.user.firstName ?? ''} ${instruction.patient.user.lastName ?? ''}`.trim()
         : '';
-    return { ...decrypted, providerName, patientName };
+    return { ...decrypted, providerName, patientName } as Record<string, unknown>;
   }
 
   /**
    * Get instruction by ID
    * HIPAA: Row-level access control
    */
-  async getInstruction(
-    instructionId: string,
-    requestingUserId: string,
-    requestingUserRole: string,
-  ) {
+  async getInstruction(instructionId: string, requestingUserId: string, requestingUserRole: string) {
     const instruction = await this.prisma.careInstruction.findFirst({
       where: { id: instructionId, deletedAt: null },
       include: {
@@ -211,7 +192,10 @@ export class InstructionsService {
         },
         provider: true,
         patient: {
-          include: { user: true, patientProviders: { select: { providerId: true } } },
+          include: {
+            user: true,
+            patientProviders: { select: { providerId: true } },
+          },
         },
       },
     });
@@ -227,15 +211,11 @@ export class InstructionsService {
         where: { userId: requestingUserId, deletedAt: null },
       });
       if (!patient || instruction.patientId !== patient.id) {
-        throw new ForbiddenException(
-          'You can only access your own instructions',
-        );
+        throw new ForbiddenException('You can only access your own instructions');
       }
     } else if (requestingUserRole === 'provider') {
       if (!providerIds.includes(requestingUserId)) {
-        throw new ForbiddenException(
-          'You can only access instructions for patients assigned to you',
-        );
+        throw new ForbiddenException('You can only access instructions for patients assigned to you');
       }
     }
 
@@ -267,14 +247,12 @@ export class InstructionsService {
           data: {
             userId: user.id,
             dateOfBirth: this.encryption.encrypt(''),
-            medicalRecordNumber: this.encryption.encrypt(
-              `TEMP-${user.id.slice(0, 8)}`,
-            ),
+            medicalRecordNumber: this.encryption.encrypt(`TEMP-${user.id.slice(0, 8)}`),
           },
         });
       }
 
-      const where: any = {
+      const where: Prisma.CareInstructionWhereInput = {
         patientId: patient.id,
         deletedAt: null,
       };
@@ -297,16 +275,14 @@ export class InstructionsService {
       });
       return list.map((i) => this.toInstructionResponse(i));
     } else if (requestingUserRole === 'provider') {
-      const where: any = {
+      const where: Prisma.CareInstructionWhereInput = {
         deletedAt: null,
         patient: {
           patientProviders: { some: { providerId: requestingUserId } },
         },
+        ...(filters?.patientId && { patientId: filters.patientId }),
       };
 
-      if (filters?.patientId) {
-        where.patientId = filters.patientId;
-      }
       if (filters?.status) {
         where.status = filters.status;
       }
@@ -326,7 +302,7 @@ export class InstructionsService {
       return list.map((i) => this.toInstructionResponse(i));
     } else if (requestingUserRole === 'administrator') {
       // Administrators see all instructions
-      const where: any = {
+      const where: Prisma.CareInstructionWhereInput = {
         deletedAt: null,
       };
 
@@ -370,7 +346,9 @@ export class InstructionsService {
     const instruction = await this.prisma.careInstruction.findFirst({
       where: { id: instructionId, deletedAt: null },
       include: {
-        patient: { include: { patientProviders: { select: { providerId: true } } } },
+        patient: {
+          include: { patientProviders: { select: { providerId: true } } },
+        },
       },
     });
 
@@ -384,9 +362,7 @@ export class InstructionsService {
 
     const providerIds = instruction.patient.patientProviders?.map((pp) => pp.providerId) ?? [];
     if (!providerIds.includes(requestingUserId)) {
-      throw new ForbiddenException(
-        'You can only update instructions for patients assigned to you',
-      );
+      throw new ForbiddenException('You can only update instructions for patients assigned to you');
     }
 
     // Get old values for history
@@ -398,54 +374,47 @@ export class InstructionsService {
     };
 
     // Update instruction
+    const updateData: Prisma.CareInstructionUpdateInput = {
+      ...(updateDto.title && { title: updateDto.title }),
+      ...(updateDto.type && { type: updateDto.type }),
+      ...(updateDto.priority && { priority: updateDto.priority }),
+      ...(updateDto.content && {
+        content: this.encryption.encrypt(updateDto.content),
+      }),
+      ...(updateDto.medicationDetails && {
+        medicationDetails: this.encryptJsonDetails(updateDto.medicationDetails) as object,
+      }),
+      ...(updateDto.lifestyleDetails && {
+        lifestyleDetails: this.encryptJsonDetails(updateDto.lifestyleDetails) as object,
+      }),
+      ...(updateDto.followUpDetails && {
+        followUpDetails: this.encryptJsonDetails(updateDto.followUpDetails) as object,
+      }),
+      ...(updateDto.warningDetails && {
+        warningDetails: this.encryptJsonDetails(updateDto.warningDetails) as object,
+      }),
+      ...(updateDto.assignedDate && {
+        assignedDate: new Date(updateDto.assignedDate),
+      }),
+      ...(updateDto.acknowledgmentDeadline && {
+        acknowledgmentDeadline: new Date(updateDto.acknowledgmentDeadline),
+      }),
+      ...(updateDto.expirationDate && {
+        expirationDate: new Date(updateDto.expirationDate),
+      }),
+      ...(updateDto.status && { status: updateDto.status }),
+      ...(updateDto.complianceTrackingEnabled !== undefined && {
+        complianceTrackingEnabled: updateDto.complianceTrackingEnabled,
+      }),
+      ...(updateDto.lifestyleTrackingEnabled !== undefined && {
+        lifestyleTrackingEnabled: updateDto.lifestyleTrackingEnabled,
+      }),
+      version: instruction.version + 1,
+      updatedAt: new Date(),
+    };
     const updatedInstruction = await this.prisma.careInstruction.update({
       where: { id: instructionId },
-      data: {
-        ...(updateDto.title && { title: updateDto.title }),
-        ...(updateDto.type && { type: updateDto.type }),
-        ...(updateDto.priority && { priority: updateDto.priority }),
-        ...(updateDto.content && {
-          content: this.encryption.encrypt(updateDto.content),
-        }),
-        ...(updateDto.medicationDetails && {
-          medicationDetails: this.encryptJsonDetails(
-            updateDto.medicationDetails,
-          ) as object,
-        }),
-        ...(updateDto.lifestyleDetails && {
-          lifestyleDetails: this.encryptJsonDetails(
-            updateDto.lifestyleDetails,
-          ) as object,
-        }),
-        ...(updateDto.followUpDetails && {
-          followUpDetails: this.encryptJsonDetails(
-            updateDto.followUpDetails,
-          ) as object,
-        }),
-        ...(updateDto.warningDetails && {
-          warningDetails: this.encryptJsonDetails(
-            updateDto.warningDetails,
-          ) as object,
-        }),
-        ...(updateDto.assignedDate && {
-          assignedDate: new Date(updateDto.assignedDate),
-        }),
-        ...(updateDto.acknowledgmentDeadline && {
-          acknowledgmentDeadline: new Date(updateDto.acknowledgmentDeadline),
-        }),
-        ...(updateDto.expirationDate && {
-          expirationDate: new Date(updateDto.expirationDate),
-        }),
-        ...(updateDto.status && { status: updateDto.status }),
-        ...(updateDto.complianceTrackingEnabled !== undefined && {
-          complianceTrackingEnabled: updateDto.complianceTrackingEnabled,
-        }),
-        ...(updateDto.lifestyleTrackingEnabled !== undefined && {
-          lifestyleTrackingEnabled: updateDto.lifestyleTrackingEnabled,
-        }),
-        version: instruction.version + 1,
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
 
     // Create history entry
@@ -486,7 +455,9 @@ export class InstructionsService {
     const instruction = await this.prisma.careInstruction.findFirst({
       where: { id: instructionId, deletedAt: null },
       include: {
-        patient: { include: { patientProviders: { select: { providerId: true } } } },
+        patient: {
+          include: { patientProviders: { select: { providerId: true } } },
+        },
       },
     });
 
@@ -500,9 +471,7 @@ export class InstructionsService {
 
     const providerIds = instruction.patient.patientProviders?.map((pp) => pp.providerId) ?? [];
     if (!providerIds.includes(requestingUserId)) {
-      throw new ForbiddenException(
-        'You can only delete instructions for patients assigned to you',
-      );
+      throw new ForbiddenException('You can only delete instructions for patients assigned to you');
     }
 
     // Soft delete
@@ -543,9 +512,7 @@ export class InstructionsService {
   ) {
     // HIPAA: Only patients can acknowledge instructions
     if (requestingUserRole !== 'patient') {
-      throw new ForbiddenException(
-        'Only patients can acknowledge instructions',
-      );
+      throw new ForbiddenException('Only patients can acknowledge instructions');
     }
 
     const instruction = await this.prisma.careInstruction.findFirst({
@@ -565,9 +532,7 @@ export class InstructionsService {
     });
 
     if (!patient || instruction.patientId !== patient.id) {
-      throw new ForbiddenException(
-        'You can only acknowledge your own instructions',
-      );
+      throw new ForbiddenException('You can only acknowledge your own instructions');
     }
 
     // Create acknowledgment (patientId derivable from instruction)
@@ -585,23 +550,12 @@ export class InstructionsService {
       where: { instructionId: instruction.id },
     });
 
-    const hasReceipt = acknowledgments.some(
-      (a) => a.acknowledgmentType === 'receipt',
-    );
-    const hasUnderstanding = acknowledgments.some(
-      (a) => a.acknowledgmentType === 'understanding',
-    );
-    const hasCommitment = acknowledgments.some(
-      (a) => a.acknowledgmentType === 'commitment',
-    );
+    const hasReceipt = acknowledgments.some((a) => a.acknowledgmentType === 'receipt');
+    const hasUnderstanding = acknowledgments.some((a) => a.acknowledgmentType === 'understanding');
+    const hasCommitment = acknowledgments.some((a) => a.acknowledgmentType === 'commitment');
 
     let newStatus = instruction.status;
-    if (
-      hasReceipt &&
-      hasUnderstanding &&
-      hasCommitment &&
-      instruction.status === 'active'
-    ) {
+    if (hasReceipt && hasUnderstanding && hasCommitment && instruction.status === 'active') {
       newStatus = 'acknowledged';
     }
 
@@ -610,10 +564,7 @@ export class InstructionsService {
       where: { id: instructionId },
       data: {
         status: newStatus,
-        acknowledgedDate:
-          hasReceipt && hasUnderstanding && hasCommitment
-            ? new Date()
-            : instruction.acknowledgedDate,
+        acknowledgedDate: hasReceipt && hasUnderstanding && hasCommitment ? new Date() : instruction.acknowledgedDate,
         updatedAt: new Date(),
       },
     });

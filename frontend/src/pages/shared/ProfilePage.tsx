@@ -63,7 +63,7 @@ const ProfilePage = () => {
         lastName: displayUser.lastName || '',
       });
     }
-  }, [displayUser?.firstName, displayUser?.lastName]);
+  }, [displayUser]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: { firstName: string; lastName: string }) => {

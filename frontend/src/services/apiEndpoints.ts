@@ -13,6 +13,7 @@ import type { Notification } from '../types/notification.types';
 import type { Role, AuditLog, SystemSettings, AdminReport } from '../types/admin.types';
 import type { FhirPatient, FhirBundle, FhirPractitioner, FhirTask } from '../types/medplum.types';
 import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, FastenEhiExportResponse, PatientHealthData } from '../types/health-connections.types';
+import { ProviderTemplate } from '../pages/provider/TemplatesPage';
 
 /**
  * Make API request. Expects backend to return ApiResponse<T> in response.data.
@@ -20,7 +21,7 @@ import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, F
 const makeApiRequest = async <T>(
   method: 'get' | 'post' | 'put' | 'delete',
   url: string,
-  data?: any
+  data?: Record<string, unknown>
 ): Promise<ApiResponse<T>> => {
   const response = await api[method]<ApiResponse<T>>(url, data);
   if (!response || !response.data || typeof response.data !== 'object' || !('success' in response.data)) {
@@ -39,7 +40,7 @@ export const authEndpoints = {
    * Login with email and password
    */
   login: async (credentials: LoginCredentials): Promise<ApiResponse<{ user: User; token: string }>> => {
-    return makeApiRequest('post', '/auth/login', credentials);
+    return makeApiRequest('post', '/auth/login', { email: credentials.email, password: credentials.password });
   },
 
   /**
@@ -329,7 +330,7 @@ export const providerEndpoints = {
    * GET /api/v1/providers/templates
    * Get instruction templates
    */
-  getTemplates: async (): Promise<ApiResponse<any[]>> => {
+  getTemplates: async (): Promise<ApiResponse<ProviderTemplate[]>> => {
     return makeApiRequest('get', '/providers/templates');
   },
 
@@ -337,14 +338,14 @@ export const providerEndpoints = {
    * POST /api/v1/providers/templates
    * Create instruction template
    */
-  createTemplate: async (template: any): Promise<ApiResponse<any>> => {
+  createTemplate: async (template: Partial<ProviderTemplate>): Promise<ApiResponse<ProviderTemplate>> => {
     return makeApiRequest('post', '/providers/templates', template);
   },
 
   /**
    * PUT /api/v1/providers/templates/:id
    */
-  updateTemplate: async (id: string, template: any): Promise<ApiResponse<any>> => {
+  updateTemplate: async (id: string, template: Partial<ProviderTemplate>): Promise<ApiResponse<ProviderTemplate>> => {
     return makeApiRequest('put', `/providers/templates/${id}`, template);
   },
 

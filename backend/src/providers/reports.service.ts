@@ -5,14 +5,19 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
-  async getReports(providerId: string) {
+  getReports(providerId: string) {
+    void providerId; // Reserved for future use
     // Return empty list; in future could persist generated reports
     return [];
   }
 
   async generateReport(
     providerId: string,
-    config: { type: string; dateRange: { start: string; end: string }; format: string },
+    config: {
+      type: string;
+      dateRange: { start: string; end: string };
+      format: string;
+    },
   ) {
     const start = new Date(config.dateRange.start);
     const end = new Date(config.dateRange.end);
@@ -22,7 +27,9 @@ export class ReportsService {
         patientProviders: { some: { providerId } },
         deletedAt: null,
       },
-      include: { user: { select: { firstName: true, lastName: true, email: true } } },
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true } },
+      },
     });
 
     const instructions = await this.prisma.careInstruction.findMany({
@@ -32,7 +39,9 @@ export class ReportsService {
         assignedDate: { gte: start, lte: end },
       },
       include: {
-        patient: { include: { user: { select: { firstName: true, lastName: true } } } },
+        patient: {
+          include: { user: { select: { firstName: true, lastName: true } } },
+        },
       },
     });
 
@@ -48,14 +57,24 @@ export class ReportsService {
       include: {
         instruction: {
           select: { title: true, type: true },
-          include: { patient: { include: { user: { select: { firstName: true, lastName: true } } } } },
+          include: {
+            patient: {
+              include: {
+                user: { select: { firstName: true, lastName: true } },
+              },
+            },
+          },
         },
       },
     });
 
     const byPatient = new Map<string, { instructions: number; acknowledged: number; complianceAvg: number }>();
     for (const p of patients) {
-      byPatient.set(p.id, { instructions: 0, acknowledged: 0, complianceAvg: 0 });
+      byPatient.set(p.id, {
+        instructions: 0,
+        acknowledged: 0,
+        complianceAvg: 0,
+      });
     }
     for (const i of instructions) {
       const entry = byPatient.get(i.patientId);

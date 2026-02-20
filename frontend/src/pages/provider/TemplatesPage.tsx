@@ -55,6 +55,9 @@ export type ProviderTemplate = {
   updatedAt?: string;
 };
 
+/** Raw template item from API (getTemplates response). */
+type TemplateApiItem = Pick<ProviderTemplate, 'id' | 'name' | 'type' | 'description' | 'content' | 'createdAt' | 'updatedAt'>;
+
 const ProviderTemplates = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -64,7 +67,7 @@ const ProviderTemplates = () => {
     queryFn: async () => {
       const res = await apiEndpoints.provider.getTemplates();
       const list = Array.isArray(res?.data) ? res.data : [];
-      return list.map((t: any) => ({
+      return list.map((t: TemplateApiItem) => ({
         id: t.id,
         name: t.name,
         type: t.type,

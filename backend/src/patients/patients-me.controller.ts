@@ -1,13 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Body,
-  Param,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { InstructionsService } from '../instructions/instructions.service';
@@ -31,10 +23,7 @@ export class PatientsMeController {
   ) {}
 
   @Get('instructions')
-  async getMyInstructions(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getMyInstructions(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.instructionsService.getInstructions(userId, role, {});
   }
 
@@ -43,7 +32,7 @@ export class PatientsMeController {
     @Param('id') id: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-  ) {
+  ): Promise<Record<string, unknown>> {
     return this.instructionsService.getInstruction(id, userId, role);
   }
 
@@ -53,33 +42,20 @@ export class PatientsMeController {
     @Body() body: AcknowledgeInstructionDto,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Req() req: any,
-  ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    return this.instructionsService.acknowledgeInstruction(
-      id,
-      body,
-      userId,
-      role,
-      ipAddress,
-      userAgent,
-    );
+    @Req() req: Request,
+  ): Promise<Record<string, unknown>> {
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.instructionsService.acknowledgeInstruction(id, body, userId, role, ipAddress, userAgent);
   }
 
   @Get('compliance')
-  async getMyCompliance(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getMyCompliance(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.complianceService.getComplianceRecords(userId, role, {});
   }
 
   @Get('compliance/metrics')
-  async getMyComplianceMetrics(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getMyComplianceMetrics(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.complianceService.getComplianceMetrics(userId, role, {});
   }
 
@@ -90,19 +66,11 @@ export class PatientsMeController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    return this.complianceService.updateComplianceRecord(
-      recordId,
-      body,
-      userId,
-      role,
-    );
+    return this.complianceService.updateComplianceRecord(recordId, body, userId, role);
   }
 
   @Get('profile')
-  async getMyProfile(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getMyProfile(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.usersService.getProfile(userId, userId, role);
   }
 
@@ -111,17 +79,10 @@ export class PatientsMeController {
     @Body() body: UpdateProfileDto,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    return this.usersService.updateProfile(
-      userId,
-      body,
-      userId,
-      role,
-      ipAddress,
-      userAgent,
-    );
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.usersService.updateProfile(userId, body, userId, role, ipAddress, userAgent);
   }
 }

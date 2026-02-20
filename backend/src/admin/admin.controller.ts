@@ -1,15 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -44,13 +34,9 @@ export class AdminController {
   }
 
   @Post('users')
-  async createUser(
-    @Body() dto: CreateUserDto,
-    @CurrentUser('id') adminUserId: string,
-    @Req() req: any,
-  ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+  async createUser(@Body() dto: CreateUserDto, @CurrentUser('id') adminUserId: string, @Req() req: Request) {
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.adminService.createUser(dto, adminUserId, ipAddress, userAgent);
   }
 
@@ -59,21 +45,17 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
     @CurrentUser('id') adminUserId: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.adminService.updateUser(id, dto, adminUserId, ipAddress, userAgent);
   }
 
   @Delete('users/:id')
-  async deleteUser(
-    @Param('id') id: string,
-    @CurrentUser('id') adminUserId: string,
-    @Req() req: any,
-  ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+  async deleteUser(@Param('id') id: string, @CurrentUser('id') adminUserId: string, @Req() req: Request) {
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     await this.adminService.deleteUser(id, adminUserId, ipAddress, userAgent);
   }
 
@@ -82,13 +64,9 @@ export class AdminController {
    * POST /api/v1/admin/users/:id/restore
    */
   @Post('users/:id/restore')
-  async restoreUser(
-    @Param('id') id: string,
-    @CurrentUser('id') adminUserId: string,
-    @Req() req: any,
-  ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+  async restoreUser(@Param('id') id: string, @CurrentUser('id') adminUserId: string, @Req() req: Request) {
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.adminService.restoreUser(id, adminUserId, ipAddress, userAgent);
   }
 
@@ -143,23 +121,28 @@ export class AdminController {
   }
 
   @Get('settings')
-  async getSystemSettings() {
+  getSystemSettings() {
     return this.adminService.getSystemSettings();
   }
 
   @Put('settings')
-  async updateSystemSettings(@Body() updates: Record<string, unknown>) {
+  updateSystemSettings(@Body() updates: Record<string, unknown>) {
     return this.adminService.updateSystemSettings(updates);
   }
 
   @Get('reports')
-  async getReports() {
+  getReports() {
     return this.adminService.getReports();
   }
 
   @Post('reports')
-  async generateReport(
-    @Body() reportConfig: { type: string; dateRange: { start: string; end: string }; format: string },
+  generateReport(
+    @Body()
+    reportConfig: {
+      type: string;
+      dateRange: { start: string; end: string };
+      format: string;
+    },
     @CurrentUser('id') adminUserId: string,
   ) {
     return this.adminService.generateReport(reportConfig, adminUserId);

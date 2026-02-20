@@ -47,6 +47,7 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import { adminService } from '../../services/adminService';
+import type { User } from '../../types/auth.types';
 import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
 
@@ -111,7 +112,7 @@ const AdminUsers = () => {
   useEffect(() => {
     if (patient?.assignedProviderIds) setAssignedProviderIds(patient.assignedProviderIds);
     else if (patient && !patient.assignedProviderIds?.length) setAssignedProviderIds([]);
-  }, [patient?.id, patient?.assignedProviderIds]);
+  }, [patient]);
 
   const updatePatientMutation = useMutation({
     mutationFn: (payload: { patientId: string; assignedProviderIds: string[] }) =>
@@ -147,7 +148,7 @@ const AdminUsers = () => {
       const email = form.email.trim().toLowerCase();
 
       // Safety guard (even if someone manipulates the UI/state)
-      if ((form as any).role === 'administrator') {
+      if (form.role === 'administrator') {
         throw new Error('Creating Administrator users is disabled for now');
       }
 
@@ -166,7 +167,7 @@ const AdminUsers = () => {
         throw new Error('A user with this email already exists');
       }
 
-      return adminService.createUser(payload as any);
+      return adminService.createUser(payload as Partial<User>);
     },
     onSuccess: async (createdUser) => {
       toast.success('User created. An invitation email with a temporary password has been sent. The user must set a new password on first login.');
@@ -174,7 +175,7 @@ const AdminUsers = () => {
       setCreateForm({ firstName: '', lastName: '', email: '', role: 'patient' });
 
       // Update cache after create
-      queryClient.setQueryData(['admin-users'], (old: any) => {
+      queryClient.setQueryData(['admin-users'], (old: User[] | undefined) => {
         const prev = Array.isArray(old) ? old : [];
         return [createdUser, ...prev];
       });

@@ -4,6 +4,7 @@
  */
 
 import { apiEndpoints } from './apiEndpoints';
+import type { ApiResponse } from '../types/api.types';
 import type { CareInstruction } from '../types/instruction.types';
 
 export const instructionService = {
@@ -21,7 +22,8 @@ export const instructionService = {
         throw new Error('Invalid role');
       }
       // Backend may return { success, data: [...] } or the array directly
-      const list = Array.isArray(raw) ? raw : (Array.isArray((raw as any)?.data) ? (raw as any).data : []);
+      const rawWithData = raw as { data?: unknown };
+      const list = Array.isArray(raw) ? raw : (Array.isArray(rawWithData?.data) ? rawWithData.data : []);
       return list as CareInstruction[];
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch instructions');
@@ -52,7 +54,7 @@ export const instructionService = {
   createInstruction: async (instruction: Partial<CareInstruction>): Promise<CareInstruction> => {
     try {
       const response = await apiEndpoints.provider.createInstruction(instruction);
-      const data = (response as any)?.data ?? response;
+      const data = (response as ApiResponse<CareInstruction>)?.data ?? response;
       if (!data || typeof data !== 'object') throw new Error('Invalid create instruction response');
       return data as CareInstruction;
     } catch (error) {

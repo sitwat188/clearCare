@@ -3,7 +3,7 @@
  * Professional healthcare theme with HIPAA-compliant design
  */
 
-import { createTheme } from '@mui/material/styles';
+import { createTheme, type Shadows } from '@mui/material/styles';
 
 export const theme = createTheme({
   palette: {
@@ -130,7 +130,7 @@ export const theme = createTheme({
     '0px 10px 14px -6px rgba(0,0,0,0.2),0px 22px 35px 3px rgba(0,0,0,0.14),0px 8px 42px 7px rgba(0,0,0,0.12)',
     '0px 11px 14px -7px rgba(0,0,0,0.2),0px 23px 36px 3px rgba(0,0,0,0.14),0px 9px 44px 8px rgba(0,0,0,0.12)',
     '0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12)',
-  ] as any, // MUI expects 25 shadows, we provide 25
+  ] as Shadows,
   components: {
     MuiButton: {
       styleOverrides: {

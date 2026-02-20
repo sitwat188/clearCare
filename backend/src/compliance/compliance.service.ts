@@ -1,14 +1,28 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateComplianceDto } from './dto/create-compliance.dto';
 import { UpdateComplianceDto } from './dto/update-compliance.dto';
 import { UpdateMedicationAdherenceDto } from './dto/update-medication-adherence.dto';
 import { UpdateLifestyleComplianceDto } from './dto/update-lifestyle-compliance.dto';
+
+/** Shape of medicationAdherence JSON stored on ComplianceRecord. */
+type MedicationAdherenceData = {
+  schedule?: Array<{ date?: string; time?: string; status?: string; reason?: string }>;
+  overallProgress?: number;
+};
+
+/** Shape of lifestyleCompliance JSON stored on ComplianceRecord. */
+type LifestyleComplianceData = {
+  checkIns?: Array<{
+    date?: string;
+    completed?: boolean;
+    notes?: string;
+    metrics?: Record<string, unknown>;
+    progress?: number;
+  }>;
+  progress?: number;
+};
 
 @Injectable()
 export class ComplianceService {
@@ -18,16 +32,14 @@ export class ComplianceService {
    * Create compliance record
    * HIPAA: Automatically created when instruction is assigned, or manually by providers
    */
-  async createComplianceRecord(
-    createDto: CreateComplianceDto,
-    requestingUserId: string,
-    requestingUserRole: string,
-  ) {
+  async createComplianceRecord(createDto: CreateComplianceDto, requestingUserId: string, requestingUserRole: string) {
     // Verify instruction exists
     const instruction = await this.prisma.careInstruction.findFirst({
       where: { id: createDto.instructionId, deletedAt: null },
       include: {
-        patient: { include: { patientProviders: { select: { providerId: true } } } },
+        patient: {
+          include: { patientProviders: { select: { providerId: true } } },
+        },
       },
     });
 
@@ -42,15 +54,11 @@ export class ComplianceService {
         where: { userId: requestingUserId, deletedAt: null },
       });
       if (!patient || instruction.patientId !== patient.id) {
-        throw new ForbiddenException(
-          'You can only create compliance records for your own instructions',
-        );
+        throw new ForbiddenException('You can only create compliance records for your own instructions');
       }
     } else if (requestingUserRole === 'provider') {
       if (!providerIds.includes(requestingUserId)) {
-        throw new ForbiddenException(
-          'You can only create compliance records for assigned patients',
-        );
+        throw new ForbiddenException('You can only create compliance records for assigned patients');
       }
     }
 
@@ -62,9 +70,7 @@ export class ComplianceService {
     });
 
     if (existing) {
-      throw new BadRequestException(
-        'Compliance record already exists for this instruction',
-      );
+      throw new BadRequestException('Compliance record already exists for this instruction');
     }
 
     const compliance = await this.prisma.complianceRecord.create({
@@ -72,10 +78,10 @@ export class ComplianceService {
         instructionId: createDto.instructionId,
         type: createDto.type,
         status: createDto.status || 'not-started',
-        overallPercentage: createDto.overallPercentage || 0,
-        medicationAdherence: createDto.medicationCompliance || null,
-        lifestyleCompliance: createDto.lifestyleCompliance || null,
-        appointmentCompliance: createDto.appointmentCompliance || null,
+        overallPercentage: createDto.overallPercentage ?? 0,
+        medicationAdherence: (createDto.medicationCompliance ?? null) as Prisma.InputJsonValue,
+        lifestyleCompliance: (createDto.lifestyleCompliance ?? null) as Prisma.InputJsonValue,
+        appointmentCompliance: (createDto.appointmentCompliance ?? null) as Prisma.InputJsonValue,
         lastUpdatedBy: requestingUserId,
       },
     });
@@ -102,7 +108,7 @@ export class ComplianceService {
         return [];
       }
 
-      const where: any = {
+      const where: Prisma.ComplianceRecordWhereInput = {
         instruction: { patientId: patient.id },
       };
       if (filters?.instructionId) where.instructionId = filters.instructionId;
@@ -112,22 +118,26 @@ export class ComplianceService {
         where,
         include: {
           instruction: {
-            select: { id: true, title: true, type: true, status: true, patientId: true },
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              status: true,
+              patientId: true,
+            },
           },
         },
         orderBy: { updatedAt: 'desc' },
       });
     } else if (requestingUserRole === 'provider') {
-      const where: any = {
+      const where: Prisma.ComplianceRecordWhereInput = {
         instruction: {
           patient: {
             patientProviders: { some: { providerId: requestingUserId } },
           },
+          ...(filters?.patientId && { patientId: filters.patientId }),
         },
       };
-      if (filters?.patientId) {
-        (where.instruction as any).patientId = filters.patientId;
-      }
       if (filters?.instructionId) where.instructionId = filters.instructionId;
       if (filters?.type) where.type = filters.type;
 
@@ -135,13 +145,19 @@ export class ComplianceService {
         where,
         include: {
           instruction: {
-            select: { id: true, title: true, type: true, status: true, patientId: true },
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              status: true,
+              patientId: true,
+            },
           },
         },
         orderBy: { updatedAt: 'desc' },
       });
     } else if (requestingUserRole === 'administrator') {
-      const where: any = {};
+      const where: Prisma.ComplianceRecordWhereInput = {};
       if (filters?.patientId) {
         where.instruction = { patientId: filters.patientId };
       }
@@ -152,7 +168,13 @@ export class ComplianceService {
         where,
         include: {
           instruction: {
-            select: { id: true, title: true, type: true, status: true, patientId: true },
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              status: true,
+              patientId: true,
+            },
           },
         },
         orderBy: { updatedAt: 'desc' },
@@ -166,17 +188,15 @@ export class ComplianceService {
    * Get compliance record by ID
    * HIPAA: Row-level access control
    */
-  async getComplianceRecord(
-    recordId: string,
-    requestingUserId: string,
-    requestingUserRole: string,
-  ) {
+  async getComplianceRecord(recordId: string, requestingUserId: string, requestingUserRole: string) {
     const record = await this.prisma.complianceRecord.findFirst({
       where: { id: recordId },
       include: {
         instruction: {
           include: {
-            patient: { include: { patientProviders: { select: { providerId: true } } } },
+            patient: {
+              include: { patientProviders: { select: { providerId: true } } },
+            },
           },
         },
       },
@@ -192,19 +212,11 @@ export class ComplianceService {
         where: { userId: requestingUserId, deletedAt: null },
       });
       if (!patient || record.instruction.patientId !== patient.id) {
-        throw new ForbiddenException(
-          'You can only access your own compliance records',
-        );
+        throw new ForbiddenException('You can only access your own compliance records');
       }
     } else if (requestingUserRole === 'provider') {
-      if (
-        !record.instruction.patient.patientProviders?.some(
-          (pp) => pp.providerId === requestingUserId,
-        )
-      ) {
-        throw new ForbiddenException(
-          'You can only access compliance records for assigned patients',
-        );
+      if (!record.instruction.patient.patientProviders?.some((pp) => pp.providerId === requestingUserId)) {
+        throw new ForbiddenException('You can only access compliance records for assigned patients');
       }
     }
 
@@ -226,7 +238,9 @@ export class ComplianceService {
       include: {
         instruction: {
           include: {
-            patient: { include: { patientProviders: { select: { providerId: true } } } },
+            patient: {
+              include: { patientProviders: { select: { providerId: true } } },
+            },
           },
         },
       },
@@ -242,42 +256,35 @@ export class ComplianceService {
         where: { userId: requestingUserId, deletedAt: null },
       });
       if (!patient || record.instruction.patientId !== patient.id) {
-        throw new ForbiddenException(
-          'You can only update your own compliance records',
-        );
+        throw new ForbiddenException('You can only update your own compliance records');
       }
     } else if (requestingUserRole === 'provider') {
-      if (
-        !record.instruction.patient.patientProviders?.some(
-          (pp) => pp.providerId === requestingUserId,
-        )
-      ) {
-        throw new ForbiddenException(
-          'You can only update compliance records for assigned patients',
-        );
+      if (!record.instruction.patient.patientProviders?.some((pp) => pp.providerId === requestingUserId)) {
+        throw new ForbiddenException('You can only update compliance records for assigned patients');
       }
     }
 
     // Update compliance record
+    const updateData: Prisma.ComplianceRecordUncheckedUpdateInput = {
+      ...(updateDto.status && { status: updateDto.status }),
+      ...(updateDto.overallPercentage !== undefined && {
+        overallPercentage: updateDto.overallPercentage,
+      }),
+      ...(updateDto.medicationCompliance && {
+        medicationAdherence: updateDto.medicationCompliance,
+      }),
+      ...(updateDto.lifestyleCompliance && {
+        lifestyleCompliance: updateDto.lifestyleCompliance,
+      }),
+      ...(updateDto.appointmentCompliance && {
+        appointmentCompliance: updateDto.appointmentCompliance,
+      }),
+      lastUpdatedBy: requestingUserId,
+      updatedAt: new Date(),
+    };
     const updated = await this.prisma.complianceRecord.update({
       where: { id: recordId },
-      data: {
-        ...(updateDto.status && { status: updateDto.status }),
-        ...(updateDto.overallPercentage !== undefined && {
-          overallPercentage: updateDto.overallPercentage,
-        }),
-        ...(updateDto.medicationCompliance && {
-          medicationAdherence: updateDto.medicationCompliance,
-        }),
-        ...(updateDto.lifestyleCompliance && {
-          lifestyleCompliance: updateDto.lifestyleCompliance,
-        }),
-        ...(updateDto.appointmentCompliance && {
-          appointmentCompliance: updateDto.appointmentCompliance,
-        }),
-        lastUpdatedBy: requestingUserId,
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
 
     return updated;
@@ -298,7 +305,9 @@ export class ComplianceService {
       include: {
         instruction: {
           include: {
-            patient: { include: { patientProviders: { select: { providerId: true } } } },
+            patient: {
+              include: { patientProviders: { select: { providerId: true } } },
+            },
           },
         },
       },
@@ -309,9 +318,7 @@ export class ComplianceService {
     }
 
     if (record.type !== 'medication') {
-      throw new BadRequestException(
-        'This record is not a medication compliance record',
-      );
+      throw new BadRequestException('This record is not a medication compliance record');
     }
 
     // HIPAA: Row-level access control
@@ -320,34 +327,22 @@ export class ComplianceService {
         where: { userId: requestingUserId, deletedAt: null },
       });
       if (!patient || record.instruction.patientId !== patient.id) {
-        throw new ForbiddenException(
-          'You can only update your own medication adherence',
-        );
+        throw new ForbiddenException('You can only update your own medication adherence');
       }
     } else if (requestingUserRole === 'provider') {
-      if (
-        !record.instruction.patient.patientProviders?.some(
-          (pp) => pp.providerId === requestingUserId,
-        )
-      ) {
-        throw new ForbiddenException(
-          'You can only update medication adherence for assigned patients',
-        );
+      if (!record.instruction.patient.patientProviders?.some((pp) => pp.providerId === requestingUserId)) {
+        throw new ForbiddenException('You can only update medication adherence for assigned patients');
       }
     }
 
     // Get existing medication adherence data
-    const existingAdherence = (record.medicationAdherence as any) || {
-      schedule: [],
-      overallProgress: 0,
-    };
+    const raw = record.medicationAdherence as MedicationAdherenceData | null | undefined;
+    const existingAdherence: MedicationAdherenceData =
+      raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : { schedule: [], overallProgress: 0 };
 
     // Update or add dose entry
-    const schedule = existingAdherence.schedule || [];
-    const existingIndex = schedule.findIndex(
-      (entry: any) =>
-        entry.date === updateDto.date && entry.time === updateDto.time,
-    );
+    const schedule = existingAdherence.schedule ?? [];
+    const existingIndex = schedule.findIndex((entry) => entry.date === updateDto.date && entry.time === updateDto.time);
 
     if (existingIndex >= 0) {
       // Update existing entry
@@ -367,11 +362,8 @@ export class ComplianceService {
     }
 
     // Calculate overall progress
-    const takenCount = schedule.filter(
-      (entry: any) => entry.status === 'taken',
-    ).length;
-    const overallProgress =
-      schedule.length > 0 ? (takenCount / schedule.length) * 100 : 0;
+    const takenCount = schedule.filter((entry) => entry.status === 'taken').length;
+    const overallProgress = schedule.length > 0 ? (takenCount / schedule.length) * 100 : 0;
 
     // Determine status based on progress
     let status = record.status;
@@ -391,15 +383,9 @@ export class ComplianceService {
       data: {
         medicationAdherence: {
           schedule,
-          overallProgress:
-            updateDto.progress !== undefined
-              ? updateDto.progress
-              : overallProgress,
+          overallProgress: updateDto.progress !== undefined ? updateDto.progress : overallProgress,
         },
-        overallPercentage:
-          updateDto.progress !== undefined
-            ? updateDto.progress
-            : overallProgress,
+        overallPercentage: updateDto.progress !== undefined ? updateDto.progress : overallProgress,
         status,
         lastUpdatedBy: requestingUserId,
         updatedAt: new Date(),
@@ -424,7 +410,9 @@ export class ComplianceService {
       include: {
         instruction: {
           include: {
-            patient: { include: { patientProviders: { select: { providerId: true } } } },
+            patient: {
+              include: { patientProviders: { select: { providerId: true } } },
+            },
           },
         },
       },
@@ -435,9 +423,7 @@ export class ComplianceService {
     }
 
     if (record.type !== 'lifestyle') {
-      throw new BadRequestException(
-        'This record is not a lifestyle compliance record',
-      );
+      throw new BadRequestException('This record is not a lifestyle compliance record');
     }
 
     // HIPAA: Row-level access control
@@ -446,45 +432,34 @@ export class ComplianceService {
         where: { userId: requestingUserId, deletedAt: null },
       });
       if (!patient || record.instruction.patientId !== patient.id) {
-        throw new ForbiddenException(
-          'You can only update your own lifestyle compliance',
-        );
+        throw new ForbiddenException('You can only update your own lifestyle compliance');
       }
     } else if (requestingUserRole === 'provider') {
-      if (
-        !record.instruction.patient.patientProviders?.some(
-          (pp) => pp.providerId === requestingUserId,
-        )
-      ) {
-        throw new ForbiddenException(
-          'You can only update lifestyle compliance for assigned patients',
-        );
+      if (!record.instruction.patient.patientProviders?.some((pp) => pp.providerId === requestingUserId)) {
+        throw new ForbiddenException('You can only update lifestyle compliance for assigned patients');
       }
     }
 
     // Get existing lifestyle compliance data
-    const existingCompliance = (record.lifestyleCompliance as any) || {
-      checkIns: [],
-      progress: 0,
-    };
+    const rawLifestyle = record.lifestyleCompliance as LifestyleComplianceData | null | undefined;
+    const existingCompliance: LifestyleComplianceData =
+      rawLifestyle && typeof rawLifestyle === 'object' && !Array.isArray(rawLifestyle)
+        ? rawLifestyle
+        : { checkIns: [], progress: 0 };
 
     // Add new check-in
-    const checkIns = existingCompliance.checkIns || [];
+    const checkIns = existingCompliance.checkIns ?? [];
     checkIns.push({
       date: updateDto.date,
-      completed:
-        updateDto.completed !== undefined ? updateDto.completed : false,
+      completed: updateDto.completed !== undefined ? updateDto.completed : false,
       notes: updateDto.notes || '',
-      metrics: updateDto.metrics || {},
+      metrics: (updateDto.metrics ?? {}) as Record<string, unknown>,
       progress: updateDto.progress || 0,
     });
 
     // Calculate overall progress
-    const completedCount = checkIns.filter(
-      (entry: any) => entry.completed,
-    ).length;
-    const overallProgress =
-      checkIns.length > 0 ? (completedCount / checkIns.length) * 100 : 0;
+    const completedCount = checkIns.filter((entry) => entry.completed).length;
+    const overallProgress = checkIns.length > 0 ? (completedCount / checkIns.length) * 100 : 0;
 
     // Determine status based on progress
     let status = record.status;
@@ -504,15 +479,9 @@ export class ComplianceService {
       data: {
         lifestyleCompliance: {
           checkIns,
-          progress:
-            updateDto.progress !== undefined
-              ? updateDto.progress
-              : overallProgress,
-        },
-        overallPercentage:
-          updateDto.progress !== undefined
-            ? updateDto.progress
-            : overallProgress,
+          progress: updateDto.progress !== undefined ? updateDto.progress : overallProgress,
+        } as Prisma.InputJsonValue,
+        overallPercentage: updateDto.progress !== undefined ? updateDto.progress : overallProgress,
         status,
         lastUpdatedBy: requestingUserId,
         updatedAt: new Date(),
@@ -532,11 +501,7 @@ export class ComplianceService {
     requestingUserRole: string,
     filters?: { patientId?: string; instructionId?: string },
   ) {
-    const records = await this.getComplianceRecords(
-      requestingUserId,
-      requestingUserRole,
-      filters,
-    );
+    const records = await this.getComplianceRecords(requestingUserId, requestingUserRole, filters);
 
     let patientId: string | undefined;
     if (requestingUserRole === 'patient') {
@@ -545,8 +510,8 @@ export class ComplianceService {
       });
       patientId = patient?.id;
     } else if (records.length > 0) {
-      patientId =
-        filters?.patientId || (records[0] as any).instruction?.patientId;
+      const first = records[0] as { instruction?: { patientId?: string } };
+      patientId = filters?.patientId ?? first?.instruction?.patientId;
     }
 
     const compliantCount = records.filter((r) => r.status === 'compliant').length;
@@ -554,30 +519,24 @@ export class ComplianceService {
     const lifestyleRecords = records.filter((r) => r.type === 'lifestyle');
     const appointmentRecords = records.filter((r) => r.type === 'appointment');
 
-    const avgPct =
-      records.length > 0
-        ? records.reduce((sum, r) => sum + r.overallPercentage, 0) / records.length
-        : 0;
+    const avgPct = records.length > 0 ? records.reduce((sum, r) => sum + r.overallPercentage, 0) / records.length : 0;
     const medicationPct =
       medicationRecords.length > 0
-        ? medicationRecords.reduce((s, r) => s + r.overallPercentage, 0) /
-          medicationRecords.length
+        ? medicationRecords.reduce((s, r) => s + r.overallPercentage, 0) / medicationRecords.length
         : 0;
     const lifestylePct =
       lifestyleRecords.length > 0
-        ? lifestyleRecords.reduce((s, r) => s + r.overallPercentage, 0) /
-          lifestyleRecords.length
+        ? lifestyleRecords.reduce((s, r) => s + r.overallPercentage, 0) / lifestyleRecords.length
         : 0;
     const appointmentPct =
       appointmentRecords.length > 0
-        ? appointmentRecords.reduce((s, r) => s + r.overallPercentage, 0) /
-          appointmentRecords.length
+        ? appointmentRecords.reduce((s, r) => s + r.overallPercentage, 0) / appointmentRecords.length
         : 0;
 
     // Build a simple trend from compliance records (by updatedAt date)
     const byDate = new Map<string, number[]>();
     for (const r of records) {
-      const dateStr = (r.updatedAt as Date).toISOString?.().slice(0, 10) || '';
+      const dateStr = r.updatedAt.toISOString?.().slice(0, 10) || '';
       if (!byDate.has(dateStr)) byDate.set(dateStr, []);
       byDate.get(dateStr)!.push(r.overallPercentage);
     }

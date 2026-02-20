@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -67,9 +63,7 @@ export class NotificationsService {
       throw new NotFoundException('Notification not found');
     }
     if (notification.userId !== userId) {
-      throw new ForbiddenException(
-        'You can only update your own notifications',
-      );
+      throw new ForbiddenException('You can only update your own notifications');
     }
     const updated = await this.prisma.notification.update({
       where: { id: notificationId },
@@ -104,9 +98,7 @@ export class NotificationsService {
       throw new NotFoundException('Notification not found');
     }
     if (notification.userId !== userId) {
-      throw new ForbiddenException(
-        'You can only delete your own notifications',
-      );
+      throw new ForbiddenException('You can only delete your own notifications');
     }
     await this.prisma.notification.delete({
       where: { id: notificationId },

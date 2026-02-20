@@ -34,7 +34,7 @@ import { patientService } from '../../services/patientService';
 import { instructionService } from '../../services/instructionService';
 import { ROUTES } from '../../config/routes';
 import { INSTRUCTION_TYPES, PRIORITY_LEVELS } from '../../utils/constants';
-import type { InstructionType, InstructionPriority } from '../../types/instruction.types';
+import type { CareInstruction, InstructionType, InstructionPriority } from '../../types/instruction.types';
 import PageHeader from '../../components/common/PageHeader';
 
 const CreateInstruction = () => {
@@ -76,7 +76,7 @@ const CreateInstruction = () => {
     if (preselectedPatientId && formData.patientId !== preselectedPatientId) {
       setFormData((prev) => ({ ...prev, patientId: preselectedPatientId }));
     }
-  }, [preselectedPatientId]);
+  }, [preselectedPatientId, formData.patientId]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -86,7 +86,7 @@ const CreateInstruction = () => {
 
       const now = new Date().toISOString();
       // Backend CreateInstructionDto: only these fields (forbidNonWhitelisted)
-      const instructionPayload: any = {
+      const instructionPayload: Partial<CareInstruction> = {
         patientId: selectedPatient.id,
         title: formData.title,
         type: formData.type,
@@ -111,7 +111,7 @@ const CreateInstruction = () => {
     },
     onSuccess: (createdInstruction) => {
       // Update cache after create
-      queryClient.setQueryData(['provider-instructions', user?.id], (old: any) => {
+      queryClient.setQueryData(['provider-instructions', user?.id], (old: CareInstruction[] | undefined) => {
         const prev = Array.isArray(old) ? old : [];
         return [createdInstruction, ...prev];
       });

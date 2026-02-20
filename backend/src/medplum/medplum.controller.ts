@@ -3,15 +3,7 @@
  * Health check (no auth) and FHIR endpoints (admin only).
  */
 
-import {
-  Controller,
-  Get,
-  Param,
-  Query,
-  UseGuards,
-  BadRequestException,
-  BadGatewayException,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards, BadRequestException, BadGatewayException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -52,8 +44,7 @@ export class MedplumController {
       return {
         status: 'ok',
         medplum: 'not_configured',
-        message:
-          'Medplum env not set. Add MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET.',
+        message: 'Medplum env not set. Add MEDPLUM_BASE_URL, MEDPLUM_CLIENT_ID, MEDPLUM_CLIENT_SECRET.',
       };
     }
     try {
@@ -104,10 +95,7 @@ export class MedplumController {
     try {
       return await this.medplumService.searchPractitioners(query);
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Medplum practitioners request failed';
+      const message = err instanceof Error ? err.message : 'Medplum practitioners request failed';
       throw new BadGatewayException(`Medplum: ${message}`);
     }
   }
@@ -128,8 +116,7 @@ export class MedplumController {
     try {
       return await this.medplumService.searchTasks(query);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Medplum tasks request failed';
+      const message = err instanceof Error ? err.message : 'Medplum tasks request failed';
       throw new BadGatewayException(`Medplum: ${message}`);
     }
   }
@@ -183,10 +170,7 @@ export class MedplumController {
     try {
       return await this.medplumService.getPractitioner(id);
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Medplum practitioner request failed';
+      const message = err instanceof Error ? err.message : 'Medplum practitioner request failed';
       throw new BadGatewayException(`Medplum: ${message}`);
     }
   }
@@ -207,8 +191,7 @@ export class MedplumController {
     try {
       return await this.medplumService.getTask(id);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Medplum task request failed';
+      const message = err instanceof Error ? err.message : 'Medplum task request failed';
       throw new BadGatewayException(`Medplum: ${message}`);
     }
   }

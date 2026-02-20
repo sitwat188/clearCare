@@ -21,11 +21,7 @@ export class HealthConnectionsPatientController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    return this.healthConnections.listConnectionsForPatient(
-      patientId,
-      userId,
-      role,
-    );
+    return this.healthConnections.listConnectionsForPatient(patientId, userId, role);
   }
 
   /**
@@ -37,11 +33,7 @@ export class HealthConnectionsPatientController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    return this.healthConnections.getHealthDataForPatient(
-      patientId,
-      userId,
-      role,
-    );
+    return this.healthConnections.getHealthDataForPatient(patientId, userId, role);
   }
 
   @Get(':orgConnectionId/status')
@@ -51,17 +43,8 @@ export class HealthConnectionsPatientController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    await this.healthConnections.ensureCanAccessPatient(
-      patientId,
-      userId,
-      role,
-    );
-    return this.healthConnections.getConnectionStatus(
-      orgConnectionId,
-      userId,
-      role,
-      patientId,
-    );
+    await this.healthConnections.ensureCanAccessPatient(patientId, userId, role);
+    return this.healthConnections.getConnectionStatus(orgConnectionId, userId, role, patientId);
   }
 
   @Post(':orgConnectionId/request-export')
@@ -71,16 +54,7 @@ export class HealthConnectionsPatientController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    await this.healthConnections.ensureCanAccessPatient(
-      patientId,
-      userId,
-      role,
-    );
-    return this.healthConnections.requestEhiExport(
-      orgConnectionId,
-      userId,
-      role,
-      patientId,
-    );
+    await this.healthConnections.ensureCanAccessPatient(patientId, userId, role);
+    return this.healthConnections.requestEhiExport(orgConnectionId, userId, role, patientId);
   }
 }

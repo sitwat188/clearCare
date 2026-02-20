@@ -61,7 +61,7 @@ const AdminReports = () => {
         return;
       }
 
-      let reportData: any[] = [];
+      let reportData: Record<string, string | number>[] = [];
       let reportTitle = '';
       const startDateFormatted = format(new Date(dateRange.start), 'MMM dd, yyyy');
       const endDateFormatted = format(new Date(dateRange.end), 'MMM dd, yyyy');

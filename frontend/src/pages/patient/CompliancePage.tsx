@@ -59,6 +59,7 @@ import { format, parseISO } from 'date-fns';
 import { toast } from 'react-toastify';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import type { RootState } from '../../store/store';
+import type { ComplianceRecord, ComplianceMetrics } from '../../types/compliance.types';
 import { complianceService } from '../../services/complianceService';
 import { instructionService } from '../../services/instructionService';
 import PageHeader from '../../components/common/PageHeader';
@@ -78,13 +79,21 @@ const TabPanel = (props: TabPanelProps) => {
   );
 };
 
+/** Raw medicationAdherence from API/seed: backend has schedule + overallProgress; seed may have adherencePercentage/totalDoses. */
+type MedicationAdherenceInput = {
+  schedule?: Array<{ date?: string; time?: string; status?: string; reason?: string }>;
+  overallProgress?: number;
+  adherencePercentage?: number;
+  totalDoses?: number;
+};
+
 /** Backend returns medicationAdherence as { schedule, overallProgress }; seed may have adherencePercentage/totalDoses. Normalize for display. */
-function normalizeMedicationAdherence(record: { medicationAdherence?: any } | null | undefined) {
+function normalizeMedicationAdherence(record: { medicationAdherence?: MedicationAdherenceInput } | null | undefined) {
   const ma = record?.medicationAdherence;
   if (!ma) return { schedule: [], adherencePercentage: 0, totalDoses: 0, takenDoses: 0, missedDoses: 0 };
   const schedule = Array.isArray(ma.schedule) ? ma.schedule : [];
-  const takenDoses = schedule.filter((s: any) => s?.status === 'taken').length;
-  const missedDoses = schedule.filter((s: any) => s?.status === 'missed').length;
+  const takenDoses = schedule.filter((s) => s?.status === 'taken').length;
+  const missedDoses = schedule.filter((s) => s?.status === 'missed').length;
   const totalDoses = schedule.length;
   const adherencePercentage =
     totalDoses > 0 ? Math.round((takenDoses / totalDoses) * 100) : (ma.overallProgress ?? ma.adherencePercentage ?? 0);
@@ -170,9 +179,9 @@ const PatientCompliance = () => {
     },
     onSuccess: (payload) => {
       // Update compliance records cache immediately
-      queryClient.setQueryData(['patient-compliance', user?.id], (old: any) => {
+      queryClient.setQueryData(['patient-compliance', user?.id], (old: ComplianceRecord[] | undefined) => {
         const prev = Array.isArray(old) ? old : [];
-        return prev.map((r: any) => {
+        return prev.map((r: ComplianceRecord) => {
           if (r?.instructionId !== payload.instructionId) return r;
           const lifestyle = r.lifestyleCompliance || { instructionId: payload.instructionId, category: 'lifestyle', progress: 0, milestones: [], checkIns: [] };
           const nextCheckIns = Array.isArray(lifestyle.checkIns)
@@ -207,7 +216,7 @@ const PatientCompliance = () => {
         });
       });
 
-      queryClient.setQueryData(['patient-compliance-metrics', user?.id], (old: any) => {
+      queryClient.setQueryData(['patient-compliance-metrics', user?.id], (old: ComplianceMetrics | undefined) => {
         if (!old || typeof old !== 'object') return old;
         const medication = typeof old.medicationAdherence === 'number' ? old.medicationAdherence : 0;
         const appointment = typeof old.appointmentCompliance === 'number' ? old.appointmentCompliance : 0;

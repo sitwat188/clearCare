@@ -47,9 +47,7 @@ export function redactPHIFromString(value: string | null | undefined): string {
  * Redact PHI keys in an object for audit payloads or logging.
  * Returns a new object with PHI values replaced by [REDACTED].
  */
-export function redactPHIFromObject<T extends Record<string, unknown>>(
-  obj: T | null | undefined,
-): T {
+export function redactPHIFromObject<T extends Record<string, unknown>>(obj: T | null | undefined): T {
   if (obj == null || typeof obj !== 'object') return obj as unknown as T;
   const out = { ...obj } as Record<string, unknown>;
   for (const key of Object.keys(out)) {
@@ -70,8 +68,6 @@ export function redactPHIFromObject<T extends Record<string, unknown>>(
 /**
  * Create a safe object for logging (alias for redactPHIFromObject for audit config).
  */
-export function createSafeLogObject<T extends Record<string, unknown>>(
-  obj: T | null | undefined,
-): T {
+export function createSafeLogObject<T extends Record<string, unknown>>(obj: T | null | undefined): T {
   return redactPHIFromObject(obj);
 }

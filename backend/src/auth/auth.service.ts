@@ -20,11 +20,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
-import {
-  getPasswordResetEmailHtml,
-  getRestoreNotificationEmailHtml,
-  getInvitationEmailHtml,
-} from '../email-templates';
+import { getPasswordResetEmailHtml, getRestoreNotificationEmailHtml, getInvitationEmailHtml } from '../email-templates';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { redactPHIFromObject, redactPHIFromString } from '../common/redact-phi';
 
@@ -52,13 +48,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'read:reports',
     'write:templates',
   ],
-  administrator: [
-    'admin:users',
-    'admin:roles',
-    'admin:system',
-    'admin:audit',
-    'admin:reports',
-  ],
+  administrator: ['admin:users', 'admin:roles', 'admin:system', 'admin:audit', 'admin:reports'],
 };
 
 @Injectable()
@@ -71,9 +61,9 @@ export class AuthService {
   ) {}
 
   /** Decrypt email, firstName, lastName for API response / tokens (supports legacy plaintext rows). */
-  private decryptUser<
-    T extends { email: string; firstName: string; lastName: string },
-  >(user: T): T & { email: string; firstName: string; lastName: string } {
+  private decryptUser<T extends { email: string; firstName: string; lastName: string }>(
+    user: T,
+  ): T & { email: string; firstName: string; lastName: string } {
     return {
       ...user,
       email: this.encryption.decrypt(user.email),
@@ -82,11 +72,7 @@ export class AuthService {
     };
   }
 
-  async register(
-    registerDto: RegisterDto,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
+  async register(registerDto: RegisterDto, ipAddress?: string, userAgent?: string) {
     const normalizedEmail = registerDto.email.toLowerCase().trim();
     const emailHash = this.encryption.hashEmailForLookup(normalizedEmail);
     const existingByHash = emailHash
@@ -145,11 +131,7 @@ export class AuthService {
     });
 
     const decrypted = this.decryptUser(user);
-    const tokens = await this.generateTokens(
-      user.id,
-      decrypted.email,
-      user.role,
-    );
+    const tokens = await this.generateTokens(user.id, decrypted.email, user.role);
 
     return {
       user: {
@@ -181,18 +163,10 @@ export class AuthService {
         await this.prisma.user.update({
           where: { id: user.id },
           data: {
-            emailHash: this.encryption.hashEmailForLookup(
-              this.encryption.decrypt(user.email) || user.email,
-            ),
-            email: this.encryption.encrypt(
-              this.encryption.decrypt(user.email) || user.email,
-            ),
-            firstName: this.encryption.encrypt(
-              this.encryption.decrypt(user.firstName) || user.firstName,
-            ),
-            lastName: this.encryption.encrypt(
-              this.encryption.decrypt(user.lastName) || user.lastName,
-            ),
+            emailHash: this.encryption.hashEmailForLookup(this.encryption.decrypt(user.email) || user.email),
+            email: this.encryption.encrypt(this.encryption.decrypt(user.email) || user.email),
+            firstName: this.encryption.encrypt(this.encryption.decrypt(user.firstName) || user.firstName),
+            lastName: this.encryption.encrypt(this.encryption.decrypt(user.lastName) || user.lastName),
           },
         });
         const updated = await this.prisma.user.findFirst({
@@ -207,10 +181,7 @@ export class AuthService {
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(
-      loginDto.password,
-      user.passwordHash,
-    );
+    const isPasswordValid = await bcrypt.compare(loginDto.password, user.passwordHash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -220,8 +191,7 @@ export class AuthService {
       const twoFactorToken = this.jwtService.sign(
         { sub: user.id, purpose: '2fa-login' },
         {
-          secret:
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+          secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
           expiresIn: '5m',
         },
       );
@@ -259,11 +229,7 @@ export class AuthService {
     });
 
     const decrypted = this.decryptUser(user);
-    const tokens = await this.generateTokens(
-      user.id,
-      decrypted.email,
-      user.role,
-    );
+    const tokens = await this.generateTokens(user.id, decrypted.email, user.role);
     const mustChangePassword = !!(
       user.mustChangePassword &&
       user.temporaryPasswordExpiresAt &&
@@ -288,25 +254,14 @@ export class AuthService {
   /**
    * Complete login after 2FA: verify TOTP or backup code, then issue tokens.
    */
-  async verifyTwoFactorLogin(
-    twoFactorToken: string,
-    code: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
+  async verifyTwoFactorLogin(twoFactorToken: string, code: string, ipAddress?: string, userAgent?: string) {
     let payload: { sub: string; purpose: string };
     try {
-      payload = this.jwtService.verify<{ sub: string; purpose: string }>(
-        twoFactorToken,
-        {
-          secret:
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-        },
-      );
+      payload = this.jwtService.verify<{ sub: string; purpose: string }>(twoFactorToken, {
+        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      });
     } catch {
-      throw new UnauthorizedException(
-        'Invalid or expired 2FA session. Please log in again.',
-      );
+      throw new UnauthorizedException('Invalid or expired 2FA session. Please log in again.');
     }
     if (payload.purpose !== '2fa-login') {
       throw new UnauthorizedException('Invalid token.');
@@ -350,9 +305,7 @@ export class AuthService {
       } catch {
         throw new BadRequestException('Invalid backup codes data.');
       }
-      const index = codes.findIndex(
-        (c) => c.trim().toLowerCase() === codeTrimmed.toLowerCase(),
-      );
+      const index = codes.findIndex((c) => c.trim().toLowerCase() === codeTrimmed.toLowerCase());
       if (index === -1) {
         throw new UnauthorizedException('Invalid backup code.');
       }
@@ -376,11 +329,7 @@ export class AuthService {
     });
 
     const decrypted = this.decryptUser(user);
-    const tokens = await this.generateTokens(
-      user.id,
-      decrypted.email,
-      user.role,
-    );
+    const tokens = await this.generateTokens(user.id, decrypted.email, user.role);
     const mustChangePassword = !!(
       user.mustChangePassword &&
       user.temporaryPasswordExpiresAt &&
@@ -438,8 +387,7 @@ export class AuthService {
     const setupToken = this.jwtService.sign(
       { sub: userId, twoFactorSecret: secret.base32, purpose: '2fa-setup' },
       {
-        secret:
-          process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
         expiresIn: '10m',
       },
     );
@@ -448,8 +396,7 @@ export class AuthService {
       secret: secret.base32,
       qrCodeDataUrl,
       setupToken,
-      message:
-        'Scan the QR code with your authenticator app, then enter the 6-digit code to verify.',
+      message: 'Scan the QR code with your authenticator app, then enter the 6-digit code to verify.',
     };
   }
 
@@ -464,13 +411,10 @@ export class AuthService {
         twoFactorSecret: string;
         purpose: string;
       }>(setupToken, {
-        secret:
-          process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
       });
     } catch {
-      throw new UnauthorizedException(
-        'Setup link expired. Please start 2FA setup again.',
-      );
+      throw new UnauthorizedException('Setup link expired. Please start 2FA setup again.');
     }
     if (payload.purpose !== '2fa-setup' || payload.sub !== userId) {
       throw new UnauthorizedException('Invalid setup token.');
@@ -486,21 +430,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid code. Please try again.');
     }
 
-    await this.usersService.setTwoFactorSecret(
-      payload.sub,
-      payload.twoFactorSecret,
-    );
+    await this.usersService.setTwoFactorSecret(payload.sub, payload.twoFactorSecret);
 
     const backupCodes = this.generateBackupCodes();
-    await this.usersService.setBackupCodes(
-      payload.sub,
-      JSON.stringify(backupCodes),
-    );
+    await this.usersService.setBackupCodes(payload.sub, JSON.stringify(backupCodes));
 
     return {
       backupCodes,
-      message:
-        '2FA has been enabled. Save your backup codes in a secure place.',
+      message: '2FA has been enabled. Save your backup codes in a secure place.',
     };
   }
 
@@ -567,9 +504,7 @@ export class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
-        secret:
-          process.env.JWT_REFRESH_SECRET ||
-          'your-refresh-secret-key-change-in-production',
+        secret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key-change-in-production',
       });
 
       const user = await this.prisma.user.findFirst({
@@ -609,9 +544,7 @@ export class AuthService {
     }
 
     const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(
-      Date.now() + RESET_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
     await this.prisma.passwordResetToken.create({
       data: { userId: user.id, token, expiresAt },
@@ -619,14 +552,11 @@ export class AuthService {
 
     // In production, always send to the user's email. Redirect only for testing/staging (when NODE_ENV !== 'production').
     const redirect = process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim();
-    const mailTo =
-      process.env.NODE_ENV !== 'production' && redirect ? redirect : email;
+    const mailTo = process.env.NODE_ENV !== 'production' && redirect ? redirect : email;
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
 
     // Send email in background so request returns immediately (avoids timeout when SMTP is blocked, e.g. on Render)
-    void this.sendPasswordResetEmail(mailTo, resetLink, expiresAt, email).catch(
-      () => {},
-    );
+    void this.sendPasswordResetEmail(mailTo, resetLink, expiresAt, email).catch(() => {});
 
     return {
       message: 'A password reset link has been sent. Please check your inbox.',
@@ -640,8 +570,7 @@ export class AuthService {
   private static getMailFrom(): string {
     const from = process.env.MAIL_FROM?.trim();
     if (from) return from;
-    if (AuthService.isResendConfigured())
-      return 'ClearCare <onboarding@resend.dev>';
+    if (AuthService.isResendConfigured()) return 'ClearCare <onboarding@resend.dev>';
     const user = process.env.SMTP_USER?.trim()?.replace(/^["']|["']$/g, '');
     return user ? `ClearCare <${user}>` : 'ClearCare <noreply@example.com>';
   }
@@ -675,9 +604,7 @@ export class AuthService {
 
     if (resendKey) {
       const from = AuthService.getMailFrom();
-      console.log(
-        `[Password reset] Sending via Resend to ${redactPHIFromString(effectiveTo)} (from: ${from})`,
-      );
+      console.log(`[Password reset] Sending via Resend to ${redactPHIFromString(effectiveTo)} (from: ${from})`);
       const resend = new Resend(resendKey);
       const html = getPasswordResetEmailHtml(requestedForEmail, resetLink);
       const { data, error } = await resend.emails.send({
@@ -687,14 +614,8 @@ export class AuthService {
         html,
       });
       if (error) {
-        console.error(
-          '[Password reset] Resend failed:',
-          error.message ?? JSON.stringify(error),
-        );
-        console.error(
-          '[Password reset] Full Resend error:',
-          JSON.stringify(error),
-        );
+        console.error('[Password reset] Resend failed:', error.message ?? JSON.stringify(error));
+        console.error('[Password reset] Full Resend error:', JSON.stringify(error));
         if (isProduction) {
           console.error(
             '[Password reset] Fix: Use MAIL_FROM=ClearCare <onboarding@resend.dev> (or verify your domain in Resend dashboard).',
@@ -702,9 +623,7 @@ export class AuthService {
         }
         return;
       }
-      console.log(
-        `[Password reset] Sent via Resend to ${redactPHIFromString(effectiveTo)} (id: ${data?.id ?? 'n/a'})`,
-      );
+      console.log(`[Password reset] Sent via Resend to ${redactPHIFromString(effectiveTo)} (id: ${data?.id ?? 'n/a'})`);
       return;
     }
 
@@ -748,9 +667,7 @@ export class AuthService {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       const response =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: string }).response
-          : undefined;
+        err && typeof err === 'object' && 'response' in err ? (err as { response?: string }).response : undefined;
       console.error('[Password reset] Failed to send email:', msg);
       if (response) console.error('[Password reset] SMTP response:', response);
       if (isProduction) {
@@ -765,15 +682,10 @@ export class AuthService {
    * Send restore notification email. Uses Resend or SMTP like invitation/password reset.
    * Called by admin when a soft-deleted user is restored.
    */
-  async sendRestoreNotificationEmail(
-    to: string,
-    firstName: string,
-  ): Promise<void> {
-    const loginUrl =
-      process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
+  async sendRestoreNotificationEmail(to: string, firstName: string): Promise<void> {
+    const loginUrl = process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
     const redirect = process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim();
-    const mailTo =
-      process.env.NODE_ENV !== 'production' && redirect ? redirect : to;
+    const mailTo = process.env.NODE_ENV !== 'production' && redirect ? redirect : to;
     const host = process.env.SMTP_HOST?.trim();
     const port = process.env.SMTP_PORT?.trim();
     const user = process.env.SMTP_USER?.trim();
@@ -794,9 +706,7 @@ export class AuthService {
 
     if (resendKey) {
       const from = AuthService.getMailFrom();
-      console.log(
-        `[Restore notification] Sending via Resend to ${redactPHIFromString(effectiveTo)} (from: ${from})`,
-      );
+      console.log(`[Restore notification] Sending via Resend to ${redactPHIFromString(effectiveTo)} (from: ${from})`);
       const resend = new Resend(resendKey);
       const { data, error } = await resend.emails.send({
         from,
@@ -805,10 +715,7 @@ export class AuthService {
         html,
       });
       if (error) {
-        console.error(
-          '[Restore notification] Resend failed:',
-          error.message ?? JSON.stringify(error),
-        );
+        console.error('[Restore notification] Resend failed:', error.message ?? JSON.stringify(error));
         if (isProduction) {
           console.error(
             '[Restore notification] Fix: Use MAIL_FROM=ClearCare <onboarding@resend.dev> or verify your domain in Resend.',
@@ -824,9 +731,7 @@ export class AuthService {
 
     if (!host || !port || !user || !pass) {
       if (isProduction) {
-        console.error(
-          '[Restore notification] PRODUCTION: No email sent. Set RESEND_API_KEY or SMTP_*.',
-        );
+        console.error('[Restore notification] PRODUCTION: No email sent. Set RESEND_API_KEY or SMTP_*.');
       } else {
         console.log(
           `[Restore notification] Mail not configured. Would send to ${redactPHIFromString(effectiveTo)}: account restored for ${redactPHIFromString(to)}.`,
@@ -854,9 +759,7 @@ export class AuthService {
     } catch (err) {
       console.error('[Restore notification] Failed to send to', effectiveTo, err);
       if (isProduction) {
-        console.error(
-          '[Restore notification] PRODUCTION: On Render, use RESEND_API_KEY instead.',
-        );
+        console.error('[Restore notification] PRODUCTION: On Render, use RESEND_API_KEY instead.');
       }
     }
   }
@@ -865,18 +768,10 @@ export class AuthService {
    * Send invitation email with temporary password. In production, sends to the invited user's email.
    * When NODE_ENV !== 'production' and PASSWORD_RESET_REDIRECT_EMAIL is set, redirects to that address for testing.
    */
-  async sendInvitationEmail(
-    invitedUserEmail: string,
-    firstName: string,
-    temporaryPassword: string,
-  ): Promise<void> {
-    const loginUrl =
-      process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
+  async sendInvitationEmail(invitedUserEmail: string, firstName: string, temporaryPassword: string): Promise<void> {
+    const loginUrl = process.env.FRONTEND_URL?.trim() || 'http://localhost:5173';
     const redirect = process.env.PASSWORD_RESET_REDIRECT_EMAIL?.trim();
-    const mailTo =
-      process.env.NODE_ENV !== 'production' && redirect
-        ? redirect
-        : invitedUserEmail;
+    const mailTo = process.env.NODE_ENV !== 'production' && redirect ? redirect : invitedUserEmail;
     const host = process.env.SMTP_HOST?.trim();
     const port = process.env.SMTP_PORT?.trim();
     const user = process.env.SMTP_USER?.trim();
@@ -885,19 +780,12 @@ export class AuthService {
     const subject = "You're invited to ClearCare+";
     const displayName = firstName || 'User';
     const text = `Welcome to ClearCare+, ${displayName}.\n\nYour account has been created. Use the temporary password below to log in. You will be asked to set a new password on first login. This temporary password is valid for one day.\n\nEmail: ${invitedUserEmail}\nTemporary password: ${temporaryPassword}\n\nLog in here: ${loginUrl}/login\n\nIf you did not expect this email, please contact your administrator.`;
-    const html = getInvitationEmailHtml(
-      displayName,
-      invitedUserEmail,
-      temporaryPassword,
-      loginUrl,
-    );
+    const html = getInvitationEmailHtml(displayName, invitedUserEmail, temporaryPassword, loginUrl);
 
     if (!mailTo) {
       const invitee = redactPHIFromString(invitedUserEmail);
       const tempPw = redactPHIFromString(temporaryPassword);
-      console.log(
-        `[Invitation] No recipient. Invited: ${invitee}, temp pw (valid 1 day): ${tempPw}`,
-      );
+      console.log(`[Invitation] No recipient. Invited: ${invitee}, temp pw (valid 1 day): ${tempPw}`);
       return;
     }
     const effectiveTo = AuthService.getEffectiveMailTo(mailTo);
@@ -917,10 +805,7 @@ export class AuthService {
         html,
       });
       if (error) {
-        console.error(
-          '[Invitation] Resend failed:',
-          error.message ?? JSON.stringify(error),
-        );
+        console.error('[Invitation] Resend failed:', error.message ?? JSON.stringify(error));
         console.error('[Invitation] Full Resend error:', JSON.stringify(error));
         if (isProduction) {
           console.error(
@@ -929,9 +814,7 @@ export class AuthService {
         }
         return;
       }
-      console.log(
-        `[Invitation] Sent via Resend to ${redactPHIFromString(effectiveTo)} (id: ${data?.id ?? 'n/a'})`,
-      );
+      console.log(`[Invitation] Sent via Resend to ${redactPHIFromString(effectiveTo)} (id: ${data?.id ?? 'n/a'})`);
       return;
     }
 
@@ -970,9 +853,7 @@ export class AuthService {
     } catch (err) {
       console.error('[Invitation] Failed to send to', effectiveTo, err);
       if (isProduction) {
-        console.error(
-          '[Invitation] PRODUCTION: On Render, SMTP is often blocked. Use RESEND_API_KEY instead.',
-        );
+        console.error('[Invitation] PRODUCTION: On Render, SMTP is often blocked. Use RESEND_API_KEY instead.');
       }
     }
   }
@@ -1023,10 +904,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const isCurrentValid = await bcrypt.compare(
-      dto.currentPassword,
-      user.passwordHash,
-    );
+    const isCurrentValid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!isCurrentValid) {
       throw new UnauthorizedException('Current password is incorrect');
     }
@@ -1059,9 +937,7 @@ export class AuthService {
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret:
-        process.env.JWT_REFRESH_SECRET ||
-        'your-refresh-secret-key-change-in-production',
+      secret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key-change-in-production',
       expiresIn: '7d', // Longer-lived refresh token
     });
 

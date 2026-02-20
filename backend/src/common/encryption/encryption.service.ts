@@ -1,11 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-  scryptSync,
-} from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
@@ -21,18 +15,11 @@ export class EncryptionService {
 
   constructor() {
     const secret = process.env.ENCRYPTION_KEY;
-    if (
-      process.env.NODE_ENV === 'production' &&
-      (!secret || secret.length < 32)
-    ) {
-      throw new Error(
-        'ENCRYPTION_KEY must be set in production (at least 32 chars, e.g. openssl rand -base64 32)',
-      );
+    if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) {
+      throw new Error('ENCRYPTION_KEY must be set in production (at least 32 chars, e.g. openssl rand -base64 32)');
     }
     this.enabled = !!(secret && secret.length >= 32);
-    this.key = this.enabled
-      ? scryptSync(secret!, 'clearcare-salt', KEY_LENGTH)
-      : Buffer.alloc(KEY_LENGTH);
+    this.key = this.enabled ? scryptSync(secret!, 'clearcare-salt', KEY_LENGTH) : Buffer.alloc(KEY_LENGTH);
   }
 
   /**
@@ -46,10 +33,7 @@ export class EncryptionService {
     const cipher = createCipheriv(ALGORITHM, this.key, iv, {
       authTagLength: TAG_LENGTH,
     });
-    const encrypted = Buffer.concat([
-      cipher.update(plainText, 'utf8'),
-      cipher.final(),
-    ]);
+    const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
     const tag = cipher.getAuthTag();
     const combined = Buffer.concat([iv, tag, encrypted]);
     return PREFIX + combined.toString('base64');
@@ -78,10 +62,7 @@ export class EncryptionService {
         authTagLength: TAG_LENGTH,
       });
       decipher.setAuthTag(tag);
-      return Buffer.concat([
-        decipher.update(encrypted),
-        decipher.final(),
-      ]).toString('utf8');
+      return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
     } catch {
       return cipherText;
     }

@@ -55,7 +55,7 @@ const ProviderReports = () => {
   const handleGenerateReport = (exportFormat: 'pdf' | 'csv') => {
     try {
       // Filter data based on selected parameters
-      let reportData: any[] = [];
+      let reportData: Record<string, string | number>[] = [];
       
       if (reportType === 'compliance' || reportType === 'summary') {
         // Create compliance summary

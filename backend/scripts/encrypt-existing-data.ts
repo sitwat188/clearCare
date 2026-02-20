@@ -4,6 +4,7 @@
  * Uses the same algorithm and key derivation as EncryptionService.
  *
  * Usage: npm run db:encrypt
+ * Optional:  npm run db:encrypt -- --emails=addr1@x.com,addr2@y.com  (only encrypt these users)
  * Requires: .env with DATABASE_URL and ENCRYPTION_KEY (min 32 chars)
  *
  * Encrypted columns by table:
@@ -31,10 +32,7 @@ if (fs.existsSync(envPath)) {
       if (eq > 0) {
         const key = trimmed.slice(0, eq).trim();
         let val = trimmed.slice(eq + 1).trim();
-        if (
-          (val.startsWith('"') && val.endsWith('"')) ||
-          (val.startsWith("'") && val.endsWith("'"))
-        )
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'")))
           val = val.slice(1, -1);
         process.env[key] = val;
       }
@@ -65,10 +63,7 @@ function encrypt(plainText: string, key: Buffer): string {
   const cipher = createCipheriv(ALGORITHM, key, iv, {
     authTagLength: TAG_LENGTH,
   });
-  const encrypted = Buffer.concat([
-    cipher.update(plainText, 'utf8'),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   const combined = Buffer.concat([iv, tag, encrypted]);
   return PREFIX + combined.toString('base64');
@@ -88,8 +83,25 @@ function hashEmailForLookup(email: string | null | undefined): string {
 
 const prisma = new PrismaClient();
 
+/** Parse --emails=addr1,addr2 from argv (optional). Normalized to lower-case. */
+function getEmailsFilter(): Set<string> | null {
+  const arg = process.argv.find((a) => a.startsWith('--emails='));
+  if (!arg) return null;
+  const list = arg.slice('--emails='.length).trim();
+  if (!list) return null;
+  const emails = list
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return emails.length > 0 ? new Set(emails) : null;
+}
+
 async function main() {
   const key = getEncryptKey();
+  const emailsFilter = getEmailsFilter();
+  if (emailsFilter) {
+    console.log('Filtering users by email:', [...emailsFilter].join(', '));
+  }
 
   let patientsUpdated = 0;
   let instructionsUpdated = 0;
@@ -103,34 +115,20 @@ async function main() {
   });
   for (const p of patients) {
     const updates: Record<string, string> = {};
-    if (shouldEncrypt(p.dateOfBirth))
-      updates.dateOfBirth = encrypt(p.dateOfBirth, key);
-    if (shouldEncrypt(p.medicalRecordNumber))
-      updates.medicalRecordNumber = encrypt(p.medicalRecordNumber, key);
-    if (p.phone != null && shouldEncrypt(p.phone))
-      updates.phone = encrypt(p.phone, key);
+    if (shouldEncrypt(p.dateOfBirth)) updates.dateOfBirth = encrypt(p.dateOfBirth, key);
+    if (shouldEncrypt(p.medicalRecordNumber)) updates.medicalRecordNumber = encrypt(p.medicalRecordNumber, key);
+    if (p.phone != null && shouldEncrypt(p.phone)) updates.phone = encrypt(p.phone, key);
     if (p.addressStreet != null && shouldEncrypt(p.addressStreet))
       updates.addressStreet = encrypt(p.addressStreet, key);
-    if (p.addressCity != null && shouldEncrypt(p.addressCity))
-      updates.addressCity = encrypt(p.addressCity, key);
-    if (p.addressState != null && shouldEncrypt(p.addressState))
-      updates.addressState = encrypt(p.addressState, key);
+    if (p.addressCity != null && shouldEncrypt(p.addressCity)) updates.addressCity = encrypt(p.addressCity, key);
+    if (p.addressState != null && shouldEncrypt(p.addressState)) updates.addressState = encrypt(p.addressState, key);
     if (p.addressZipCode != null && shouldEncrypt(p.addressZipCode))
       updates.addressZipCode = encrypt(p.addressZipCode, key);
     if (p.emergencyContactName != null && shouldEncrypt(p.emergencyContactName))
       updates.emergencyContactName = encrypt(p.emergencyContactName, key);
-    if (
-      p.emergencyContactRelationship != null &&
-      shouldEncrypt(p.emergencyContactRelationship)
-    )
-      updates.emergencyContactRelationship = encrypt(
-        p.emergencyContactRelationship,
-        key,
-      );
-    if (
-      p.emergencyContactPhone != null &&
-      shouldEncrypt(p.emergencyContactPhone)
-    )
+    if (p.emergencyContactRelationship != null && shouldEncrypt(p.emergencyContactRelationship))
+      updates.emergencyContactRelationship = encrypt(p.emergencyContactRelationship, key);
+    if (p.emergencyContactPhone != null && shouldEncrypt(p.emergencyContactPhone))
       updates.emergencyContactPhone = encrypt(p.emergencyContactPhone, key);
 
     if (Object.keys(updates).length > 0) {
@@ -151,12 +149,7 @@ async function main() {
     if (i.content != null && shouldEncrypt(i.content)) {
       updates.content = encrypt(i.content, key);
     }
-    const jsonFields = [
-      'medicationDetails',
-      'lifestyleDetails',
-      'followUpDetails',
-      'warningDetails',
-    ] as const;
+    const jsonFields = ['medicationDetails', 'lifestyleDetails', 'followUpDetails', 'warningDetails'] as const;
     for (const field of jsonFields) {
       const val = i[field];
       if (val != null && typeof val === 'object' && !('_encrypted' in val)) {
@@ -179,10 +172,14 @@ async function main() {
   }
 
   // --- Users: encrypt email, firstName, lastName, 2FA secret, backup codes if plaintext ---
-  const users = await prisma.user.findMany({
-    where: { deletedAt: null },
-  });
+  // Include all users (including soft-deleted) so no plaintext is left
+  const users = await prisma.user.findMany({});
   for (const u of users) {
+    const emailPlain = shouldEncrypt(u.email) ? u.email : '';
+    if (emailsFilter && emailPlain !== '') {
+      const normalized = emailPlain.toLowerCase().trim();
+      if (!emailsFilter.has(normalized)) continue;
+    }
     const updates: Record<string, string> = {};
     if (shouldEncrypt(u.email)) {
       updates.email = encrypt(u.email, key);
@@ -204,11 +201,19 @@ async function main() {
       updates.backupCodes = encrypt(u.backupCodes, key);
     }
     if (Object.keys(updates).length > 0) {
-      await prisma.user.update({
-        where: { id: u.id },
-        data: updates,
-      });
-      usersUpdated++;
+      try {
+        await prisma.user.update({
+          where: { id: u.id },
+          data: updates,
+        });
+        usersUpdated++;
+        if (emailPlain) {
+          console.log('  Encrypted user:', emailPlain);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`  Failed to encrypt user ${u.id} (${emailPlain || 'no-email'}):`, msg);
+      }
     }
   }
 
@@ -217,15 +222,10 @@ async function main() {
   for (const t of templates) {
     const updates: Record<string, unknown> = {};
     if (shouldEncrypt(t.name)) updates.name = encrypt(t.name, key);
-    if (t.description != null && shouldEncrypt(t.description))
-      updates.description = encrypt(t.description, key);
+    if (t.description != null && shouldEncrypt(t.description)) updates.description = encrypt(t.description, key);
     if (shouldEncrypt(t.content)) updates.content = encrypt(t.content, key);
     const details = t.details;
-    if (
-      details != null &&
-      typeof details === 'object' &&
-      !('_encrypted' in details)
-    ) {
+    if (details != null && typeof details === 'object' && !('_encrypted' in details)) {
       try {
         updates.details = { _encrypted: encrypt(JSON.stringify(details), key) };
       } catch {
@@ -259,10 +259,7 @@ async function main() {
   }
 
   console.log('Encryption of existing data complete.');
-  console.log(
-    '  Patients (rows with at least one field encrypted):',
-    patientsUpdated,
-  );
+  console.log('  Patients (rows with at least one field encrypted):', patientsUpdated);
   console.log('  Care instructions:', instructionsUpdated);
   console.log('  Users (email/name/2FA/backup codes):', usersUpdated);
   console.log('  Instruction templates:', templatesUpdated);

@@ -10,13 +10,7 @@ import { TemplatesService } from './templates.service';
 import { ReportsService } from './reports.service';
 
 @Module({
-  imports: [
-    PrismaModule,
-    EncryptionModule,
-    PatientsModule,
-    ComplianceModule,
-    InstructionsModule,
-  ],
+  imports: [PrismaModule, EncryptionModule, PatientsModule, ComplianceModule, InstructionsModule],
   controllers: [ProvidersController],
   providers: [TemplatesService, ReportsService, RolesGuard],
 })

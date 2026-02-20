@@ -60,13 +60,7 @@ const ROLE_DEFINITIONS: Array<{
     id: 'administrator',
     name: 'Administrator',
     description: 'Full system administration',
-    permissions: [
-      'admin:users',
-      'admin:roles',
-      'admin:system',
-      'admin:audit',
-      'admin:reports',
-    ],
+    permissions: ['admin:users', 'admin:roles', 'admin:system', 'admin:audit', 'admin:reports'],
     isSystemRole: true,
   },
 ];
@@ -111,9 +105,7 @@ export class AdminService {
     return def?.permissions ?? [];
   }
 
-  private async getAdminDisplay(
-    adminUserId: string,
-  ): Promise<{ userEmail: string; userName: string }> {
+  private async getAdminDisplay(adminUserId: string): Promise<{ userEmail: string; userName: string }> {
     const admin = await this.prisma.user.findFirst({
       where: { id: adminUserId, deletedAt: null },
       select: { email: true, firstName: true, lastName: true },
@@ -121,9 +113,7 @@ export class AdminService {
     if (!admin) return { userEmail: '(unknown)', userName: 'Admin' };
     return {
       userEmail: admin.email,
-      userName:
-        [admin.firstName, admin.lastName].filter(Boolean).join(' ') ||
-        admin.email,
+      userName: [admin.firstName, admin.lastName].filter(Boolean).join(' ') || admin.email,
     };
   }
 
@@ -199,23 +189,14 @@ export class AdminService {
     return this.patientsService.getPatientByUserId(userId, 'administrator');
   }
 
-  async createUser(
-    dto: CreateUserDto,
-    adminUserId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
+  async createUser(dto: CreateUserDto, adminUserId: string, ipAddress?: string, userAgent?: string) {
     if (dto.role === 'administrator') {
       throw new BadRequestException('Creating Administrator users is disabled');
     }
     const email = dto.email.toLowerCase().trim();
     const emailHash = this.encryption.hashEmailForLookup(email);
-    const existingByHash = emailHash
-      ? await this.prisma.user.findFirst({ where: { emailHash } })
-      : null;
-    const existing =
-      existingByHash ??
-      (await this.prisma.user.findFirst({ where: { email } }));
+    const existingByHash = emailHash ? await this.prisma.user.findFirst({ where: { emailHash } }) : null;
+    const existing = existingByHash ?? (await this.prisma.user.findFirst({ where: { email } }));
     if (existing) {
       if (!existing.deletedAt) {
         throw new ConflictException('A user with this email already exists');
@@ -224,17 +205,14 @@ export class AdminService {
       // Return code + id so frontend can show "Would you like to restore?" and call restore endpoint.
       throw new ConflictException({
         code: 'USER_INACTIVE',
-        message:
-          'User already exists in inactive state. Would you like to restore this user?',
+        message: 'User already exists in inactive state. Would you like to restore this user?',
         inactiveUserId: existing.id,
       });
     }
     // Invitation flow: always generate a temporary password (valid up to 1 day)
     const rawPassword = randomBytes(DEFAULT_PASSWORD_LENGTH).toString('hex');
     const passwordHash = await bcrypt.hash(rawPassword, SALT_ROUNDS);
-    const temporaryPasswordExpiresAt = new Date(
-      Date.now() + TEMPORARY_PASSWORD_VALID_DAYS * 24 * 60 * 60 * 1000,
-    );
+    const temporaryPasswordExpiresAt = new Date(Date.now() + TEMPORARY_PASSWORD_VALID_DAYS * 24 * 60 * 60 * 1000);
 
     const createData = {
       emailHash,
@@ -259,18 +237,14 @@ export class AdminService {
       },
     });
 
-    void this.authService
-      .sendInvitationEmail(email, dto.firstName.trim(), rawPassword)
-      .catch(() => {});
+    void this.authService.sendInvitationEmail(email, dto.firstName.trim(), rawPassword).catch(() => {});
 
     if (dto.role === 'patient') {
       await this.prisma.patient.create({
         data: {
           userId: user.id,
           dateOfBirth: this.encryption.encrypt('1900-01-01'),
-          medicalRecordNumber: this.encryption.encrypt(
-            `MRN-${user.id.slice(0, 8).toUpperCase()}`,
-          ),
+          medicalRecordNumber: this.encryption.encrypt(`MRN-${user.id.slice(0, 8).toUpperCase()}`),
         },
       });
       // Sync to Medplum FHIR when configured (non-blocking; failures are logged only)
@@ -279,10 +253,9 @@ export class AdminService {
           id: user.id,
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
-        }).catch((err) => {
-          this.logger.warn(
-            `Medplum Patient create failed for user ${user.id}: ${err?.message ?? err}`,
-          );
+        }).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error';
+          this.logger.warn(`Medplum Patient create failed for user ${user.id}: ${msg}`);
         });
       }
     }
@@ -309,11 +282,7 @@ export class AdminService {
    * Create or update a minimal FHIR Patient in Medplum for a ClearCare user (patient).
    * Uses identifier https://clearcare.local/user|userId for uniqueness; updates if already present.
    */
-  private async syncPatientToMedplum(user: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  }): Promise<void> {
+  private async syncPatientToMedplum(user: { id: string; firstName: string; lastName: string }): Promise<void> {
     const namePayload = [
       {
         use: 'official',
@@ -327,9 +296,7 @@ export class AdminService {
         value: user.id,
       },
     ];
-    const existing = await this.medplumService.findPatientByClearCareUserId(
-      user.id,
-    );
+    const existing = await this.medplumService.findPatientByClearCareUserId(user.id);
     if (existing) {
       await this.medplumService.updatePatient({
         ...existing,
@@ -344,30 +311,18 @@ export class AdminService {
     });
   }
 
-  async updateUser(
-    id: string,
-    dto: UpdateUserDto,
-    adminUserId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
+  async updateUser(id: string, dto: UpdateUserDto, adminUserId: string, ipAddress?: string, userAgent?: string) {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
     if (!user) throw new NotFoundException('User not found');
-    if (
-      user.role === 'administrator' &&
-      dto.role &&
-      dto.role !== 'administrator'
-    ) {
+    if (user.role === 'administrator' && dto.role && dto.role !== 'administrator') {
       throw new ForbiddenException('Cannot change administrator role');
     }
 
     const updateData: Record<string, unknown> = {};
-    if (dto.firstName !== undefined)
-      updateData.firstName = this.encryption.encrypt(dto.firstName.trim());
-    if (dto.lastName !== undefined)
-      updateData.lastName = this.encryption.encrypt(dto.lastName.trim());
+    if (dto.firstName !== undefined) updateData.firstName = this.encryption.encrypt(dto.firstName.trim());
+    if (dto.lastName !== undefined) updateData.lastName = this.encryption.encrypt(dto.lastName.trim());
     if (dto.email !== undefined) {
       const normalized = dto.email.toLowerCase().trim();
       updateData.emailHash = this.encryption.hashEmailForLookup(normalized);
@@ -408,12 +363,7 @@ export class AdminService {
     return this.toUserResponse(updated);
   }
 
-  async deleteUser(
-    id: string,
-    adminUserId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
+  async deleteUser(id: string, adminUserId: string, ipAddress?: string, userAgent?: string) {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
@@ -439,9 +389,7 @@ export class AdminService {
         status: 'success',
       },
     });
-    const deletedUserAddr = redactPHIFromString(
-      this.encryption.decrypt(user.email),
-    );
+    const deletedUserAddr = redactPHIFromString(this.encryption.decrypt(user.email));
     this.logger.log(`Audit log written: delete user ${id} (${deletedUserAddr})`);
 
     // HIPAA: Soft-delete linked Patient so PHI is excluded from all reads
@@ -465,9 +413,7 @@ export class AdminService {
           status: 'success',
         },
       });
-      this.logger.log(
-        `Audit log written: cascade soft-delete patient ${patient.id} (user ${id})`,
-      );
+      this.logger.log(`Audit log written: cascade soft-delete patient ${patient.id} (user ${id})`);
     }
   }
 
@@ -475,12 +421,7 @@ export class AdminService {
    * Restore a soft-deleted user (and linked patient if any).
    * HIPAA: Admin only; audit logged.
    */
-  async restoreUser(
-    id: string,
-    adminUserId: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ) {
+  async restoreUser(id: string, adminUserId: string, ipAddress?: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -515,12 +456,8 @@ export class AdminService {
         status: 'success',
       },
     });
-    const restoredUserAddr = redactPHIFromString(
-      this.encryption.decrypt(user.email),
-    );
-    this.logger.log(
-      `Audit log written: restore user ${id} (${restoredUserAddr})`,
-    );
+    const restoredUserAddr = redactPHIFromString(this.encryption.decrypt(user.email));
+    this.logger.log(`Audit log written: restore user ${id} (${restoredUserAddr})`);
 
     const patient = await this.prisma.patient.findFirst({
       where: { userId: id },
@@ -542,14 +479,11 @@ export class AdminService {
           status: 'success',
         },
       });
-      this.logger.log(
-        `Audit log written: restore patient ${patient.id} (user ${id})`,
-      );
+      this.logger.log(`Audit log written: restore patient ${patient.id} (user ${id})`);
     }
 
     const decryptedEmail = this.encryption.decrypt(user.email);
-    const decryptedFirstName =
-      this.encryption.decrypt(user.firstName) ?? 'User';
+    const decryptedFirstName = this.encryption.decrypt(user.firstName) ?? 'User';
     const restoredAddr = redactPHIFromString(decryptedEmail);
     void this.authService
       .sendRestoreNotificationEmail(decryptedEmail, decryptedFirstName)
@@ -581,9 +515,7 @@ export class AdminService {
       where: { deletedAt: null },
       _count: { id: true },
     });
-    const countByRole = Object.fromEntries(
-      userCounts.map((r) => [r.role, r._count.id]),
-    );
+    const countByRole = Object.fromEntries(userCounts.map((r) => [r.role, r._count.id]));
 
     return ROLE_DEFINITIONS.map((r) => ({
       ...r,
@@ -608,9 +540,7 @@ export class AdminService {
   }
 
   createRoleStub() {
-    throw new ForbiddenException(
-      'System roles cannot be created; only predefined roles are supported.',
-    );
+    throw new ForbiddenException('System roles cannot be created; only predefined roles are supported.');
   }
 
   updateRoleStub() {
@@ -640,14 +570,8 @@ export class AdminService {
     if (filters.action) where.action = filters.action;
     if (filters.startDate || filters.endDate) {
       where.timestamp = {};
-      if (filters.startDate)
-        (where.timestamp as Record<string, Date>).gte = new Date(
-          filters.startDate,
-        );
-      if (filters.endDate)
-        (where.timestamp as Record<string, Date>).lte = new Date(
-          filters.endDate,
-        );
+      if (filters.startDate) (where.timestamp as Record<string, Date>).gte = new Date(filters.startDate);
+      if (filters.endDate) (where.timestamp as Record<string, Date>).lte = new Date(filters.endDate);
     }
 
     const page = Math.max(1, filters.page ?? 1);
@@ -671,9 +595,7 @@ export class AdminService {
 
     const resourceUserIds = [
       ...new Set(
-        items
-          .filter((l) => l.resourceType === 'user' && l.resourceId != null)
-          .map((l) => l.resourceId as string),
+        items.filter((l) => l.resourceType === 'user' && l.resourceId != null).map((l) => l.resourceId as string),
       ),
     ];
     const resourceUsers =
@@ -683,16 +605,11 @@ export class AdminService {
             select: { id: true, email: true },
           })
         : [];
-    const resourceNameByUserId = new Map(
-      resourceUsers.map((u) => [u.id, this.encryption.decrypt(u.email)]),
-    );
+    const resourceNameByUserId = new Map(resourceUsers.map((u) => [u.id, this.encryption.decrypt(u.email)]));
 
     return {
       data: items.map((log) => {
-        const userEmail =
-          log.user != null
-            ? this.encryption.decrypt(log.user.email)
-            : '(deleted user)';
+        const userEmail = log.user != null ? this.encryption.decrypt(log.user.email) : '(deleted user)';
         const userName =
           log.user != null
             ? `${this.encryption.decrypt(log.user.firstName) ?? ''} ${this.encryption.decrypt(log.user.lastName) ?? ''}`.trim() ||
@@ -757,18 +674,18 @@ export class AdminService {
   }
 
   // ---------- Reports (stub) ----------
-  async getReports() {
+  getReports(): unknown[] {
     return [];
   }
 
-  async generateReport(
+  generateReport(
     config: {
       type: string;
       dateRange: { start: string; end: string };
       format: string;
     },
     adminUserId: string,
-  ) {
+  ): Record<string, unknown> {
     const report = {
       id: `report-${Date.now()}`,
       type: config.type as 'compliance' | 'users' | 'audit' | 'system',

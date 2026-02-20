@@ -1,12 +1,4 @@
-import {
-  IsString,
-  IsNotEmpty,
-  IsDateString,
-  IsBoolean,
-  IsOptional,
-  IsNumber,
-  IsObject,
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsDateString, IsBoolean, IsOptional, IsNumber, IsObject } from 'class-validator';
 
 export class UpdateLifestyleComplianceDto {
   @IsNotEmpty({ message: 'Date is required' })

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { redactPHIFromObject } from '../common/redact-phi';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,11 +15,7 @@ export class UsersService {
    * Get user profile by ID
    * HIPAA: Users can only view their own profile, admins can view any
    */
-  async getProfile(
-    userId: string,
-    requestingUserId: string,
-    requestingUserRole: string,
-  ) {
+  async getProfile(userId: string, requestingUserId: string, requestingUserRole: string) {
     // HIPAA: Row-level access control - users can only access their own data
     if (requestingUserRole !== 'administrator' && userId !== requestingUserId) {
       throw new ForbiddenException('You can only access your own profile');
@@ -101,10 +93,8 @@ export class UsersService {
       updateData.emailHash = this.encryption.hashEmailForLookup(normalized);
       updateData.email = this.encryption.encrypt(normalized);
     }
-    if (updateDto.firstName !== undefined)
-      updateData.firstName = this.encryption.encrypt(updateDto.firstName);
-    if (updateDto.lastName !== undefined)
-      updateData.lastName = this.encryption.encrypt(updateDto.lastName);
+    if (updateDto.firstName !== undefined) updateData.firstName = this.encryption.encrypt(updateDto.firstName);
+    if (updateDto.lastName !== undefined) updateData.lastName = this.encryption.encrypt(updateDto.lastName);
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },

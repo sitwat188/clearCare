@@ -207,10 +207,11 @@ export const exportAuditLogs = (logs: any[], format: 'csv' | 'json' | 'pdf' = 'c
     case 'json':
       exportToJSON(formattedLogs, filename);
       break;
-    case 'pdf':
+    case 'pdf': {
       const tableHTML = arrayToHTMLTable(formattedLogs);
       exportToPDF(tableHTML, filename, 'Audit Logs Report');
       break;
+    }
   }
 };
 
@@ -222,7 +223,7 @@ export const exportReport = (report: any, format: 'pdf' | 'csv' | 'json'): void 
   const filename = `${report.title || 'report'}-${timestamp}`.replace(/[^a-z0-9]/gi, '-').toLowerCase();
 
   switch (format) {
-    case 'csv':
+    case 'csv': {
       // Convert report data to array format
       const csvData = Object.entries(report.data || {}).map(([key, value]) => ({
         Metric: key,
@@ -230,10 +231,11 @@ export const exportReport = (report: any, format: 'pdf' | 'csv' | 'json'): void 
       }));
       exportToCSV(csvData, filename);
       break;
+    }
     case 'json':
       exportToJSON(report, filename);
       break;
-    case 'pdf':
+    case 'pdf': {
       // Create formatted PDF content
       let pdfContent = `
         <h2>${report.title}</h2>
@@ -241,7 +243,7 @@ export const exportReport = (report: any, format: 'pdf' | 'csv' | 'json'): void 
         <p><strong>Generated:</strong> ${new Date(report.generatedAt).toLocaleString()}</p>
         <p><strong>Date Range:</strong> ${new Date(report.dateRange.start).toLocaleDateString()} - ${new Date(report.dateRange.end).toLocaleDateString()}</p>
       `;
-      
+
       // Add data as table if it's an object
       if (report.data && typeof report.data === 'object') {
         const dataTable = arrayToHTMLTable(
@@ -252,9 +254,10 @@ export const exportReport = (report: any, format: 'pdf' | 'csv' | 'json'): void 
         );
         pdfContent += dataTable;
       }
-      
+
       exportToPDF(pdfContent, filename, report.title);
       break;
+    }
   }
 };
 

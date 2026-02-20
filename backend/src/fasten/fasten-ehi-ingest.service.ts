@@ -8,6 +8,26 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** Transaction client shape for the 4 health models (used to type $transaction callback). */
+interface TxHealthClient {
+  patientHealthObservation: {
+    deleteMany: (args: { where: { connectionId: string } }) => Promise<unknown>;
+    createMany: (args: { data: unknown[] }) => Promise<unknown>;
+  };
+  patientHealthMedication: {
+    deleteMany: (args: { where: { connectionId: string } }) => Promise<unknown>;
+    createMany: (args: { data: unknown[] }) => Promise<unknown>;
+  };
+  patientHealthCondition: {
+    deleteMany: (args: { where: { connectionId: string } }) => Promise<unknown>;
+    createMany: (args: { data: unknown[] }) => Promise<unknown>;
+  };
+  patientHealthEncounter: {
+    deleteMany: (args: { where: { connectionId: string } }) => Promise<unknown>;
+    createMany: (args: { data: unknown[] }) => Promise<unknown>;
+  };
+}
+
 interface FhirResource {
   resourceType?: string;
   id?: string;
@@ -129,14 +149,11 @@ export class FastenEhiIngestService {
         continue;
       }
       const rt = resource.resourceType;
-      if (rt === 'Observation')
-        this.pushObservation(resource, connectionId, patientId, observations);
+      if (rt === 'Observation') this.pushObservation(resource, connectionId, patientId, observations);
       else if (rt === 'MedicationRequest' || rt === 'MedicationStatement')
         this.pushMedication(resource, connectionId, patientId, medications);
-      else if (rt === 'Condition')
-        this.pushCondition(resource, connectionId, patientId, conditions);
-      else if (rt === 'Encounter')
-        this.pushEncounter(resource, connectionId, patientId, encounters);
+      else if (rt === 'Condition') this.pushCondition(resource, connectionId, patientId, conditions);
+      else if (rt === 'Encounter') this.pushEncounter(resource, connectionId, patientId, encounters);
     }
 
     const BATCH = 80;
@@ -144,36 +161,37 @@ export class FastenEhiIngestService {
     try {
       await this.prisma.$transaction(
         async (tx) => {
-          await tx.patientHealthObservation.deleteMany({
+          const db = tx as unknown as TxHealthClient;
+          await db.patientHealthObservation.deleteMany({
             where: { connectionId },
           });
-          await tx.patientHealthMedication.deleteMany({
+          await db.patientHealthMedication.deleteMany({
             where: { connectionId },
           });
-          await tx.patientHealthCondition.deleteMany({
+          await db.patientHealthCondition.deleteMany({
             where: { connectionId },
           });
-          await tx.patientHealthEncounter.deleteMany({
+          await db.patientHealthEncounter.deleteMany({
             where: { connectionId },
           });
 
           for (let i = 0; i < observations.length; i += BATCH) {
-            await tx.patientHealthObservation.createMany({
+            await db.patientHealthObservation.createMany({
               data: observations.slice(i, i + BATCH),
             });
           }
           for (let i = 0; i < medications.length; i += BATCH) {
-            await tx.patientHealthMedication.createMany({
+            await db.patientHealthMedication.createMany({
               data: medications.slice(i, i + BATCH),
             });
           }
           for (let i = 0; i < conditions.length; i += BATCH) {
-            await tx.patientHealthCondition.createMany({
+            await db.patientHealthCondition.createMany({
               data: conditions.slice(i, i + BATCH),
             });
           }
           for (let i = 0; i < encounters.length; i += BATCH) {
-            await tx.patientHealthEncounter.createMany({
+            await db.patientHealthEncounter.createMany({
               data: encounters.slice(i, i + BATCH),
             });
           }
@@ -188,9 +206,7 @@ export class FastenEhiIngestService {
         msg.includes('column') ||
         msg.includes('does not exist')
       ) {
-        this.logger.error(
-          `EHI ingest failed (missing DB columns?). Run: npx prisma migrate deploy. Original: ${msg}`,
-        );
+        this.logger.error(`EHI ingest failed (missing DB columns?). Run: npx prisma migrate deploy. Original: ${msg}`);
       }
       throw err;
     }
@@ -237,8 +253,7 @@ export class FastenEhiIngestService {
     const code = r.code?.coding?.[0]?.code ?? r.code?.text ?? null;
     const display = r.code?.coding?.[0]?.display ?? r.code?.text ?? null;
     const cat = r.category?.[0];
-    const category =
-      cat?.coding?.[0]?.code ?? cat?.coding?.[0]?.display ?? cat?.text ?? null;
+    const category = cat?.coding?.[0]?.code ?? cat?.coding?.[0]?.display ?? cat?.text ?? null;
     let value: string | null = null;
     let unit: string | null = null;
     if (r.valueQuantity != null) {
@@ -248,9 +263,7 @@ export class FastenEhiIngestService {
       value = v != null ? `${v} ${u}`.trim() : null;
     } else if (typeof r.valueString === 'string') value = r.valueString;
     else if (r.valueCodeableConcept?.text) value = r.valueCodeableConcept.text;
-    const effectiveAt = this.parseDate(
-      r.effectiveDateTime ?? r.effectivePeriod?.start,
-    );
+    const effectiveAt = this.parseDate(r.effectiveDateTime ?? r.effectivePeriod?.start);
     out.push({
       id: this.newId(),
       connectionId,
@@ -295,12 +308,8 @@ export class FastenEhiIngestService {
       const d = di.doseAndRate[0];
       const doseQ = d.doseQuantity;
       const parts: string[] = [];
-      if (doseQ?.value != null)
-        parts.push(`${doseQ.value} ${doseQ.unit ?? ''}`.trim());
-      if (d.rateQuantity?.value != null)
-        parts.push(
-          `${d.rateQuantity.value} ${d.rateQuantity.unit ?? ''}/day`.trim(),
-        );
+      if (doseQ?.value != null) parts.push(`${doseQ.value} ${doseQ.unit ?? ''}`.trim());
+      if (d.rateQuantity?.value != null) parts.push(`${d.rateQuantity.value} ${d.rateQuantity.unit ?? ''}/day`.trim());
       if (parts.length) dosage = parts.join(', ');
     }
     out.push({

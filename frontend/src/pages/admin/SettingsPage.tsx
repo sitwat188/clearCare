@@ -29,9 +29,10 @@ import {
 import { toast } from 'react-toastify';
 import { adminService } from '../../services/adminService';
 import PageHeader from '../../components/common/PageHeader';
+import { SystemSettings } from '../../types/admin.types';
 
 const AdminSettings = () => {
-  const [settings, setSettings] = useState<any>(null);
+  const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
   const { data: systemSettings, isLoading } = useQuery({
@@ -46,7 +47,7 @@ const AdminSettings = () => {
     }
   }, [systemSettings]);
 
-  const handleSettingChange = (field: string, value: any) => {
+  const handleSettingChange = (field: string, value: string | number | boolean) => {
     if (!settings) return;
     setSettings({
       ...settings,
@@ -55,30 +56,40 @@ const AdminSettings = () => {
     setHasChanges(true);
   };
 
-  const handleNestedSettingChange = (section: string, field: string, value: any) => {
+  const handleNestedSettingChange = (
+    section: string,
+    field: string,
+    value: string | number | boolean | string[],
+  ) => {
     if (!settings) return;
     setSettings({
       ...settings,
       [section]: {
-        ...settings[section],
+        ...(settings[section as keyof SystemSettings] as object),
         [field]: value,
       },
-    });
+    } as SystemSettings);
     setHasChanges(true);
   };
 
-  const handleDeepNestedSettingChange = (section: string, subsection: string, field: string, value: any) => {
+  const handleDeepNestedSettingChange = (
+    section: string,
+    subsection: string,
+    field: string,
+    value: string | number | boolean,
+  ) => {
     if (!settings) return;
+    const sectionSettings = settings[section as keyof SystemSettings] as Record<string, unknown>;
     setSettings({
       ...settings,
       [section]: {
-        ...settings[section],
+        ...sectionSettings,
         [subsection]: {
-          ...settings[section][subsection],
+          ...(sectionSettings[subsection] as object),
           [field]: value,
         },
       },
-    });
+    } as SystemSettings);
     setHasChanges(true);
   };
 

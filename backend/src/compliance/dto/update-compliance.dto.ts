@@ -14,13 +14,13 @@ export class UpdateComplianceDto {
 
   @IsOptional()
   @IsObject({ message: 'Medication compliance data must be an object' })
-  medicationCompliance?: any;
+  medicationCompliance?: object;
 
   @IsOptional()
   @IsObject({ message: 'Lifestyle compliance data must be an object' })
-  lifestyleCompliance?: any;
+  lifestyleCompliance?: object;
 
   @IsOptional()
   @IsObject({ message: 'Appointment compliance data must be an object' })
-  appointmentCompliance?: any;
+  appointmentCompliance?: object;
 }

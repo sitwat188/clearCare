@@ -1,13 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Body,
-  Param,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { PatientsService } from './patients.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -31,17 +23,11 @@ export class PatientsController {
     @Body() createDto: CreatePatientDto,
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    return this.patientsService.createPatient(
-      createDto,
-      requestingUserId,
-      requestingUserRole,
-      ipAddress,
-      userAgent,
-    );
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.patientsService.createPatient(createDto, requestingUserId, requestingUserRole, ipAddress, userAgent);
   }
 
   /**
@@ -49,14 +35,8 @@ export class PatientsController {
    * GET /api/v1/patients
    */
   @Get()
-  async getPatients(
-    @CurrentUser('id') requestingUserId: string,
-    @CurrentUser('role') requestingUserRole: string,
-  ) {
-    return this.patientsService.getPatients(
-      requestingUserId,
-      requestingUserRole,
-    );
+  async getPatients(@CurrentUser('id') requestingUserId: string, @CurrentUser('role') requestingUserRole: string) {
+    return this.patientsService.getPatients(requestingUserId, requestingUserRole);
   }
 
   /**
@@ -66,10 +46,7 @@ export class PatientsController {
   @Get('by-user/:userId')
   @UseGuards(RolesGuard)
   @Roles('administrator')
-  async getPatientByUserId(
-    @Param('userId') userId: string,
-    @CurrentUser('role') requestingUserRole: string,
-  ) {
+  async getPatientByUserId(@Param('userId') userId: string, @CurrentUser('role') requestingUserRole: string) {
     return this.patientsService.getPatientByUserId(userId, requestingUserRole);
   }
 
@@ -83,11 +60,7 @@ export class PatientsController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.patientsService.getPatient(
-      patientId,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.patientsService.getPatient(patientId, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -100,10 +73,10 @@ export class PatientsController {
     @Body() updateDto: UpdatePatientDto,
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.patientsService.updatePatient(
       patientId,
       updateDto,

@@ -10,13 +10,7 @@ import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    InstructionsModule,
-    ComplianceModule,
-    UsersModule,
-    NotificationsModule,
-  ],
+  imports: [PrismaModule, InstructionsModule, ComplianceModule, UsersModule, NotificationsModule],
   controllers: [PatientsController, PatientsMeController],
   providers: [PatientsService, RolesGuard],
   exports: [PatientsService],

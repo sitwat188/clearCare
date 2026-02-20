@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
+import type { ChipProps } from '@mui/material';
 import {
   Typography,
   Box,
@@ -141,7 +142,7 @@ const PatientInstructionDetail = () => {
             />
             <Chip
               label={PRIORITY_LEVELS.find((p) => p.value === instruction.priority)?.label || instruction.priority}
-              color={PRIORITY_LEVELS.find((p) => p.value === instruction.priority)?.color as any}
+              color={PRIORITY_LEVELS.find((p) => p.value === instruction.priority)?.color as ChipProps['color']}
               sx={{ fontWeight: 600 }}
             />
             <Chip

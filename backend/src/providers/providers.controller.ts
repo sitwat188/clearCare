@@ -1,14 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -42,10 +33,7 @@ export class ProvidersController {
    * GET /api/v1/providers/reports
    */
   @Get('reports')
-  async getReports(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  getReports(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     if (role !== 'provider') return [];
     return this.reportsService.getReports(userId);
   }
@@ -70,10 +58,7 @@ export class ProvidersController {
    * GET /api/v1/providers/templates
    */
   @Get('templates')
-  async getTemplates(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getTemplates(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     if (role !== 'provider') return [];
     return this.templatesService.getTemplates(userId);
   }
@@ -82,10 +67,7 @@ export class ProvidersController {
    * POST /api/v1/providers/templates
    */
   @Post('templates')
-  async createTemplate(
-    @CurrentUser('id') userId: string,
-    @Body() dto: CreateTemplateDto,
-  ) {
+  async createTemplate(@CurrentUser('id') userId: string, @Body() dto: CreateTemplateDto) {
     return this.templatesService.createTemplate(userId, dto);
   }
 
@@ -93,10 +75,7 @@ export class ProvidersController {
    * GET /api/v1/providers/templates/:id
    */
   @Get('templates/:id')
-  async getTemplate(
-    @Param('id') id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  async getTemplate(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.templatesService.getTemplate(id, userId);
   }
 
@@ -104,11 +83,7 @@ export class ProvidersController {
    * PUT /api/v1/providers/templates/:id
    */
   @Put('templates/:id')
-  async updateTemplate(
-    @Param('id') id: string,
-    @CurrentUser('id') userId: string,
-    @Body() dto: UpdateTemplateDto,
-  ) {
+  async updateTemplate(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() dto: UpdateTemplateDto) {
     return this.templatesService.updateTemplate(id, userId, dto);
   }
 
@@ -116,10 +91,7 @@ export class ProvidersController {
    * DELETE /api/v1/providers/templates/:id
    */
   @Delete('templates/:id')
-  async deleteTemplate(
-    @Param('id') id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  async deleteTemplate(@Param('id') id: string, @CurrentUser('id') userId: string) {
     await this.templatesService.deleteTemplate(id, userId);
   }
 
@@ -128,10 +100,7 @@ export class ProvidersController {
    * List instructions (for assigned patients)
    */
   @Get('instructions')
-  async getInstructions(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getInstructions(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.instructionsService.getInstructions(userId, role, {});
   }
 
@@ -139,11 +108,7 @@ export class ProvidersController {
    * GET /api/v1/providers/instructions/:id
    */
   @Get('instructions/:id')
-  async getInstruction(
-    @Param('id') id: string,
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getInstruction(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.instructionsService.getInstruction(id, userId, role);
   }
 
@@ -155,17 +120,11 @@ export class ProvidersController {
     @Body() body: CreateInstructionDto,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    return this.instructionsService.createInstruction(
-      body,
-      userId,
-      role,
-      ipAddress,
-      userAgent,
-    );
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.instructionsService.createInstruction(body, userId, role, ipAddress, userAgent);
   }
 
   /**
@@ -177,18 +136,11 @@ export class ProvidersController {
     @Body() body: UpdateInstructionDto,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    return this.instructionsService.updateInstruction(
-      id,
-      body,
-      userId,
-      role,
-      ipAddress,
-      userAgent,
-    );
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.instructionsService.updateInstruction(id, body, userId, role, ipAddress, userAgent);
   }
 
   /**
@@ -199,17 +151,11 @@ export class ProvidersController {
     @Param('id') id: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
-    return this.instructionsService.deleteInstruction(
-      id,
-      userId,
-      role,
-      ipAddress,
-      userAgent,
-    );
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
+    return this.instructionsService.deleteInstruction(id, userId, role, ipAddress, userAgent);
   }
 
   /**
@@ -217,10 +163,7 @@ export class ProvidersController {
    * List patients (access control: provider sees only assigned, admin sees all)
    */
   @Get('patients')
-  async getPatients(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getPatients(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.patientsService.getPatients(userId, role);
   }
 
@@ -257,11 +200,7 @@ export class ProvidersController {
    * GET /api/v1/providers/patients/:id
    */
   @Get('patients/:id')
-  async getPatient(
-    @Param('id') id: string,
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getPatient(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.patientsService.getPatient(id, userId, role);
   }
 }

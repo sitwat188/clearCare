@@ -32,9 +32,7 @@ export class FastenConnectService {
   private authHeader: string | null = null;
 
   constructor(private config: ConfigService) {
-    const rawBase =
-      this.getEnvValue('FASTEN_BASE_URL')?.replace(/\/+$/, '') ||
-      DEFAULT_BASE_URL;
+    const rawBase = this.getEnvValue('FASTEN_BASE_URL')?.replace(/\/+$/, '') || DEFAULT_BASE_URL;
     // Accept either ".../v1" or "..." and normalize to include "/v1"
     this.baseUrl = rawBase.match(/\/v\d+$/) ? rawBase : `${rawBase}/v1`;
     this.initAuth();
@@ -90,9 +88,7 @@ export class FastenConnectService {
     return `${this.baseUrl}/bridge/connect?${params.toString()}`;
   }
 
-  async getConnectionStatus(
-    orgConnectionId: string,
-  ): Promise<FastenConnectionStatus | null> {
+  async getConnectionStatus(orgConnectionId: string): Promise<FastenConnectionStatus | null> {
     if (!this.authHeader) return null;
     const url = `${this.baseUrl}/bridge/org_connection/${encodeURIComponent(orgConnectionId)}`;
     try {
@@ -104,9 +100,7 @@ export class FastenConnectService {
         },
       });
       if (!res.ok) {
-        this.logger.warn(
-          `Fasten getConnectionStatus ${orgConnectionId}: ${res.status}`,
-        );
+        this.logger.warn(`Fasten getConnectionStatus ${orgConnectionId}: ${res.status}`);
         return null;
       }
       const json = (await res.json()) as {
@@ -121,13 +115,9 @@ export class FastenConnectService {
     }
   }
 
-  async requestEhiExport(
-    orgConnectionId: string,
-  ): Promise<FastenEhiExportResponse | null> {
+  async requestEhiExport(orgConnectionId: string): Promise<FastenEhiExportResponse | null> {
     if (!this.authHeader) {
-      this.logger.warn(
-        'Fasten requestEhiExport skipped: missing FASTEN_PUBLIC_ID/FASTEN_PRIVATE_KEY',
-      );
+      this.logger.warn('Fasten requestEhiExport skipped: missing FASTEN_PUBLIC_ID/FASTEN_PRIVATE_KEY');
       return null;
     }
     const url = `${this.baseUrl}/bridge/fhir/ehi-export`;
@@ -142,9 +132,7 @@ export class FastenConnectService {
         body: JSON.stringify({ org_connection_id: orgConnectionId }),
       });
       if (!res.ok) {
-        this.logger.warn(
-          `Fasten requestEhiExport ${orgConnectionId}: ${res.status}`,
-        );
+        this.logger.warn(`Fasten requestEhiExport ${orgConnectionId}: ${res.status}`);
         return null;
       }
       const json = (await res.json()) as {

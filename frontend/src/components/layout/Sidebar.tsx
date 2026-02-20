@@ -56,9 +56,7 @@ import { ROUTES } from '../../config/routes';
 import { logout } from '../../store/slices/authSlice';
 import { APP_NAME } from '../../utils/constants';
 import { notificationService } from '../../services/notificationService';
-
-const drawerWidth = 240;
-const collapsedWidth = 64;
+import { drawerWidth, collapsedWidth } from './layoutConstants';
 
 const Sidebar = () => {
   const { t } = useTranslation();
@@ -596,4 +594,3 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
-export { drawerWidth, collapsedWidth };

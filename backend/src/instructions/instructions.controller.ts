@@ -1,15 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { InstructionsService } from './instructions.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -32,10 +22,10 @@ export class InstructionsController {
     @Body() createDto: CreateInstructionDto,
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.instructionsService.createInstruction(
       createDto,
       requestingUserId,
@@ -57,15 +47,11 @@ export class InstructionsController {
     @Query('status') status?: string,
     @Query('type') type?: string,
   ) {
-    return this.instructionsService.getInstructions(
-      requestingUserId,
-      requestingUserRole,
-      {
-        patientId,
-        status,
-        type,
-      },
-    );
+    return this.instructionsService.getInstructions(requestingUserId, requestingUserRole, {
+      patientId,
+      status,
+      type,
+    });
   }
 
   /**
@@ -78,11 +64,7 @@ export class InstructionsController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.instructionsService.getInstruction(
-      instructionId,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.instructionsService.getInstruction(instructionId, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -96,10 +78,10 @@ export class InstructionsController {
     @Body() updateDto: UpdateInstructionDto,
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.instructionsService.updateInstruction(
       instructionId,
       updateDto,
@@ -120,10 +102,10 @@ export class InstructionsController {
     @Param('id') instructionId: string,
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.instructionsService.deleteInstruction(
       instructionId,
       requestingUserId,
@@ -144,10 +126,10 @@ export class InstructionsController {
     @Body() acknowledgeDto: AcknowledgeInstructionDto,
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
-    @Req() req: any,
+    @Req() req: Request,
   ) {
-    const ipAddress = req.ip || req.connection?.remoteAddress;
-    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
+    const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
     return this.instructionsService.acknowledgeInstruction(
       instructionId,
       acknowledgeDto,

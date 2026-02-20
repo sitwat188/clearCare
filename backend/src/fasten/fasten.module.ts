@@ -11,17 +11,8 @@ import { FastenWebhookController } from './fasten-webhook.controller';
 
 @Module({
   imports: [ConfigModule, PrismaModule],
-  controllers: [
-    HealthConnectionsMeController,
-    HealthConnectionsPatientController,
-    FastenWebhookController,
-  ],
-  providers: [
-    FastenConnectService,
-    HealthConnectionsService,
-    FastenEhiIngestService,
-    FastenWebhookService,
-  ],
+  controllers: [HealthConnectionsMeController, HealthConnectionsPatientController, FastenWebhookController],
+  providers: [FastenConnectService, HealthConnectionsService, FastenEhiIngestService, FastenWebhookService],
   exports: [FastenConnectService, HealthConnectionsService],
 })
 export class FastenModule {}

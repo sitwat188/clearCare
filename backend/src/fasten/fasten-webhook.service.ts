@@ -45,8 +45,7 @@ export class FastenWebhookService {
     const orgConnectionId = data.org_connection_id ?? (data as { org_connection_id?: string }).org_connection_id;
     if (!orgConnectionId) {
       this.logger.warn(
-        'EHI export_success missing org_connection_id. Keys in data: ' +
-          Object.keys(data || {}).join(', '),
+        'EHI export_success missing org_connection_id. Keys in data: ' + Object.keys(data || {}).join(', '),
       );
       return;
     }

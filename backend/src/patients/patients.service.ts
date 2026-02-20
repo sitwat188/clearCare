@@ -1,14 +1,28 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
+
+/** Shape passed to toPatientResponse (Prisma patient with include: { user, patientProviders }). */
+interface PatientWithRelations {
+  user?: { firstName?: string; lastName?: string; email?: string } | null;
+  patientProviders?: Array<{ providerId: string }> | null;
+  addressStreet?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
+  addressZipCode?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactRelationship?: string | null;
+  emergencyContactPhone?: string | null;
+  dateOfBirth?: string | null;
+  medicalRecordNumber?: string | null;
+  phone?: string | null;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  [key: string]: unknown;
+}
 
 @Injectable()
 export class PatientsService {
@@ -31,9 +45,7 @@ export class PatientsService {
   ) {
     // HIPAA: Only administrators can create patient records
     if (requestingUserRole !== 'administrator') {
-      throw new ForbiddenException(
-        'Only administrators can create patient records',
-      );
+      throw new ForbiddenException('Only administrators can create patient records');
     }
 
     // Check if user exists
@@ -51,9 +63,7 @@ export class PatientsService {
     });
 
     if (existingPatient) {
-      throw new BadRequestException(
-        'Patient record already exists for this user',
-      );
+      throw new BadRequestException('Patient record already exists for this user');
     }
 
     // Create patient record (encrypt PHI at rest)
@@ -62,30 +72,15 @@ export class PatientsService {
       data: {
         userId: createDto.userId,
         dateOfBirth: this.encryption.encrypt(createDto.dateOfBirth ?? '') || '',
-        medicalRecordNumber:
-          this.encryption.encrypt(createDto.medicalRecordNumber ?? '') || '',
-        phone: createDto.phone
-          ? this.encryption.encrypt(createDto.phone)
-          : null,
-        addressStreet: createDto.addressStreet
-          ? this.encryption.encrypt(createDto.addressStreet)
-          : null,
-        addressCity: createDto.addressCity
-          ? this.encryption.encrypt(createDto.addressCity)
-          : null,
-        addressState: createDto.addressState
-          ? this.encryption.encrypt(createDto.addressState)
-          : null,
-        addressZipCode: createDto.addressZipCode
-          ? this.encryption.encrypt(createDto.addressZipCode)
-          : null,
+        medicalRecordNumber: this.encryption.encrypt(createDto.medicalRecordNumber ?? '') || '',
+        phone: createDto.phone ? this.encryption.encrypt(createDto.phone) : null,
+        addressStreet: createDto.addressStreet ? this.encryption.encrypt(createDto.addressStreet) : null,
+        addressCity: createDto.addressCity ? this.encryption.encrypt(createDto.addressCity) : null,
+        addressState: createDto.addressState ? this.encryption.encrypt(createDto.addressState) : null,
+        addressZipCode: createDto.addressZipCode ? this.encryption.encrypt(createDto.addressZipCode) : null,
         emergencyContactName:
           (createDto.emergencyContactName ?? createDto.emergencyContact)
-            ? this.encryption.encrypt(
-                createDto.emergencyContactName ??
-                  createDto.emergencyContact ??
-                  '',
-              )
+            ? this.encryption.encrypt(createDto.emergencyContactName ?? createDto.emergencyContact ?? '')
             : null,
         emergencyContactRelationship: createDto.emergencyContactRelationship
           ? this.encryption.encrypt(createDto.emergencyContactRelationship)
@@ -129,11 +124,7 @@ export class PatientsService {
    * Get patient by ID
    * HIPAA: Row-level access - patients can only see their own data, providers can see assigned patients
    */
-  async getPatient(
-    patientId: string,
-    requestingUserId: string,
-    requestingUserRole: string,
-  ) {
+  async getPatient(patientId: string, requestingUserId: string, requestingUserRole: string) {
     const patient = await this.prisma.patient.findFirst({
       where: { id: patientId, deletedAt: null },
       include: {
@@ -154,16 +145,12 @@ export class PatientsService {
     // HIPAA: Row-level access control
     if (requestingUserRole === 'patient') {
       if (patient.userId !== requestingUserId) {
-        throw new ForbiddenException(
-          'You can only access your own patient data',
-        );
+        throw new ForbiddenException('You can only access your own patient data');
       }
     } else if (requestingUserRole === 'provider') {
       const assignedProviderIds = patient.patientProviders?.map((pp) => pp.providerId) ?? [];
       if (!assignedProviderIds.includes(requestingUserId)) {
-        throw new ForbiddenException(
-          'You can only access patients assigned to you',
-        );
+        throw new ForbiddenException('You can only access patients assigned to you');
       }
     }
 
@@ -171,21 +158,16 @@ export class PatientsService {
   }
 
   /** Map DB patient (with user) to frontend-friendly shape; decrypt PHI for API response */
-  private toPatientResponse(patient: any) {
+  private toPatientResponse(patient: PatientWithRelations): Record<string, unknown> {
     const { user: u, patientProviders, ...rest } = patient;
-    const assignedProviderIds =
-      patientProviders?.map((pp: { providerId: string }) => pp.providerId) ?? [];
+    const assignedProviderIds = patientProviders?.map((pp: { providerId: string }) => pp.providerId) ?? [];
     const street = this.encryption.decrypt(patient.addressStreet);
     const city = this.encryption.decrypt(patient.addressCity);
     const state = this.encryption.decrypt(patient.addressState);
     const zipCode = this.encryption.decrypt(patient.addressZipCode);
     const emergencyName = this.encryption.decrypt(patient.emergencyContactName);
-    const emergencyRel = this.encryption.decrypt(
-      patient.emergencyContactRelationship,
-    );
-    const emergencyPhone = this.encryption.decrypt(
-      patient.emergencyContactPhone,
-    );
+    const emergencyRel = this.encryption.decrypt(patient.emergencyContactRelationship);
+    const emergencyPhone = this.encryption.decrypt(patient.emergencyContactPhone);
     return {
       ...rest,
       assignedProviderIds,
@@ -219,9 +201,9 @@ export class PatientsService {
               phone: emergencyPhone ?? '',
             }
           : undefined,
-      createdAt: patient.createdAt?.toISOString?.() ?? patient.createdAt,
-      updatedAt: patient.updatedAt?.toISOString?.() ?? patient.updatedAt,
-    };
+      createdAt: patient.createdAt instanceof Date ? patient.createdAt.toISOString() : patient.createdAt,
+      updatedAt: patient.updatedAt instanceof Date ? patient.updatedAt.toISOString() : patient.updatedAt,
+    } as Record<string, unknown>;
   }
 
   /**
@@ -230,9 +212,7 @@ export class PatientsService {
    */
   async getPatientByUserId(userId: string, requestingUserRole: string) {
     if (requestingUserRole !== 'administrator') {
-      throw new ForbiddenException(
-        'Only administrators can look up patient by user ID',
-      );
+      throw new ForbiddenException('Only administrators can look up patient by user ID');
     }
     const patient = await this.prisma.patient.findFirst({
       where: { userId, deletedAt: null },
@@ -243,7 +223,10 @@ export class PatientsService {
     }
     const withProviders = await this.prisma.patient.findFirst({
       where: { id: patient.id },
-      include: { user: true, patientProviders: { select: { providerId: true } } },
+      include: {
+        user: true,
+        patientProviders: { select: { providerId: true } },
+      },
     });
     return withProviders ? this.toPatientResponse(withProviders) : this.toPatientResponse(patient);
   }
@@ -333,15 +316,11 @@ export class PatientsService {
         where: { id: requestingUserId, deletedAt: null },
       });
       if (user && patient.userId !== requestingUserId) {
-        throw new ForbiddenException(
-          'You can only update your own patient data',
-        );
+        throw new ForbiddenException('You can only update your own patient data');
       }
     } else if (requestingUserRole === 'provider') {
       if (!assignedProviderIds.includes(requestingUserId)) {
-        throw new ForbiddenException(
-          'You can only update patients assigned to you',
-        );
+        throw new ForbiddenException('You can only update patients assigned to you');
       }
     }
 
@@ -353,38 +332,22 @@ export class PatientsService {
     };
 
     const data: Record<string, unknown> = {};
-    if (updateDto.dateOfBirth != null)
-      data.dateOfBirth = this.encryption.encrypt(updateDto.dateOfBirth);
+    if (updateDto.dateOfBirth != null) data.dateOfBirth = this.encryption.encrypt(updateDto.dateOfBirth);
     if (updateDto.medicalRecordNumber != null)
-      data.medicalRecordNumber = this.encryption.encrypt(
-        updateDto.medicalRecordNumber,
-      );
-    if (updateDto.phone != null)
-      data.phone = this.encryption.encrypt(updateDto.phone);
-    if (updateDto.addressStreet != null)
-      data.addressStreet = this.encryption.encrypt(updateDto.addressStreet);
-    if (updateDto.addressCity != null)
-      data.addressCity = this.encryption.encrypt(updateDto.addressCity);
-    if (updateDto.addressState != null)
-      data.addressState = this.encryption.encrypt(updateDto.addressState);
-    if (updateDto.addressZipCode != null)
-      data.addressZipCode = this.encryption.encrypt(updateDto.addressZipCode);
+      data.medicalRecordNumber = this.encryption.encrypt(updateDto.medicalRecordNumber);
+    if (updateDto.phone != null) data.phone = this.encryption.encrypt(updateDto.phone);
+    if (updateDto.addressStreet != null) data.addressStreet = this.encryption.encrypt(updateDto.addressStreet);
+    if (updateDto.addressCity != null) data.addressCity = this.encryption.encrypt(updateDto.addressCity);
+    if (updateDto.addressState != null) data.addressState = this.encryption.encrypt(updateDto.addressState);
+    if (updateDto.addressZipCode != null) data.addressZipCode = this.encryption.encrypt(updateDto.addressZipCode);
     if (updateDto.emergencyContact != null)
-      data.emergencyContactName = this.encryption.encrypt(
-        updateDto.emergencyContact,
-      );
+      data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContact);
     if (updateDto.emergencyContactName != null)
-      data.emergencyContactName = this.encryption.encrypt(
-        updateDto.emergencyContactName,
-      );
+      data.emergencyContactName = this.encryption.encrypt(updateDto.emergencyContactName);
     if (updateDto.emergencyContactRelationship != null)
-      data.emergencyContactRelationship = this.encryption.encrypt(
-        updateDto.emergencyContactRelationship,
-      );
+      data.emergencyContactRelationship = this.encryption.encrypt(updateDto.emergencyContactRelationship);
     if (updateDto.emergencyContactPhone != null)
-      data.emergencyContactPhone = this.encryption.encrypt(
-        updateDto.emergencyContactPhone,
-      );
+      data.emergencyContactPhone = this.encryption.encrypt(updateDto.emergencyContactPhone);
 
     await this.prisma.patient.update({
       where: { id: patientId },
@@ -411,7 +374,10 @@ export class PatientsService {
     // Create history entry
     const updatedPatient = await this.prisma.patient.findFirst({
       where: { id: patientId },
-      include: { user: true, patientProviders: { select: { providerId: true } } },
+      include: {
+        user: true,
+        patientProviders: { select: { providerId: true } },
+      },
     });
     await this.prisma.patientHistory.create({
       data: {
@@ -432,21 +398,14 @@ export class PatientsService {
     });
 
     // When admin assigns providers, notify the patient and each newly assigned provider
-    if (
-      requestingUserRole === 'administrator' &&
-      updateDto.assignedProviderIds != null &&
-      updatedPatient?.user
-    ) {
-      const newProviderIds = updateDto.assignedProviderIds.filter(
-        (id: string) => !previousProviderIds.includes(id),
-      );
+    if (requestingUserRole === 'administrator' && updateDto.assignedProviderIds != null && updatedPatient?.user) {
+      const newProviderIds = updateDto.assignedProviderIds.filter((id: string) => !previousProviderIds.includes(id));
       const patientName =
         `${updatedPatient.user.firstName ?? ''} ${updatedPatient.user.lastName ?? ''}`.trim() ||
         updatedPatient.user.email;
 
       if (newProviderIds.length > 0) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- NotificationsService.createNotification
           await this.notifications.createNotification({
             userId: updatedPatient.userId,
             type: 'provider_assigned',
@@ -465,7 +424,6 @@ export class PatientsService {
         });
         for (const prov of providers) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- NotificationsService.createNotification
             await this.notifications.createNotification({
               userId: prov.id,
               type: 'provider_assigned',
@@ -482,8 +440,6 @@ export class PatientsService {
       }
     }
 
-    return updatedPatient
-      ? this.toPatientResponse(updatedPatient)
-      : (null as any);
+    return updatedPatient ? this.toPatientResponse(updatedPatient) : null;
   }
 }

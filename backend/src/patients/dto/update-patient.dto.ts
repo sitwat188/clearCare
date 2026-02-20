@@ -1,10 +1,4 @@
-import {
-  IsDateString,
-  IsOptional,
-  IsEnum,
-  IsString,
-  IsArray,
-} from 'class-validator';
+import { IsDateString, IsOptional, IsEnum, IsString, IsArray } from 'class-validator';
 import { Gender } from './create-patient.dto';
 
 export class UpdatePatientDto {

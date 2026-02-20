@@ -1,4 +1,4 @@
-import { IsString, Length, Matches } from 'class-validator';
+import { IsString, Length } from 'class-validator';
 
 export class VerifyTwoFactorDto {
   /** Short-lived token returned from login when user has 2FA enabled */

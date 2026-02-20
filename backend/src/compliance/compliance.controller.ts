@@ -1,13 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ComplianceService } from './compliance.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -31,11 +22,7 @@ export class ComplianceController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.complianceService.createComplianceRecord(
-      createDto,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.complianceService.createComplianceRecord(createDto, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -50,15 +37,11 @@ export class ComplianceController {
     @Query('patientId') patientId?: string,
     @Query('type') type?: string,
   ) {
-    return this.complianceService.getComplianceRecords(
-      requestingUserId,
-      requestingUserRole,
-      {
-        instructionId,
-        patientId,
-        type,
-      },
-    );
+    return this.complianceService.getComplianceRecords(requestingUserId, requestingUserRole, {
+      instructionId,
+      patientId,
+      type,
+    });
   }
 
   /**
@@ -71,11 +54,7 @@ export class ComplianceController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.complianceService.getComplianceRecord(
-      recordId,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.complianceService.getComplianceRecord(recordId, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -89,12 +68,7 @@ export class ComplianceController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.complianceService.updateComplianceRecord(
-      recordId,
-      updateDto,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.complianceService.updateComplianceRecord(recordId, updateDto, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -108,12 +82,7 @@ export class ComplianceController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.complianceService.updateMedicationAdherence(
-      recordId,
-      updateDto,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.complianceService.updateMedicationAdherence(recordId, updateDto, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -127,12 +96,7 @@ export class ComplianceController {
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
   ) {
-    return this.complianceService.updateLifestyleCompliance(
-      recordId,
-      updateDto,
-      requestingUserId,
-      requestingUserRole,
-    );
+    return this.complianceService.updateLifestyleCompliance(recordId, updateDto, requestingUserId, requestingUserRole);
   }
 
   /**
@@ -146,13 +110,9 @@ export class ComplianceController {
     @Query('patientId') patientId?: string,
     @Query('instructionId') instructionId?: string,
   ) {
-    return this.complianceService.getComplianceMetrics(
-      requestingUserId,
-      requestingUserRole,
-      {
-        patientId,
-        instructionId,
-      },
-    );
+    return this.complianceService.getComplianceMetrics(requestingUserId, requestingUserRole, {
+      patientId,
+      instructionId,
+    });
   }
 }

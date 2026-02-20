@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Delete,
-  Body,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -25,10 +17,7 @@ export class HealthConnectionsMeController {
   constructor(private readonly healthConnections: HealthConnectionsService) {}
 
   @Get()
-  async listMyConnections(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async listMyConnections(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.healthConnections.listMyConnections(userId, role);
   }
 
@@ -44,10 +33,7 @@ export class HealthConnectionsMeController {
    * GET health-data: imported observations, medications, conditions, encounters from Fasten EHI export.
    */
   @Get('health-data')
-  async getMyHealthData(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('role') role: string,
-  ) {
+  async getMyHealthData(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.healthConnections.getMyHealthData(userId, role);
   }
 
@@ -57,12 +43,7 @@ export class HealthConnectionsMeController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    return this.healthConnections.addConnection(
-      userId,
-      role,
-      dto.orgConnectionId,
-      dto.sourceName,
-    );
+    return this.healthConnections.addConnection(userId, role, dto.orgConnectionId, dto.sourceName);
   }
 
   @Delete(':orgConnectionId')
@@ -71,11 +52,7 @@ export class HealthConnectionsMeController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    return this.healthConnections.removeConnection(
-      userId,
-      role,
-      orgConnectionId,
-    );
+    return this.healthConnections.removeConnection(userId, role, orgConnectionId);
   }
 
   @Get(':orgConnectionId/status')
@@ -84,10 +61,6 @@ export class HealthConnectionsMeController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
-    return this.healthConnections.getConnectionStatus(
-      orgConnectionId,
-      userId,
-      role,
-    );
+    return this.healthConnections.getConnectionStatus(orgConnectionId, userId, role);
   }
 }

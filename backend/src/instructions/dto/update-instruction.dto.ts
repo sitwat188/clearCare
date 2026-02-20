@@ -1,11 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsDateString,
-  IsBoolean,
-  IsObject,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsBoolean, IsObject } from 'class-validator';
 import { InstructionType, InstructionPriority } from './create-instruction.dto';
 
 export class UpdateInstructionDto {
@@ -29,19 +22,19 @@ export class UpdateInstructionDto {
 
   @IsOptional()
   @IsObject({ message: 'Medication details must be an object' })
-  medicationDetails?: any;
+  medicationDetails?: object;
 
   @IsOptional()
   @IsObject({ message: 'Lifestyle details must be an object' })
-  lifestyleDetails?: any;
+  lifestyleDetails?: object;
 
   @IsOptional()
   @IsObject({ message: 'Follow-up details must be an object' })
-  followUpDetails?: any;
+  followUpDetails?: object;
 
   @IsOptional()
   @IsObject({ message: 'Warning details must be an object' })
-  warningDetails?: any;
+  warningDetails?: object;
 
   @IsOptional()
   @IsDateString({}, { message: 'Assigned date must be a valid date' })

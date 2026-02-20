@@ -1,9 +1,5 @@
-import {
-  CallHandler,
-  ExecutionContext,
-  Injectable,
-  NestInterceptor,
-} from '@nestjs/common';
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { Observable, catchError, throwError, tap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -95,20 +91,19 @@ function inferResourceType(path: string): string {
 /** Path segment that looks like an ID (UUID, hex, or long opaque string). */
 const ID_LIKE = /^[0-9a-zA-Z_-]{8,}$/;
 /** Path segments that are route names, not IDs. */
-const NOT_IDS = new Set(['by-user', 'audit-logs', 'me', 'login', 'logout', 'refresh', 'forgot-password', 'reset-password']);
+const NOT_IDS = new Set([
+  'by-user',
+  'audit-logs',
+  'me',
+  'login',
+  'logout',
+  'refresh',
+  'forgot-password',
+  'reset-password',
+]);
 
-function inferResourceId(
-  params: Record<string, unknown> | undefined,
-  path: string,
-): string | undefined {
-  const candidates = [
-    'id',
-    'userId',
-    'patientId',
-    'instructionId',
-    'recordId',
-    'notificationId',
-  ];
+function inferResourceId(params: Record<string, unknown> | undefined, path: string): string | undefined {
+  const candidates = ['id', 'userId', 'patientId', 'instructionId', 'recordId', 'notificationId'];
   if (params && typeof params === 'object') {
     for (const key of candidates) {
       const v = params[key];
@@ -137,8 +132,8 @@ export class AuditLogInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const http = context.switchToHttp();
-    const req: any = http.getRequest();
-    const res: any = http.getResponse();
+    const req = http.getRequest<Request & { user?: RequestUser }>();
+    const res = http.getResponse<Response>();
 
     // Only log HTTP requests
     if (!req) return next.handle();
@@ -148,10 +143,10 @@ export class AuditLogInterceptor implements NestInterceptor {
     // Public endpoints (no req.user) are skipped to avoid invalid FK for userId.
     if (!user?.id) return next.handle();
 
-    const path: string = req.originalUrl || req.url || '';
-    const method: string = req.method || '';
-    const ipAddress: string = req.ip || req.connection?.remoteAddress || '';
-    const userAgent: string = req.headers?.['user-agent'] || '';
+    const path: string = req.originalUrl ?? req.url ?? '';
+    const method: string = req.method ?? '';
+    const ipAddress: string = req.ip ?? req.socket?.remoteAddress ?? '';
+    const userAgent: string = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : '';
 
     const action = inferAction(method, path);
     const resourceType = inferResourceType(path);
@@ -163,18 +158,10 @@ export class AuditLogInterceptor implements NestInterceptor {
       path,
       query: scrubObject(safeJson(req.query)),
       // For PHI resource types, never store body. Otherwise store scrubbed body for non-GET only.
-      body:
-        method.toUpperCase() === 'GET'
-          ? undefined
-          : isPhiResource
-            ? undefined
-            : scrubObject(safeJson(req.body)),
+      body: method.toUpperCase() === 'GET' ? undefined : isPhiResource ? undefined : scrubObject(safeJson(req.body)),
     };
 
-    const writeLog = async (
-      status: 'success' | 'failure' | 'denied',
-      errorMessage?: string,
-    ) => {
+    const writeLog = async (status: 'success' | 'failure' | 'denied', errorMessage?: string) => {
       try {
         const detailsPayload = {
           ...baseDetails,
@@ -210,12 +197,14 @@ export class AuditLogInterceptor implements NestInterceptor {
               : 'failure';
         void writeLog(status);
       }),
-      catchError((err) => {
-        const statusCode =
-          err?.status ?? err?.response?.statusCode ?? res?.statusCode;
+      catchError((err: unknown) => {
+        const e = err as { status?: number; response?: { statusCode?: number }; message?: string };
+        const statusCode = e?.status ?? e?.response?.statusCode ?? res?.statusCode;
         const status: 'success' | 'failure' | 'denied' =
           statusCode === 401 || statusCode === 403 ? 'denied' : 'failure';
-        void writeLog(status, err?.message ?? String(err));
+        const errorMessage =
+          e?.message ?? (err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error');
+        void writeLog(status, errorMessage);
         return throwError(() => err);
       }),
     );

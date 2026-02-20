@@ -1,10 +1,7 @@
 import { escapeHtml } from './escape';
 
 /** HTML body for password reset email (inline CSS for email client compatibility). */
-export function getPasswordResetEmailHtml(
-  requestedForEmail: string,
-  resetLink: string,
-): string {
+export function getPasswordResetEmailHtml(requestedForEmail: string, resetLink: string): string {
   const safeEmail = escapeHtml(requestedForEmail);
   const safeLink = escapeHtml(resetLink);
   const body = `

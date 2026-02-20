@@ -9,8 +9,7 @@ export enum AcknowledgmentType {
 export class AcknowledgeInstructionDto {
   @IsNotEmpty({ message: 'Acknowledgment type is required' })
   @IsEnum(AcknowledgmentType, {
-    message:
-      'Acknowledgment type must be receipt, understanding, or commitment',
+    message: 'Acknowledgment type must be receipt, understanding, or commitment',
   })
   acknowledgmentType: AcknowledgmentType;
 }

@@ -31,11 +31,7 @@ export class MedplumService implements OnModuleInit {
     await this.initPromise;
   }
 
-  private async connect(
-    baseUrl: string,
-    clientId: string,
-    clientSecret: string,
-  ): Promise<void> {
+  private async connect(baseUrl: string, clientId: string, clientSecret: string): Promise<void> {
     try {
       this.client = new MedplumClient({
         baseUrl: baseUrl.replace(/\/+$/, ''),
@@ -69,8 +65,7 @@ export class MedplumService implements OnModuleInit {
   }
 
   /** System used for ClearCare user id when syncing to Medplum Patient. */
-  static readonly CLEARCARE_USER_IDENTIFIER_SYSTEM =
-    'https://clearcare.local/user';
+  static readonly CLEARCARE_USER_IDENTIFIER_SYSTEM = 'https://clearcare.local/user';
 
   /**
    * Search Patient resources in Medplum.
@@ -85,9 +80,7 @@ export class MedplumService implements OnModuleInit {
    * Find a Medplum Patient by ClearCare user id (identifier system + value).
    * Returns the first match if any; use to enforce uniqueness before create.
    */
-  async findPatientByClearCareUserId(
-    clearCareUserId: string,
-  ): Promise<{ id: string; [k: string]: unknown } | null> {
+  async findPatientByClearCareUserId(clearCareUserId: string): Promise<{ id: string; [k: string]: unknown } | null> {
     const client = this.ensureClient();
     const identifier = `${MedplumService.CLEARCARE_USER_IDENTIFIER_SYSTEM}|${clearCareUserId}`;
     const results = (await client.searchResources('Patient', {
@@ -95,11 +88,7 @@ export class MedplumService implements OnModuleInit {
       _count: '1',
     })) as unknown;
     const first: unknown = Array.isArray(results) ? results[0] : undefined;
-    if (
-      first !== null &&
-      first !== undefined &&
-      typeof (first as Record<string, unknown>).id === 'string'
-    ) {
+    if (first !== null && first !== undefined && typeof (first as Record<string, unknown>).id === 'string') {
       return first as { id: string; [k: string]: unknown };
     }
     return null;
@@ -109,9 +98,9 @@ export class MedplumService implements OnModuleInit {
    * Read one Patient by id.
    * @param id Patient id (e.g. "xyz" for Patient/xyz)
    */
-  async getPatient(id: string) {
+  async getPatient(id: string): Promise<Record<string, unknown>> {
     const client = this.ensureClient();
-    return client.readResource('Patient', id);
+    return client.readResource('Patient', id) as Promise<Record<string, unknown>>;
   }
 
   /**
@@ -127,52 +116,39 @@ export class MedplumService implements OnModuleInit {
   /**
    * Update a Patient in Medplum.
    */
-  async updatePatient(patient: Record<string, unknown>) {
+  async updatePatient(patient: Record<string, unknown>): Promise<Record<string, unknown>> {
     const client = this.ensureClient();
-    return client.updateResource(patient as any);
+    return client.updateResource(patient as never) as Promise<Record<string, unknown>>;
   }
 
   /** Normalize Medplum search result to an array (handles array or Bundle). */
-  private normalizeSearchResult<T extends { resourceType?: string }>(
-    result: unknown,
-    resourceType: string,
-  ): T[] {
+  private normalizeSearchResult<T extends { resourceType?: string }>(result: unknown, resourceType: string): T[] {
     if (!result) return [];
     if (Array.isArray(result))
       return result.filter(
         (r: unknown) =>
-          r != null &&
-          typeof r === 'object' &&
-          (r as { resourceType?: string }).resourceType === resourceType,
+          r != null && typeof r === 'object' && (r as { resourceType?: string }).resourceType === resourceType,
       ) as T[];
-    const entries =
-      (result as { entry?: Array<{ resource?: T }> })?.entry ?? [];
-    return entries
-      .map((e) => e?.resource)
-      .filter((r): r is T => r != null && r.resourceType === resourceType);
+    const entries = (result as { entry?: Array<{ resource?: T }> })?.entry ?? [];
+    return entries.map((e) => e?.resource).filter((r): r is T => r != null && r.resourceType === resourceType);
   }
 
   /**
    * Search Practitioner resources in Medplum (providers).
    * Returns a plain array for consistent API response.
    */
-  async searchPractitioners(
-    searchParams?: Record<string, string>,
-  ): Promise<unknown[]> {
+  async searchPractitioners(searchParams?: Record<string, string>): Promise<unknown[]> {
     const client = this.ensureClient();
-    const result = await client.searchResources(
-      'Practitioner',
-      searchParams ?? {},
-    );
+    const result = await client.searchResources('Practitioner', searchParams ?? {});
     return this.normalizeSearchResult(result as unknown, 'Practitioner');
   }
 
   /**
    * Read one Practitioner by id.
    */
-  async getPractitioner(id: string) {
+  async getPractitioner(id: string): Promise<Record<string, unknown>> {
     const client = this.ensureClient();
-    return client.readResource('Practitioner', id);
+    return client.readResource('Practitioner', id) as Promise<Record<string, unknown>>;
   }
 
   /**
@@ -188,9 +164,9 @@ export class MedplumService implements OnModuleInit {
   /**
    * Read one Task by id.
    */
-  async getTask(id: string) {
+  async getTask(id: string): Promise<Record<string, unknown>> {
     const client = this.ensureClient();
-    return client.readResource('Task', id);
+    return client.readResource('Task', id) as Promise<Record<string, unknown>>;
   }
 
   /**
@@ -205,10 +181,7 @@ export class MedplumService implements OnModuleInit {
   /**
    * Generic search for any resource type.
    */
-  async searchResources(
-    resourceType: string,
-    searchParams?: Record<string, string>,
-  ) {
+  async searchResources(resourceType: string, searchParams?: Record<string, string>) {
     const client = this.ensureClient();
     return client.searchResources(resourceType, searchParams ?? {});
   }
@@ -216,9 +189,9 @@ export class MedplumService implements OnModuleInit {
   /**
    * Read any resource by type and id.
    */
-  async readResource(resourceType: string, id: string) {
+  async readResource(resourceType: string, id: string): Promise<Record<string, unknown>> {
     const client = this.ensureClient();
-    return client.readResource(resourceType, id);
+    return client.readResource(resourceType, id) as Promise<Record<string, unknown>>;
   }
 
   /**
@@ -230,55 +203,59 @@ export class MedplumService implements OnModuleInit {
     const samples = [
       {
         resourceType: 'Patient' as const,
-        name: [
-          { use: 'official', family: 'Smith', given: ['Alice'] },
-        ],
+        name: [{ use: 'official', family: 'Smith', given: ['Alice'] }],
         birthDate: '1985-03-15',
         gender: 'female',
-        identifier: [
-          { system: 'https://clearcare.local/sample', value: 'SAMPLE-001' },
-        ],
+        identifier: [{ system: 'https://clearcare.local/sample', value: 'SAMPLE-001' }],
         telecom: [
           { system: 'phone', value: '+1-555-0101', use: 'home' },
           { system: 'email', value: 'alice.smith@example.com' },
         ],
         address: [
-          { use: 'home', line: ['123 Main St'], city: 'Springfield', state: 'IL', postalCode: '62701' },
+          {
+            use: 'home',
+            line: ['123 Main St'],
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+          },
         ],
       },
       {
         resourceType: 'Patient' as const,
-        name: [
-          { use: 'official', family: 'Johnson', given: ['Bob'] },
-        ],
+        name: [{ use: 'official', family: 'Johnson', given: ['Bob'] }],
         birthDate: '1978-07-22',
         gender: 'male',
-        identifier: [
-          { system: 'https://clearcare.local/sample', value: 'SAMPLE-002' },
-        ],
+        identifier: [{ system: 'https://clearcare.local/sample', value: 'SAMPLE-002' }],
         telecom: [
           { system: 'phone', value: '+1-555-0102', use: 'mobile' },
           { system: 'email', value: 'bob.johnson@example.com' },
         ],
         address: [
-          { use: 'home', line: ['456 Oak Ave'], city: 'Portland', state: 'OR', postalCode: '97201' },
+          {
+            use: 'home',
+            line: ['456 Oak Ave'],
+            city: 'Portland',
+            state: 'OR',
+            postalCode: '97201',
+          },
         ],
       },
       {
         resourceType: 'Patient' as const,
-        name: [
-          { use: 'official', family: 'Williams', given: ['Carol'] },
-        ],
+        name: [{ use: 'official', family: 'Williams', given: ['Carol'] }],
         birthDate: '1992-11-08',
         gender: 'female',
-        identifier: [
-          { system: 'https://clearcare.local/sample', value: 'SAMPLE-003' },
-        ],
-        telecom: [
-          { system: 'email', value: 'carol.williams@example.com' },
-        ],
+        identifier: [{ system: 'https://clearcare.local/sample', value: 'SAMPLE-003' }],
+        telecom: [{ system: 'email', value: 'carol.williams@example.com' }],
         address: [
-          { use: 'work', line: ['789 Pine Rd'], city: 'Austin', state: 'TX', postalCode: '78701' },
+          {
+            use: 'work',
+            line: ['789 Pine Rd'],
+            city: 'Austin',
+            state: 'TX',
+            postalCode: '78701',
+          },
         ],
       },
     ];

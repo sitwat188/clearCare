@@ -5,7 +5,8 @@
 
 import { ReactNode, useState, useEffect } from 'react';
 import { Box, Container } from '@mui/material';
-import Sidebar, { drawerWidth, collapsedWidth } from './Sidebar';
+import Sidebar from './Sidebar';
+import { drawerWidth, collapsedWidth } from './layoutConstants';
 
 interface MainLayoutProps {
   children: ReactNode;

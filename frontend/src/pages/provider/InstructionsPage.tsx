@@ -7,6 +7,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import type { ChipProps } from '@mui/material';
 import {
   Typography,
   Box,
@@ -257,12 +258,12 @@ const ProviderInstructions = () => {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
                       <Chip
                         label={instruction.status}
-                        color={getStatusColor(instruction.status) as any}
+                        color={getStatusColor(instruction.status) as ChipProps['color']}
                         size="small"
                       />
                       <Chip
                         label={PRIORITY_LEVELS.find((p) => p.value === instruction.priority)?.label || instruction.priority}
-                        color={getPriorityColor(instruction.priority) as any}
+                        color={getPriorityColor(instruction.priority) as ChipProps['color']}
                         size="small"
                       />
                     </Box>

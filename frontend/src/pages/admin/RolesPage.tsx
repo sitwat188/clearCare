@@ -34,6 +34,7 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import { adminService } from '../../services/adminService';
+import type { Role } from '../../types/admin.types';
 import PageHeader from '../../components/common/PageHeader';
 
 const ALL_PERMISSIONS = [
@@ -105,7 +106,7 @@ const AdminRoles = () => {
           description,
           permissions: selectedPermissions,
           updatedAt: new Date().toISOString(),
-        } as any);
+        } as Partial<Role>);
       }
 
       return adminService.createRole({
@@ -116,14 +117,14 @@ const AdminRoles = () => {
         userCount: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      } as any);
+      } as Partial<Role>);
     },
     onSuccess: async (savedRole) => {
       // Update cache after save
-      queryClient.setQueryData(['admin-roles'], (old: any) => {
+      queryClient.setQueryData(['admin-roles'], (old: Role[] | undefined) => {
         const prev = Array.isArray(old) ? old : [];
-        const exists = prev.some((r: any) => r?.id === savedRole.id);
-        if (exists) return prev.map((r: any) => (r?.id === savedRole.id ? savedRole : r));
+        const exists = prev.some((r: Role) => r?.id === savedRole.id);
+        if (exists) return prev.map((r: Role) => (r?.id === savedRole.id ? savedRole : r));
         return [savedRole, ...prev];
       });
 
@@ -140,9 +141,9 @@ const AdminRoles = () => {
   const deleteRoleMutation = useMutation({
     mutationFn: async (roleId: string) => adminService.deleteRole(roleId),
     onSuccess: async (_data, roleId) => {
-      queryClient.setQueryData(['admin-roles'], (old: any) => {
+      queryClient.setQueryData(['admin-roles'], (old: Role[] | undefined) => {
         const prev = Array.isArray(old) ? old : [];
-        return prev.filter((r: any) => r?.id !== roleId);
+        return prev.filter((r: Role) => r?.id !== roleId);
       });
 
       toast.success('Role deleted');

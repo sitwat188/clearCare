@@ -1,12 +1,4 @@
-import {
-  IsString,
-  IsNotEmpty,
-  IsEnum,
-  IsOptional,
-  IsDateString,
-  IsBoolean,
-  IsObject,
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject } from 'class-validator';
 
 export enum InstructionType {
   MEDICATION = 'medication',

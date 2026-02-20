@@ -3,10 +3,7 @@ import { escapeHtml } from './escape';
 /**
  * HTML body for account-restored notification (same style as other transactional emails).
  */
-export function getRestoreNotificationEmailHtml(
-  displayName: string,
-  loginUrl: string,
-): string {
+export function getRestoreNotificationEmailHtml(displayName: string, loginUrl: string): string {
   const loginLink = `${loginUrl}/login`;
   const safeName = escapeHtml(displayName);
   return `
