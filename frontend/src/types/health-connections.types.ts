@@ -2,6 +2,13 @@
  * Health connections (Fasten Connect) types
  */
 
+/** Reason set when Fasten is not configured; treat as "export not available", not a user-facing failure. */
+export const EXPORT_REASON_FASTEN_NOT_CONFIGURED = 'Fasten not configured';
+
+export function isUserFacingExportFailure(reason: string | undefined): reason is string {
+  return Boolean(reason && reason !== EXPORT_REASON_FASTEN_NOT_CONFIGURED);
+}
+
 export interface HealthConnection {
   id: string;
   orgConnectionId: string;

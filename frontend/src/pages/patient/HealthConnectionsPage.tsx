@@ -29,6 +29,7 @@ import { format } from 'date-fns';
 import PageHeader from '../../components/common/PageHeader';
 import { healthConnectionsService } from '../../services/healthConnectionsService';
 import type { HealthConnection, HealthObservation } from '../../types/health-connections.types';
+import { isUserFacingExportFailure } from '../../types/health-connections.types';
 
 const observationCategoryLabel = (cat: string | undefined): string => {
   if (!cat) return 'Other';
@@ -290,7 +291,7 @@ const HealthConnectionsPage = () => {
                       {conn.lastSyncedAt && (
                         <> · Last synced {format(new Date(conn.lastSyncedAt), 'MMM d, yyyy')}</>
                       )}
-                      {conn.lastExportFailureReason && (
+                      {isUserFacingExportFailure(conn.lastExportFailureReason) && (
                         <Typography component="span" variant="caption" color="error" display="block" sx={{ mt: 0.5 }}>
                           Export failed: {conn.lastExportFailureReason}
                         </Typography>
@@ -310,7 +311,7 @@ const HealthConnectionsPage = () => {
                     mt: { xs: 1, sm: 0 },
                   }}
                 >
-                  {conn.lastExportFailureReason ? (
+                  {isUserFacingExportFailure(conn.lastExportFailureReason) ? (
                     <Chip label="Export failed" size="small" color="error" />
                   ) : conn.lastSyncedAt ? (
                     <Chip label="Synced" size="small" color="success" />

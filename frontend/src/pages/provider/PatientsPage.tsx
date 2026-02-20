@@ -20,6 +20,7 @@ import {
   Chip,
   Button,
   Alert,
+  Tooltip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -139,9 +140,11 @@ const ProviderPatients = () => {
                       {patient.firstName?.[0] || <PatientsIcon />}
                     </Avatar>
                     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }} noWrap>
-                        {patient.firstName} {patient.lastName}
-                      </Typography>
+                      <Tooltip title={`${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim()} placement="top" enterDelay={500}>
+                        <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }} noWrap component="span">
+                          {patient.firstName} {patient.lastName}
+                        </Typography>
+                      </Tooltip>
                       <Chip
                         label={`MRN: ${patient.medicalRecordNumber}`}
                         size="small"
@@ -153,15 +156,19 @@ const ProviderPatients = () => {
                   <Box sx={{ mb: 2, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
                       <EmailIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
-                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {patient.email}
-                      </Typography>
+                      <Tooltip title={patient.email ?? ''} placement="top" enterDelay={500}>
+                        <Typography variant="body2" color="text.secondary" noWrap component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                          {patient.email}
+                        </Typography>
+                      </Tooltip>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
                       <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
-                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {patient.phone}
-                      </Typography>
+                      <Tooltip title={patient.phone ?? ''} placement="top" enterDelay={500}>
+                        <Typography variant="body2" color="text.secondary" noWrap component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                          {patient.phone}
+                        </Typography>
+                      </Tooltip>
                     </Box>
                     {patient.dateOfBirth && (
                       <Typography variant="caption" color="text.secondary">

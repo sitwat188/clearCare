@@ -19,6 +19,7 @@ import {
   Avatar,
   Button,
   alpha,
+  Tooltip,
 } from '@mui/material';
 import {
   People as PatientsIcon,
@@ -313,10 +314,12 @@ const ProviderDashboard = () => {
                       >
                         {patient.firstName?.[0] || <PatientsIcon />}
                       </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                          {patient.firstName} {patient.lastName}
-                        </Typography>
+                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Tooltip title={`${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim()} placement="top" enterDelay={500}>
+                          <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
+                            {patient.firstName} {patient.lastName}
+                          </Typography>
+                        </Tooltip>
                         <Typography variant="caption" color="text.secondary">
                           MRN: {patient.medicalRecordNumber}
                         </Typography>

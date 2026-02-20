@@ -181,9 +181,9 @@ export class PatientsService {
       emergencyContactName: emergencyName || undefined,
       emergencyContactRelationship: emergencyRel || undefined,
       emergencyContactPhone: emergencyPhone || undefined,
-      firstName: u?.firstName ?? '',
-      lastName: u?.lastName ?? '',
-      email: u?.email ?? '',
+      firstName: u?.firstName != null ? (this.encryption.decrypt(u.firstName) ?? '') : '',
+      lastName: u?.lastName != null ? (this.encryption.decrypt(u.lastName) ?? '') : '',
+      email: u?.email != null ? (this.encryption.decrypt(u.email) ?? '') : '',
       address:
         street || city
           ? {

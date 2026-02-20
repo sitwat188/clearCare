@@ -19,6 +19,7 @@ import {
   List,
   ListItem,
   ListItemText,
+  Tooltip,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -41,6 +42,7 @@ import { healthConnectionsService } from '../../services/healthConnectionsServic
 import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
 import type { HealthObservation } from '../../types/health-connections.types';
+import { isUserFacingExportFailure } from '../../types/health-connections.types';
 
 const observationCategoryLabel = (cat: string | undefined): string => {
   if (!cat) return 'Other';
@@ -153,25 +155,31 @@ const ProviderPatientDetail = () => {
                   {patient.firstName?.[0]}
                   {patient.lastName?.[0]}
                 </Avatar>
-                <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  {patient.firstName} {patient.lastName}
-                </Typography>
+                <Tooltip title={`${patient.firstName ?? ''} ${patient.lastName ?? ''}`.trim()} placement="top" enterDelay={500}>
+                  <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }} noWrap component="span">
+                    {patient.firstName} {patient.lastName}
+                  </Typography>
+                </Tooltip>
                 <Chip label={`MRN: ${patient.medicalRecordNumber}`} size="small" sx={{ mb: 2 }} />
                 <Box sx={{ width: '100%', textAlign: 'left', minWidth: 0 }}>
                   {patient.email && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
                       <EmailIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
-                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {patient.email}
-                      </Typography>
+                      <Tooltip title={patient.email} placement="top" enterDelay={500}>
+                        <Typography variant="body2" color="text.secondary" noWrap component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                          {patient.email}
+                        </Typography>
+                      </Tooltip>
                     </Box>
                   )}
                   {patient.phone && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, minWidth: 0 }}>
                       <PhoneIcon sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
-                      <Typography variant="body2" color="text.secondary" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {patient.phone}
-                      </Typography>
+                      <Tooltip title={patient.phone} placement="top" enterDelay={500}>
+                        <Typography variant="body2" color="text.secondary" noWrap component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}>
+                          {patient.phone}
+                        </Typography>
+                      </Tooltip>
                     </Box>
                   )}
                   {patient.dateOfBirth && (
@@ -245,7 +253,7 @@ const ProviderPatientDetail = () => {
                             {conn.lastSyncedAt && (
                               <> · Last synced {format(new Date(conn.lastSyncedAt), 'MMM d, yyyy')}</>
                             )}
-                            {conn.lastExportFailureReason && (
+                            {isUserFacingExportFailure(conn.lastExportFailureReason) && (
                               <Typography component="span" variant="caption" color="error" display="block" sx={{ mt: 0.5 }}>
                                 Export failed: {conn.lastExportFailureReason}
                               </Typography>

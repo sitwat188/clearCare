@@ -36,7 +36,7 @@ import { ROUTES } from '../../config/routes';
 import PageHeader from '../../components/common/PageHeader';
 import type { FhirPatient } from '../../types/medplum.types';
 
-function getDisplayName(p: FhirPatient): string {
+const getDisplayName = (p: FhirPatient): string => {
   const name = p.name?.[0];
   if (!name) return 'Unknown';
   if (name.text) return name.text;
@@ -45,15 +45,15 @@ function getDisplayName(p: FhirPatient): string {
   return [given, family].filter(Boolean).join(' ') || 'Unknown';
 }
 
-function getFirstIdentifier(p: FhirPatient): string | undefined {
+const getFirstIdentifier = (p: FhirPatient): string | undefined => {
   const id = p.identifier?.[0];
   if (!id) return undefined;
   return id.value ?? (id.system ? `${id.system}` : undefined);
 }
 
-function getPhone(p: FhirPatient): string | undefined {
+const getPhone = (p: FhirPatient): string | undefined => {
   return p.telecom?.find((t) => t.system === 'phone')?.value;
-}
+};
 
 const MedplumPatientsPage = () => {
   const navigate = useNavigate();
@@ -187,14 +187,14 @@ const MedplumPatientsPage = () => {
           </CardContent>
         </Card>
       ) : (
-        <Grid container spacing={3}>
+        <Grid container spacing={4}>
           {filteredPatients.map((p) => {
             const id = p.id ?? '';
             const displayName = getDisplayName(p);
             const identifier = getFirstIdentifier(p);
             const phone = getPhone(p);
             return (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={id}>
+              <Grid item xs={12} sm={6} md={4} lg={3} xl={4} key={id}>
                 <Card
                   sx={{
                     height: '100%',
