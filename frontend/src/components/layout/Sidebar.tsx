@@ -91,7 +91,7 @@ const Sidebar = () => {
   };
 
   const handleLogout = () => {
-    dispatch(logout()); // This will clear localStorage via authSlice
+    dispatch(logout()); // Clears sessionStorage auth state via authSlice
     navigate(ROUTES.LOGIN);
     handleProfileMenuClose();
   };

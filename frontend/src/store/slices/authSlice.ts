@@ -7,7 +7,7 @@ import type { User, AuthState } from '../../types/auth.types';
 import { loadAuthState, saveAuthState, clearAuthState } from '../../utils/authStorage';
 import { setAccessToken } from '../../services/api';
 
-// Load initial state from localStorage
+// Load initial state from sessionStorage (authStorage)
 const persistedState = loadAuthState();
 
 const initialState: AuthState = {
@@ -34,7 +34,7 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
       state.isLoading = false;
       state.error = null;
-      // Persist to localStorage
+      // Persist to sessionStorage
       saveAuthState(action.payload);
     },
     logout: (state) => {
@@ -43,7 +43,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.isLoading = false;
       state.error = null;
-      // Clear localStorage and API token
+      // Clear sessionStorage and API token
       clearAuthState();
       setAccessToken(null);
     },

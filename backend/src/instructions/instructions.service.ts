@@ -164,16 +164,16 @@ export class InstructionsService {
     return this.toInstructionResponse(withRelations ?? instruction);
   }
 
-  /** Add providerName/patientName from relations and decrypt content */
+  /** Add providerName/patientName from relations (decrypted) and decrypt content */
   private toInstructionResponse(instruction: InstructionForResponse): Record<string, unknown> {
     const decrypted = this.decryptInstruction(instruction);
     const providerName =
       instruction.provider != null
-        ? `${instruction.provider.firstName ?? ''} ${instruction.provider.lastName ?? ''}`.trim()
+        ? `${this.encryption.decrypt(instruction.provider.firstName) ?? ''} ${this.encryption.decrypt(instruction.provider.lastName) ?? ''}`.trim()
         : '';
     const patientName =
       instruction.patient?.user != null
-        ? `${instruction.patient.user.firstName ?? ''} ${instruction.patient.user.lastName ?? ''}`.trim()
+        ? `${this.encryption.decrypt(instruction.patient.user.firstName) ?? ''} ${this.encryption.decrypt(instruction.patient.user.lastName) ?? ''}`.trim()
         : '';
     return { ...decrypted, providerName, patientName } as Record<string, unknown>;
   }

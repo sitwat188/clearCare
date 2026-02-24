@@ -1,10 +1,10 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type { ApiError } from '../types/api.types';
-import { clearAuthState, updateAccessToken } from '../utils/authStorage';
+import { clearAuthState, updateAccessToken, getRefreshToken, setRefreshToken } from '../utils/authStorage';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
-// In-memory token (you already persist in Redux/localStorage)
+// In-memory access token (auth state + refresh token in sessionStorage via authStorage)
 let accessToken: string | null = null;
 export const setAccessToken = (token: string | null): void => {
   accessToken = token;
@@ -34,7 +34,7 @@ api.interceptors.request.use(
 
 /** Call backend POST /auth/refresh with refresh token; return new access token or null. */
 export const refreshAccessToken = async (): Promise<string | null> => {
-  const refreshToken = localStorage.getItem('refreshToken');
+  const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
   try {
     // Use raw axios so we don't attach the expired Bearer token
@@ -47,7 +47,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
     const newAccessToken = payload?.accessToken ?? null;
     const newRefreshToken = payload?.refreshToken;
     if (newAccessToken) {
-      if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
+      setRefreshToken(newRefreshToken ?? null);
       updateAccessToken(newAccessToken);
       return newAccessToken;
     }

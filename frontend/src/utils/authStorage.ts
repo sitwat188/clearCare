@@ -1,11 +1,15 @@
 /**
  * Authentication storage utilities
- * Handles persisting auth state to localStorage
+ * Uses sessionStorage (not localStorage) for auth state and refresh token
+ * so tokens are cleared when the tab closes and exposure to XSS is reduced.
  */
 
 import type { User } from '../types/auth.types';
 
 const AUTH_STORAGE_KEY = 'clearcare_auth';
+const REFRESH_TOKEN_KEY = 'refreshToken';
+
+const storage = sessionStorage;
 
 export interface PersistedAuthState {
   user: User | null;
@@ -17,7 +21,7 @@ export interface PersistedAuthState {
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 /**
- * Save auth state to localStorage
+ * Save auth state to sessionStorage
  */
 export const saveAuthState = (state: { user: User; token: string }): void => {
   try {
@@ -27,18 +31,18 @@ export const saveAuthState = (state: { user: User; token: string }): void => {
       isAuthenticated: true,
       timestamp: Date.now(),
     };
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(persistedState));
+    storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(persistedState));
   } catch (error) {
     console.error('Failed to save auth state:', error);
   }
 };
 
 /**
- * Load auth state from localStorage
+ * Load auth state from sessionStorage
  */
 export const loadAuthState = (): PersistedAuthState | null => {
   try {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    const stored = storage.getItem(AUTH_STORAGE_KEY);
     if (!stored) {
       return null;
     }
@@ -66,23 +70,32 @@ export const loadAuthState = (): PersistedAuthState | null => {
  */
 export const updateAccessToken = (token: string): void => {
   try {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    const stored = storage.getItem(AUTH_STORAGE_KEY);
     if (!stored) return;
     const state: PersistedAuthState = JSON.parse(stored);
     state.accessToken = token;
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state));
+    storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
     console.error('Failed to update access token:', error);
   }
 };
 
+/** Get refresh token from sessionStorage (single source for key). */
+export const getRefreshToken = (): string | null => storage.getItem(REFRESH_TOKEN_KEY);
+
+/** Set or clear refresh token in sessionStorage. */
+export const setRefreshToken = (token: string | null): void => {
+  if (token) storage.setItem(REFRESH_TOKEN_KEY, token);
+  else storage.removeItem(REFRESH_TOKEN_KEY);
+};
+
 /**
- * Clear auth state from localStorage
+ * Clear auth state and refresh token from sessionStorage
  */
 export const clearAuthState = (): void => {
   try {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    localStorage.removeItem('refreshToken');
+    storage.removeItem(AUTH_STORAGE_KEY);
+    storage.removeItem(REFRESH_TOKEN_KEY);
   } catch (error) {
     console.error('Failed to clear auth state:', error);
   }

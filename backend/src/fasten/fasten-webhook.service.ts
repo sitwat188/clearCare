@@ -2,7 +2,7 @@
  * Handles Fasten Connect webhook events: EHI export success/failure.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { FastenConnectService } from './fasten-connect.service';
@@ -24,11 +24,17 @@ export class FastenWebhookService {
     private config: ConfigService,
   ) {}
 
-  async handle(payload: FastenWebhookPayload, _signature?: string): Promise<void> {
+  async handle(payload: FastenWebhookPayload, signatureOrSecret?: string): Promise<void> {
     const secret = this.config.get<string>('FASTEN_WEBHOOK_SECRET')?.trim();
-    if (secret && _signature && _signature !== secret) {
-      this.logger.warn('Webhook signature mismatch – ignoring');
-      return;
+    if (secret) {
+      if (!signatureOrSecret?.trim()) {
+        this.logger.warn('Webhook rejected: FASTEN_WEBHOOK_SECRET is set but no signature/secret header received');
+        throw new UnauthorizedException('Webhook authentication required');
+      }
+      if (signatureOrSecret.trim() !== secret) {
+        this.logger.warn('Webhook rejected: signature/secret does not match FASTEN_WEBHOOK_SECRET');
+        throw new UnauthorizedException('Invalid webhook signature');
+      }
     }
 
     const { type, data } = payload;

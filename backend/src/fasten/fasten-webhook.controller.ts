@@ -1,6 +1,10 @@
 /**
  * Fasten Connect webhook receiver.
- * No auth guard – Fasten servers POST here. Optionally verify FASTEN_WEBHOOK_SECRET header if configured.
+ * When FASTEN_WEBHOOK_SECRET is set, requests must include a matching value in one of:
+ * - x-fasten-signature
+ * - x-webhook-secret
+ * - webhook-signature (Standard-Webhooks)
+ * Otherwise the request is rejected with 401.
  */
 
 import { Controller, Post, Body, Headers, Logger } from '@nestjs/common';
@@ -16,13 +20,15 @@ export class FastenWebhookController {
   @Post()
   async handleWebhook(
     @Body() payload: FastenWebhookPayload,
-    @Headers('x-fasten-signature') signature?: string,
-    @Headers('x-webhook-secret') webhookSecret?: string,
+    @Headers('x-fasten-signature') xFastenSignature?: string,
+    @Headers('x-webhook-secret') xWebhookSecret?: string,
+    @Headers('webhook-signature') webhookSignature?: string,
   ) {
+    const signatureOrSecret = xFastenSignature ?? xWebhookSecret ?? webhookSignature;
     this.logger.log(
       `Webhook received: type=${payload?.type ?? 'missing'} id=${(payload as { id?: string })?.id ?? 'n/a'}`,
     );
-    await this.webhookService.handle(payload, signature ?? webhookSecret);
+    await this.webhookService.handle(payload, signatureOrSecret);
     return { received: true };
   }
 }

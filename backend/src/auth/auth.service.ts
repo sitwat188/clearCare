@@ -20,6 +20,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { getJwtSecret, getJwtRefreshSecret } from './jwt-secret';
 import { getPasswordResetEmailHtml, getRestoreNotificationEmailHtml, getInvitationEmailHtml } from '../email-templates';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { redactPHIFromObject, redactPHIFromString } from '../common/redact-phi';
@@ -191,7 +192,7 @@ export class AuthService {
       const twoFactorToken = this.jwtService.sign(
         { sub: user.id, purpose: '2fa-login' },
         {
-          secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+          secret: getJwtSecret(),
           expiresIn: '5m',
         },
       );
@@ -258,7 +259,7 @@ export class AuthService {
     let payload: { sub: string; purpose: string };
     try {
       payload = this.jwtService.verify<{ sub: string; purpose: string }>(twoFactorToken, {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret: getJwtSecret(),
       });
     } catch {
       throw new UnauthorizedException('Invalid or expired 2FA session. Please log in again.');
@@ -387,7 +388,7 @@ export class AuthService {
     const setupToken = this.jwtService.sign(
       { sub: userId, twoFactorSecret: secret.base32, purpose: '2fa-setup' },
       {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret: getJwtSecret(),
         expiresIn: '10m',
       },
     );
@@ -411,7 +412,7 @@ export class AuthService {
         twoFactorSecret: string;
         purpose: string;
       }>(setupToken, {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret: getJwtSecret(),
       });
     } catch {
       throw new UnauthorizedException('Setup link expired. Please start 2FA setup again.');
@@ -504,7 +505,7 @@ export class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key-change-in-production',
+        secret: getJwtRefreshSecret(),
       });
 
       const user = await this.prisma.user.findFirst({
@@ -932,12 +933,12 @@ export class AuthService {
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      secret: getJwtSecret(),
       expiresIn: '15m', // Short-lived access token
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key-change-in-production',
+      secret: getJwtRefreshSecret(),
       expiresIn: '7d', // Longer-lived refresh token
     });
 

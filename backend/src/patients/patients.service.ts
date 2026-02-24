@@ -400,9 +400,10 @@ export class PatientsService {
     // When admin assigns providers, notify the patient and each newly assigned provider
     if (requestingUserRole === 'administrator' && updateDto.assignedProviderIds != null && updatedPatient?.user) {
       const newProviderIds = updateDto.assignedProviderIds.filter((id: string) => !previousProviderIds.includes(id));
-      const patientName =
-        `${updatedPatient.user.firstName ?? ''} ${updatedPatient.user.lastName ?? ''}`.trim() ||
-        updatedPatient.user.email;
+      const first = this.encryption.decrypt(updatedPatient.user.firstName) ?? '';
+      const last = this.encryption.decrypt(updatedPatient.user.lastName) ?? '';
+      const emailDec = this.encryption.decrypt(updatedPatient.user.email) ?? '';
+      const patientName = `${first} ${last}`.trim() || emailDec;
 
       if (newProviderIds.length > 0) {
         try {

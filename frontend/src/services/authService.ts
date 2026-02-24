@@ -4,6 +4,7 @@
  */
 
 import { setAccessToken, refreshAccessToken } from './api';
+import { setRefreshToken } from '../utils/authStorage';
 import { apiEndpoints } from './apiEndpoints';
 import type { User, LoginCredentials, LoginResult, OAuthTokenResponse } from '../types/auth.types';
 
@@ -50,9 +51,7 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
     const { user, accessToken, refreshToken, mustChangePassword } = payload ?? {};
     if (accessToken) {
       setAccessToken(accessToken);
-      if (refreshToken) {
-        localStorage.setItem('refreshToken', refreshToken);
-      }
+      setRefreshToken(refreshToken ?? null);
       return { user, token: accessToken, mustChangePassword: mustChangePassword === true };
     }
 
@@ -79,9 +78,7 @@ export const verifyTwoFactor = async (
       throw new Error('Invalid response from 2FA verification');
     }
     setAccessToken(accessToken);
-    if (refreshToken) {
-      localStorage.setItem('refreshToken', refreshToken);
-    }
+    setRefreshToken(refreshToken ?? null);
     return { user, token: accessToken, mustChangePassword: mustChangePassword === true };
   } catch (error: any) {
     const message =

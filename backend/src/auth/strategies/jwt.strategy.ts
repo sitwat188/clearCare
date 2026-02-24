@@ -2,6 +2,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EncryptionService } from '../../common/encryption/encryption.service';
+import { getJwtSecret } from '../jwt-secret';
 
 export interface JwtPayload {
   sub: string; // user id
@@ -11,11 +13,14 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private prisma: PrismaService) {
+  constructor(
+    private prisma: PrismaService,
+    private encryption: EncryptionService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      secretOrKey: getJwtSecret(),
     });
   }
 
@@ -32,13 +37,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or has been deleted');
     }
 
-    // Return user object that will be attached to request.user
+    // Return user object (decrypted) for request.user so UI shows plaintext name/email
     return {
       id: user.id,
-      email: user.email,
+      email: this.encryption.decrypt(user.email) ?? '',
       role: user.role,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      firstName: this.encryption.decrypt(user.firstName) ?? '',
+      lastName: this.encryption.decrypt(user.lastName) ?? '',
     };
   }
 }
