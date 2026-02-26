@@ -1,5 +1,7 @@
--- CreateTable
-CREATE TABLE "generated_reports" (
+-- Idempotent: create table and indexes only if they do not exist.
+-- This migration is a duplicate of 20260218160000; this file ensures deploy succeeds
+-- when the table was already created by the earlier migration.
+CREATE TABLE IF NOT EXISTS "generated_reports" (
     "id" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -16,11 +18,6 @@ CREATE TABLE "generated_reports" (
     CONSTRAINT "generated_reports_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "generated_reports_generated_by_idx" ON "generated_reports"("generated_by");
-
--- CreateIndex
-CREATE INDEX "generated_reports_scope_generated_by_idx" ON "generated_reports"("scope", "generated_by");
-
--- CreateIndex
-CREATE INDEX "generated_reports_generated_at_idx" ON "generated_reports"("generated_at");
+CREATE INDEX IF NOT EXISTS "generated_reports_generated_by_idx" ON "generated_reports"("generated_by");
+CREATE INDEX IF NOT EXISTS "generated_reports_scope_generated_by_idx" ON "generated_reports"("scope", "generated_by");
+CREATE INDEX IF NOT EXISTS "generated_reports_generated_at_idx" ON "generated_reports"("generated_at");
