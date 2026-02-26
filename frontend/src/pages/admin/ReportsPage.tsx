@@ -46,7 +46,7 @@ import { exportReport } from '../../utils/exportUtils';
 const AdminReports = () => {
   const [reportType, setReportType] = useState<string>('compliance');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [format, setFormat] = useState<'pdf' | 'csv' | 'json'>('pdf');
+  const [reportFormat, setReportFormat] = useState<'pdf' | 'csv' | 'json'>('pdf');
 
   const { data: reports, isLoading, refetch } = useQuery({
     queryKey: ['admin-reports'],
@@ -67,7 +67,7 @@ const AdminReports = () => {
           start: new Date(dateRange.start).toISOString().slice(0, 10),
           end: new Date(dateRange.end + 'T23:59:59').toISOString().slice(0, 10),
         },
-        format,
+        format: reportFormat,
       });
       const hasData =
         (generatedReport.data?.rows && (generatedReport.data as { rows?: unknown[] }).rows?.length) ||
@@ -76,7 +76,7 @@ const AdminReports = () => {
         toast.warning('No data found for the selected criteria');
         return;
       }
-      exportReport(generatedReport, format);
+      exportReport(generatedReport, reportFormat);
       toast.success(`Generated and downloaded ${reportType} report`);
       setTimeout(() => refetch(), 500);
     } catch (error) {
@@ -196,9 +196,9 @@ const AdminReports = () => {
                 <FormControl fullWidth>
                   <InputLabel>Export Format</InputLabel>
                   <Select
-                    value={format}
+                    value={reportFormat}
                     label="Export Format"
-                    onChange={(e) => setFormat(e.target.value as 'pdf' | 'csv' | 'json')}
+                    onChange={(e) => setReportFormat(e.target.value as 'pdf' | 'csv' | 'json')}
                   >
                     <MenuItem value="pdf">PDF</MenuItem>
                     <MenuItem value="csv">CSV</MenuItem>
