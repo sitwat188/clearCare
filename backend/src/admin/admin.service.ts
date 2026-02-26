@@ -11,6 +11,7 @@ import { MedplumService } from '../medplum/medplum.service';
 import { PatientsService } from '../patients/patients.service';
 import { AuthService } from '../auth/auth.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
+import { ReportGeneratorService } from '../reports/report-generator.service';
 import { redactPHIFromString } from '../common/redact-phi';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -98,6 +99,7 @@ export class AdminService {
     private patientsService: PatientsService,
     private authService: AuthService,
     private encryption: EncryptionService,
+    private reportGenerator: ReportGeneratorService,
   ) {}
 
   private getPermissionsForRole(role: string): string[] {
@@ -111,9 +113,10 @@ export class AdminService {
       select: { email: true, firstName: true, lastName: true },
     });
     if (!admin) return { userEmail: '(unknown)', userName: 'Admin' };
+    const view = this.encryption.decryptedView(admin, ['email', 'firstName', 'lastName']);
     return {
-      userEmail: admin.email,
-      userName: [admin.firstName, admin.lastName].filter(Boolean).join(' ') || admin.email,
+      userEmail: view.email,
+      userName: [view.firstName, view.lastName].filter(Boolean).join(' ') || view.email,
     };
   }
 
@@ -127,12 +130,13 @@ export class AdminService {
     lastLoginAt: Date | null;
     deletedAt?: Date | null;
   }) {
+    const view = this.encryption.decryptedView(user, ['email', 'firstName', 'lastName']);
     const deletedAt = user.deletedAt;
     return {
       id: user.id,
-      email: this.encryption.decrypt(user.email),
-      firstName: this.encryption.decrypt(user.firstName),
-      lastName: this.encryption.decrypt(user.lastName),
+      email: view.email,
+      firstName: view.firstName,
+      lastName: view.lastName,
       role: user.role,
       permissions: this.getPermissionsForRole(user.role),
       createdAt: user.createdAt.toISOString(),
@@ -216,62 +220,74 @@ export class AdminService {
 
     const createData = {
       emailHash,
-      email: this.encryption.encrypt(email),
       passwordHash,
-      firstName: this.encryption.encrypt(dto.firstName.trim()),
-      lastName: this.encryption.encrypt(dto.lastName.trim()),
       role: dto.role,
       mustChangePassword: true,
       temporaryPasswordExpiresAt,
+      ...this.encryption.encryptFields({ email, firstName: dto.firstName.trim(), lastName: dto.lastName.trim() }, [
+        'email',
+        'firstName',
+        'lastName',
+      ]),
     };
-    const user = await this.prisma.user.create({
-      data: createData as never,
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        createdAt: true,
-        lastLoginAt: true,
-      },
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: createData as never,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          createdAt: true,
+          lastLoginAt: true,
+        },
+      });
+      if (dto.role === 'patient') {
+        const patientEnc = this.encryption.encryptFields(
+          {
+            dateOfBirth: '1900-01-01',
+            medicalRecordNumber: `MRN-${created.id.slice(0, 8).toUpperCase()}`,
+          },
+          ['dateOfBirth', 'medicalRecordNumber'],
+        ) as { dateOfBirth: string; medicalRecordNumber: string };
+        await tx.patient.create({
+          data: {
+            userId: created.id,
+            dateOfBirth: patientEnc.dateOfBirth,
+            medicalRecordNumber: patientEnc.medicalRecordNumber,
+          },
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'create',
+          resourceType: 'user',
+          resourceId: created.id,
+          ipAddress: ipAddress ?? '',
+          userAgent: userAgent ?? '',
+          status: 'success',
+          details: { role: created.role },
+        },
+      });
+      return created;
     });
 
     void this.authService.sendInvitationEmail(email, dto.firstName.trim(), rawPassword).catch(() => {});
 
-    if (dto.role === 'patient') {
-      await this.prisma.patient.create({
-        data: {
-          userId: user.id,
-          dateOfBirth: this.encryption.encrypt('1900-01-01'),
-          medicalRecordNumber: this.encryption.encrypt(`MRN-${user.id.slice(0, 8).toUpperCase()}`),
-        },
+    if (dto.role === 'patient' && this.medplumService.isConnected()) {
+      this.syncPatientToMedplum({
+        id: user.id,
+        firstName: dto.firstName.trim(),
+        lastName: dto.lastName.trim(),
+      }).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error';
+        this.logger.warn(`Medplum Patient create failed for user ${user.id}: ${msg}`);
       });
-      // Sync to Medplum FHIR when configured (non-blocking; failures are logged only)
-      if (this.medplumService.isConnected()) {
-        this.syncPatientToMedplum({
-          id: user.id,
-          firstName: dto.firstName.trim(),
-          lastName: dto.lastName.trim(),
-        }).catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error';
-          this.logger.warn(`Medplum Patient create failed for user ${user.id}: ${msg}`);
-        });
-      }
     }
 
-    await this.prisma.auditLog.create({
-      data: {
-        userId: adminUserId,
-        action: 'create',
-        resourceType: 'user',
-        resourceId: user.id,
-        ipAddress: ipAddress ?? '',
-        userAgent: userAgent ?? '',
-        status: 'success',
-        details: { role: user.role },
-      },
-    });
     const createUserAddr = redactPHIFromString(email);
     this.logger.log(`Audit log written: create user ${user.id} (${createUserAddr})`);
 
@@ -320,44 +336,51 @@ export class AdminService {
       throw new ForbiddenException('Cannot change administrator role');
     }
 
-    const updateData: Record<string, unknown> = {};
-    if (dto.firstName !== undefined) updateData.firstName = this.encryption.encrypt(dto.firstName.trim());
-    if (dto.lastName !== undefined) updateData.lastName = this.encryption.encrypt(dto.lastName.trim());
+    const updateData: Record<string, unknown> = {
+      ...this.encryption.encryptFields(
+        {
+          firstName: dto.firstName !== undefined ? dto.firstName.trim() : undefined,
+          lastName: dto.lastName !== undefined ? dto.lastName.trim() : undefined,
+          email: dto.email !== undefined ? dto.email.toLowerCase().trim() : undefined,
+        },
+        ['firstName', 'lastName', 'email'],
+      ),
+    };
     if (dto.email !== undefined) {
-      const normalized = dto.email.toLowerCase().trim();
-      updateData.emailHash = this.encryption.hashEmailForLookup(normalized);
-      updateData.email = this.encryption.encrypt(normalized);
+      updateData.emailHash = this.encryption.hashEmailForLookup(dto.email.toLowerCase().trim());
     }
     if (dto.role !== undefined) updateData.role = dto.role;
     if (dto.password !== undefined) {
       updateData.passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        createdAt: true,
-        lastLoginAt: true,
-      },
-    });
-
-    await this.prisma.auditLog.create({
-      data: {
-        userId: adminUserId,
-        action: 'write',
-        resourceType: 'user',
-        resourceId: id,
-        ipAddress: ipAddress ?? '',
-        userAgent: userAgent ?? '',
-        status: 'success',
-        details: { updatedFields: Object.keys(updateData) },
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.user.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          createdAt: true,
+          lastLoginAt: true,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'write',
+          resourceType: 'user',
+          resourceId: id,
+          ipAddress: ipAddress ?? '',
+          userAgent: userAgent ?? '',
+          status: 'success',
+          details: { updatedFields: Object.keys(updateData) },
+        },
+      });
+      return u;
     });
 
     return this.toUserResponse(updated);
@@ -373,48 +396,47 @@ export class AdminService {
     }
 
     const deletedAt = new Date();
-    await this.prisma.user.update({
-      where: { id },
-      data: { deletedAt },
-    });
-
-    await this.prisma.auditLog.create({
-      data: {
-        userId: adminUserId,
-        action: 'delete',
-        resourceType: 'user',
-        resourceId: id,
-        ipAddress: ipAddress ?? '',
-        userAgent: userAgent ?? '',
-        status: 'success',
-      },
-    });
-    const deletedUserAddr = redactPHIFromString(this.encryption.decrypt(user.email));
-    this.logger.log(`Audit log written: delete user ${id} (${deletedUserAddr})`);
-
-    // HIPAA: Soft-delete linked Patient so PHI is excluded from all reads
-    const patient = await this.prisma.patient.findFirst({
-      where: { userId: id, deletedAt: null },
-      select: { id: true },
-    });
-    if (patient) {
-      await this.prisma.patient.update({
-        where: { id: patient.id },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
         data: { deletedAt },
       });
-      await this.prisma.auditLog.create({
+      await tx.auditLog.create({
         data: {
           userId: adminUserId,
           action: 'delete',
-          resourceType: 'patient',
-          resourceId: patient.id,
+          resourceType: 'user',
+          resourceId: id,
           ipAddress: ipAddress ?? '',
           userAgent: userAgent ?? '',
           status: 'success',
         },
       });
-      this.logger.log(`Audit log written: cascade soft-delete patient ${patient.id} (user ${id})`);
-    }
+      const patient = await tx.patient.findFirst({
+        where: { userId: id, deletedAt: null },
+        select: { id: true },
+      });
+      if (patient) {
+        await tx.patient.update({
+          where: { id: patient.id },
+          data: { deletedAt },
+        });
+        await tx.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: 'delete',
+            resourceType: 'patient',
+            resourceId: patient.id,
+            ipAddress: ipAddress ?? '',
+            userAgent: userAgent ?? '',
+            status: 'success',
+          },
+        });
+      }
+    });
+
+    const deletedUserAddr = redactPHIFromString(this.encryption.decryptedView(user, ['email']).email);
+    this.logger.log(`Audit log written: delete user ${id} (${deletedUserAddr})`);
   }
 
   /**
@@ -440,53 +462,52 @@ export class AdminService {
       throw new BadRequestException('User is not inactive; nothing to restore');
     }
 
-    await this.prisma.user.update({
-      where: { id },
-      data: { deletedAt: null },
-    });
-
-    await this.prisma.auditLog.create({
-      data: {
-        userId: adminUserId,
-        action: 'restore',
-        resourceType: 'user',
-        resourceId: id,
-        ipAddress: ipAddress ?? '',
-        userAgent: userAgent ?? '',
-        status: 'success',
-      },
-    });
-    const restoredUserAddr = redactPHIFromString(this.encryption.decrypt(user.email));
-    this.logger.log(`Audit log written: restore user ${id} (${restoredUserAddr})`);
-
-    const patient = await this.prisma.patient.findFirst({
-      where: { userId: id },
-      select: { id: true, deletedAt: true },
-    });
-    if (patient?.deletedAt) {
-      await this.prisma.patient.update({
-        where: { id: patient.id },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
         data: { deletedAt: null },
       });
-      await this.prisma.auditLog.create({
+      await tx.auditLog.create({
         data: {
           userId: adminUserId,
           action: 'restore',
-          resourceType: 'patient',
-          resourceId: patient.id,
+          resourceType: 'user',
+          resourceId: id,
           ipAddress: ipAddress ?? '',
           userAgent: userAgent ?? '',
           status: 'success',
         },
       });
-      this.logger.log(`Audit log written: restore patient ${patient.id} (user ${id})`);
-    }
+      const patient = await tx.patient.findFirst({
+        where: { userId: id },
+        select: { id: true, deletedAt: true },
+      });
+      if (patient?.deletedAt) {
+        await tx.patient.update({
+          where: { id: patient.id },
+          data: { deletedAt: null },
+        });
+        await tx.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: 'restore',
+            resourceType: 'patient',
+            resourceId: patient.id,
+            ipAddress: ipAddress ?? '',
+            userAgent: userAgent ?? '',
+            status: 'success',
+          },
+        });
+      }
+    });
 
-    const decryptedEmail = this.encryption.decrypt(user.email);
-    const decryptedFirstName = this.encryption.decrypt(user.firstName) ?? 'User';
-    const restoredAddr = redactPHIFromString(decryptedEmail);
+    const restoredUserAddr = redactPHIFromString(this.encryption.decryptedView(user, ['email']).email);
+    this.logger.log(`Audit log written: restore user ${id} (${restoredUserAddr})`);
+
+    const userView = this.encryption.decryptedView(user, ['email', 'firstName']);
+    const restoredAddr = redactPHIFromString(userView.email);
     void this.authService
-      .sendRestoreNotificationEmail(decryptedEmail, decryptedFirstName)
+      .sendRestoreNotificationEmail(userView.email, userView.firstName ?? 'User')
       .catch((err: unknown) =>
         this.logger.warn(
           `Restore notification failed for ${restoredAddr}: ${err instanceof Error ? err.message : String(err)}`,
@@ -605,16 +626,18 @@ export class AdminService {
             select: { id: true, email: true },
           })
         : [];
-    const resourceNameByUserId = new Map(resourceUsers.map((u) => [u.id, this.encryption.decrypt(u.email)]));
+    const resourceNameByUserId = new Map(
+      resourceUsers.map((u) => [u.id, this.encryption.decryptedView(u, ['email']).email]),
+    );
 
     return {
       data: items.map((log) => {
-        const userEmail = log.user != null ? this.encryption.decrypt(log.user.email) : '(deleted user)';
+        const userView =
+          log.user != null ? this.encryption.decryptedView(log.user, ['email', 'firstName', 'lastName']) : null;
+        const userEmail = userView != null ? userView.email : '(deleted user)';
         const userName =
-          log.user != null
-            ? `${this.encryption.decrypt(log.user.firstName) ?? ''} ${this.encryption.decrypt(log.user.lastName) ?? ''}`.trim() ||
-              userEmail ||
-              log.userId
+          userView != null
+            ? `${userView.firstName ?? ''} ${userView.lastName ?? ''}`.trim() || userEmail || log.userId
             : '(deleted user)';
         const resourceName =
           log.resourceType === 'user' && log.resourceId != null
@@ -673,30 +696,189 @@ export class AdminService {
     return this.systemSettings;
   }
 
-  // ---------- Reports (stub) ----------
-  getReports(): unknown[] {
-    return [];
+  // ---------- Reports ----------
+  async getReports(): Promise<Array<Record<string, unknown>>> {
+    const list = await this.prisma.generatedReport.findMany({
+      where: { scope: 'admin' },
+      orderBy: { generatedAt: 'desc' },
+      take: 100,
+    });
+    return list.map((r) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      description: r.description ?? undefined,
+      generatedAt: r.generatedAt.toISOString(),
+      generatedBy: r.generatedBy,
+      dateRange: {
+        start: r.dateRangeStart.toISOString(),
+        end: r.dateRangeEnd.toISOString(),
+      },
+      format: r.format,
+    }));
   }
 
-  generateReport(
+  async getReportById(reportId: string): Promise<Record<string, unknown> | null> {
+    const row = await this.prisma.generatedReport.findFirst({
+      where: { id: reportId, scope: 'admin' },
+    });
+    if (!row) return null;
+    return row.payload as Record<string, unknown>;
+  }
+
+  private async persistReport(
+    report: Record<string, unknown>,
+    scope: 'admin' | 'provider',
+    providerId?: string,
+  ): Promise<string> {
+    const dateRange = report.dateRange as { start: string; end: string };
+    const row = await this.prisma.generatedReport.create({
+      data: {
+        type: (report.type as string) ?? 'compliance',
+        title: (report.title as string) ?? 'Report',
+        description: (report.description as string) ?? null,
+        generatedBy: (report.generatedBy as string) ?? '',
+        dateRangeStart: new Date(dateRange?.start ?? Date.now()),
+        dateRangeEnd: new Date(dateRange?.end ?? Date.now()),
+        format: (report.format as string) ?? 'json',
+        scope,
+        providerId: providerId ?? null,
+        payload: report as object,
+      },
+    });
+    return row.id;
+  }
+
+  async generateReport(
     config: {
       type: string;
       dateRange: { start: string; end: string };
       format: string;
     },
     adminUserId: string,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
+    const { type, dateRange, format } = config;
+    const startDate = dateRange.start.includes('T') ? dateRange.start : `${dateRange.start}T00:00:00.000Z`;
+    const endDate = dateRange.end.includes('T') ? dateRange.end : `${dateRange.end}T23:59:59.999Z`;
+    const dateRangeEod = { start: startDate, end: endDate };
+
+    if (type === 'compliance') {
+      const report = await this.reportGenerator.generateComplianceReport({
+        scope: 'admin',
+        dateRange: dateRangeEod,
+        format,
+        generatedBy: adminUserId,
+      });
+      const reportObj = report as unknown as Record<string, unknown>;
+      reportObj.id = await this.persistReport(reportObj, 'admin');
+      return reportObj;
+    }
+
+    if (type === 'users') {
+      const users = await this.getUsers();
+      const data = users.map((u) => ({
+        'User ID': u.id,
+        Name: `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.email,
+        Email: u.email,
+        Role: u.role,
+        'Created At': u.createdAt,
+        'Last Login': u.lastLoginAt ?? '-',
+        Status: u.status ?? 'active',
+      }));
+      const report = {
+        id: `report-${Date.now()}`,
+        type: 'users',
+        title: 'User Activity Report',
+        description: `Generated report for ${dateRange.start} to ${dateRange.end}`,
+        generatedAt: new Date().toISOString(),
+        generatedBy: adminUserId,
+        dateRange,
+        data: { rows: data },
+        format,
+      };
+      report.id = await this.persistReport(report, 'admin');
+      return report;
+    }
+
+    if (type === 'audit') {
+      const result = await this.getAuditLogs({
+        startDate,
+        endDate,
+        page: 1,
+        limit: 5000,
+      });
+      const data = (result.data as Array<Record<string, unknown>>).map((log) => ({
+        Timestamp: log.timestamp,
+        User: log.userName,
+        Email: log.userEmail,
+        Action: log.action,
+        'Resource Type': log.resourceType,
+        'Resource Name': log.resourceName ?? '-',
+        'IP Address': log.ipAddress,
+        Status: log.status,
+        Details: log.details ? JSON.stringify(log.details) : '-',
+      }));
+      const report = {
+        id: `report-${Date.now()}`,
+        type: 'audit',
+        title: 'Audit Report',
+        description: `Generated report for ${dateRange.start} to ${dateRange.end}`,
+        generatedAt: new Date().toISOString(),
+        generatedBy: adminUserId,
+        dateRange,
+        data: { rows: data },
+        format,
+      };
+      report.id = await this.persistReport(report, 'admin');
+      return report;
+    }
+
+    if (type === 'system') {
+      const [userCount, auditResult] = await Promise.all([
+        this.prisma.user.count({ where: { deletedAt: null } }),
+        this.getAuditLogs({
+          startDate,
+          endDate,
+          page: 1,
+          limit: 10000,
+        }),
+      ]);
+      const logs = auditResult.data as Array<{ status?: string }>;
+      const successCount = logs.filter((l) => l.status === 'success').length;
+      const failureCount = logs.filter((l) => l.status === 'failure').length;
+      const report = {
+        id: `report-${Date.now()}`,
+        type: 'system',
+        title: 'System Report',
+        description: `Generated report for ${dateRange.start} to ${dateRange.end}`,
+        generatedAt: new Date().toISOString(),
+        generatedBy: adminUserId,
+        dateRange,
+        data: {
+          totalUsers: userCount,
+          totalAuditLogs: auditResult.total,
+          successfulActions: successCount,
+          failedActions: failureCount,
+          dateRange: `${dateRange.start} to ${dateRange.end}`,
+        },
+        format,
+      };
+      report.id = await this.persistReport(report, 'admin');
+      return report;
+    }
+
     const report = {
       id: `report-${Date.now()}`,
-      type: config.type as 'compliance' | 'users' | 'audit' | 'system',
-      title: `${config.type} Report`,
-      description: `Generated report for ${config.dateRange.start} to ${config.dateRange.end}`,
+      type,
+      title: `${type} Report`,
+      description: `Generated report for ${dateRange.start} to ${dateRange.end}`,
       generatedAt: new Date().toISOString(),
       generatedBy: adminUserId,
-      dateRange: config.dateRange,
+      dateRange,
       data: {},
-      format: config.format as 'pdf' | 'csv' | 'json',
+      format,
     };
+    report.id = await this.persistReport(report, 'admin');
     return report;
   }
 }

@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { Prisma } from '@prisma/client';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NOTIFICATION_TYPES, NOTIFICATION_ACTION_LABELS } from '../notifications/notification-types';
 import { CreateInstructionDto } from './dto/create-instruction.dto';
 import { UpdateInstructionDto } from './dto/update-instruction.dto';
 import { AcknowledgeInstructionDto } from './dto/acknowledge-instruction.dto';
@@ -24,6 +26,7 @@ export class InstructionsService {
   constructor(
     private prisma: PrismaService,
     private encryption: EncryptionService,
+    private notifications: NotificationsService,
   ) {}
 
   /** Decrypt instruction content for API response (backward compatible with plaintext). */
@@ -37,10 +40,8 @@ export class InstructionsService {
     },
   >(instruction: T): T {
     if (!instruction) return instruction;
-    const out = { ...instruction };
-    if (instruction.content) {
-      (out as { content: string }).content = this.encryption.decrypt(instruction.content);
-    }
+    const contentView = this.encryption.decryptedView(instruction as Record<string, unknown>, ['content']);
+    const out = { ...instruction, content: contentView.content };
     const jsonFields = ['medicationDetails', 'lifestyleDetails', 'followUpDetails', 'warningDetails'] as const;
     for (const key of jsonFields) {
       const val = instruction[key];
@@ -112,46 +113,47 @@ export class InstructionsService {
     }
 
     // Create instruction (encrypt content at rest; providerName/patientName derived from relations)
-    const instruction = await this.prisma.careInstruction.create({
-      data: {
-        providerId: requestingUserId,
-        patientId: createDto.patientId,
-        title: createDto.title,
-        type: createDto.type,
-        priority: createDto.priority || 'medium',
-        content: this.encryption.encrypt(createDto.content),
-        medicationDetails:
-          this.encryptJsonDetails((createDto.medicationDetails ?? undefined) as object | undefined) ?? undefined,
-        lifestyleDetails:
-          this.encryptJsonDetails((createDto.lifestyleDetails ?? undefined) as object | undefined) ?? undefined,
-        followUpDetails:
-          this.encryptJsonDetails((createDto.followUpDetails ?? undefined) as object | undefined) ?? undefined,
-        warningDetails:
-          this.encryptJsonDetails((createDto.warningDetails ?? undefined) as object | undefined) ?? undefined,
-        assignedDate: createDto.assignedDate ? new Date(createDto.assignedDate) : new Date(),
-        acknowledgmentDeadline: createDto.acknowledgmentDeadline ? new Date(createDto.acknowledgmentDeadline) : null,
-        expirationDate: createDto.expirationDate ? new Date(createDto.expirationDate) : null,
-        complianceTrackingEnabled: createDto.complianceTrackingEnabled || false,
-        lifestyleTrackingEnabled: createDto.lifestyleTrackingEnabled || false,
-        status: 'active',
-        version: 1,
-      },
-    });
-
-    // Create history entry
-    await this.prisma.instructionHistory.create({
-      data: {
-        instructionId: instruction.id,
-        action: 'create',
-        changedBy: requestingUserId,
-        newValues: {
-          title: instruction.title,
-          type: instruction.type,
-          patientId: instruction.patientId,
+    const instruction = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.careInstruction.create({
+        data: {
+          providerId: requestingUserId,
+          patientId: createDto.patientId,
+          title: createDto.title,
+          type: createDto.type,
+          priority: createDto.priority || 'medium',
+          content: this.encryption.encryptFields({ content: createDto.content }, ['content']).content,
+          medicationDetails:
+            this.encryptJsonDetails((createDto.medicationDetails ?? undefined) as object | undefined) ?? undefined,
+          lifestyleDetails:
+            this.encryptJsonDetails((createDto.lifestyleDetails ?? undefined) as object | undefined) ?? undefined,
+          followUpDetails:
+            this.encryptJsonDetails((createDto.followUpDetails ?? undefined) as object | undefined) ?? undefined,
+          warningDetails:
+            this.encryptJsonDetails((createDto.warningDetails ?? undefined) as object | undefined) ?? undefined,
+          assignedDate: createDto.assignedDate ? new Date(createDto.assignedDate) : new Date(),
+          acknowledgmentDeadline: createDto.acknowledgmentDeadline ? new Date(createDto.acknowledgmentDeadline) : null,
+          expirationDate: createDto.expirationDate ? new Date(createDto.expirationDate) : null,
+          complianceTrackingEnabled: createDto.complianceTrackingEnabled || false,
+          lifestyleTrackingEnabled: createDto.lifestyleTrackingEnabled || false,
+          status: 'active',
+          version: 1,
         },
-        ipAddress,
-        userAgent,
-      },
+      });
+      await tx.instructionHistory.create({
+        data: {
+          instructionId: created.id,
+          action: 'create',
+          changedBy: requestingUserId,
+          newValues: {
+            title: created.title,
+            type: created.type,
+            patientId: created.patientId,
+          },
+          ipAddress,
+          userAgent,
+        },
+      });
+      return created;
     });
 
     const withRelations = await this.prisma.careInstruction.findFirst({
@@ -161,20 +163,42 @@ export class InstructionsService {
         patient: { include: { user: true } },
       },
     });
+
+    // Notify patient of new instruction (in-app reminder)
+    const patientUserId = patient.userId;
+    try {
+      await this.notifications.createNotification({
+        userId: patientUserId,
+        type: NOTIFICATION_TYPES.INSTRUCTION_ASSIGNED,
+        title: 'New care instruction',
+        message: `You have a new care instruction: ${instruction.title}`,
+        priority: instruction.priority === 'urgent' || instruction.priority === 'high' ? 'high' : 'medium',
+        actionUrl: `/patient/instructions/${instruction.id}`,
+        actionLabel: NOTIFICATION_ACTION_LABELS[NOTIFICATION_TYPES.INSTRUCTION_ASSIGNED] ?? 'View instruction',
+        metadata: { instructionId: instruction.id },
+      });
+    } catch {
+      // Do not fail instruction creation if notification fails
+    }
+
     return this.toInstructionResponse(withRelations ?? instruction);
   }
 
   /** Add providerName/patientName from relations (decrypted) and decrypt content */
   private toInstructionResponse(instruction: InstructionForResponse): Record<string, unknown> {
     const decrypted = this.decryptInstruction(instruction);
-    const providerName =
+    const providerView =
       instruction.provider != null
-        ? `${this.encryption.decrypt(instruction.provider.firstName) ?? ''} ${this.encryption.decrypt(instruction.provider.lastName) ?? ''}`.trim()
-        : '';
-    const patientName =
+        ? this.encryption.decryptedView(instruction.provider, ['firstName', 'lastName'])
+        : null;
+    const patientUserView =
       instruction.patient?.user != null
-        ? `${this.encryption.decrypt(instruction.patient.user.firstName) ?? ''} ${this.encryption.decrypt(instruction.patient.user.lastName) ?? ''}`.trim()
-        : '';
+        ? this.encryption.decryptedView(instruction.patient.user, ['firstName', 'lastName'])
+        : null;
+    const providerName =
+      providerView != null ? `${providerView.firstName ?? ''} ${providerView.lastName ?? ''}`.trim() : '';
+    const patientName =
+      patientUserView != null ? `${patientUserView.firstName ?? ''} ${patientUserView.lastName ?? ''}`.trim() : '';
     return { ...decrypted, providerName, patientName } as Record<string, unknown>;
   }
 
@@ -243,11 +267,18 @@ export class InstructionsService {
           where: { id: requestingUserId, deletedAt: null },
         });
         if (!user) return [];
+        const patientEnc = this.encryption.encryptFields(
+          {
+            dateOfBirth: '',
+            medicalRecordNumber: `TEMP-${user.id.slice(0, 8)}`,
+          },
+          ['dateOfBirth', 'medicalRecordNumber'],
+        );
         patient = await this.prisma.patient.create({
           data: {
             userId: user.id,
-            dateOfBirth: this.encryption.encrypt(''),
-            medicalRecordNumber: this.encryption.encrypt(`TEMP-${user.id.slice(0, 8)}`),
+            dateOfBirth: patientEnc.dateOfBirth,
+            medicalRecordNumber: patientEnc.medicalRecordNumber,
           },
         });
       }
@@ -379,7 +410,7 @@ export class InstructionsService {
       ...(updateDto.type && { type: updateDto.type }),
       ...(updateDto.priority && { priority: updateDto.priority }),
       ...(updateDto.content && {
-        content: this.encryption.encrypt(updateDto.content),
+        content: this.encryption.encryptFields({ content: updateDto.content }, ['content']).content,
       }),
       ...(updateDto.medicationDetails && {
         medicationDetails: this.encryptJsonDetails(updateDto.medicationDetails) as object,

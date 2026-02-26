@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req, NotFoundException } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -36,6 +36,17 @@ export class ProvidersController {
   getReports(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     if (role !== 'provider') return [];
     return this.reportsService.getReports(userId);
+  }
+
+  /**
+   * GET /api/v1/providers/reports/:id
+   */
+  @Get('reports/:id')
+  async getReportById(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
+    if (role !== 'provider') throw new NotFoundException('Report not found');
+    const report = await this.reportsService.getReportById(id, userId);
+    if (!report) throw new NotFoundException('Report not found');
+    return report;
   }
 
   /**

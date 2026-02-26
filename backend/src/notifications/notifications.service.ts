@@ -23,12 +23,16 @@ export class NotificationsService {
     actionLabel?: string;
     metadata?: Record<string, unknown>;
   }) {
+    const encrypted = this.encryption.encryptFields({ title: params.title, message: params.message }, [
+      'title',
+      'message',
+    ]) as { title: string; message: string };
     return this.prisma.notification.create({
       data: {
         userId: params.userId,
         type: params.type,
-        title: this.encryption.encrypt(params.title),
-        message: this.encryption.encrypt(params.message),
+        title: encrypted.title,
+        message: encrypted.message,
         priority: params.priority ?? 'medium',
         actionUrl: params.actionUrl ?? undefined,
         actionLabel: params.actionLabel ?? undefined,
@@ -45,11 +49,7 @@ export class NotificationsService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
-    return list.map((n) => ({
-      ...n,
-      title: this.encryption.decrypt(n.title),
-      message: this.encryption.decrypt(n.message),
-    }));
+    return list.map((n) => this.encryption.decryptedView(n, ['title', 'message']));
   }
 
   /**
@@ -69,11 +69,7 @@ export class NotificationsService {
       where: { id: notificationId },
       data: { read: true },
     });
-    return {
-      ...updated,
-      title: this.encryption.decrypt(updated.title),
-      message: this.encryption.decrypt(updated.message),
-    };
+    return this.encryption.decryptedView(updated, ['title', 'message']);
   }
 
   /**

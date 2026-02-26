@@ -49,7 +49,7 @@ const PatientDashboard = () => {
   // Fetch compliance metrics
   const { data: complianceMetrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['patient-compliance-metrics', user?.id],
-    queryFn: () => complianceService.getComplianceMetrics(user?.id || ''),
+    queryFn: () => complianceService.getComplianceMetrics(user?.id || '', 'patient'),
     enabled: !!user?.id,
   });
 

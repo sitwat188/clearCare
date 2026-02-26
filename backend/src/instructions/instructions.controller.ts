@@ -7,8 +7,9 @@ import { CreateInstructionDto } from './dto/create-instruction.dto';
 import { UpdateInstructionDto } from './dto/update-instruction.dto';
 import { AcknowledgeInstructionDto } from './dto/acknowledge-instruction.dto';
 
+/** @deprecated Prefer role-prefixed routes: GET/POST /api/v1/providers/instructions (provider), GET/POST /api/v1/patients/me/instructions (patient). */
 @Controller('instructions')
-@UseGuards(JwtAuthGuard) // All routes require authentication
+@UseGuards(JwtAuthGuard)
 export class InstructionsController {
   constructor(private readonly instructionsService: InstructionsService) {}
 

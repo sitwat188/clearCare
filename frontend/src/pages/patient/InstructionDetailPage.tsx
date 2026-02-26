@@ -60,7 +60,7 @@ const PatientInstructionDetail = () => {
 
   const { data: instruction, isLoading } = useQuery({
     queryKey: ['instruction', id],
-    queryFn: () => instructionService.getInstruction(id || ''),
+    queryFn: () => instructionService.getInstruction(id || '', (user?.role as 'patient' | 'provider') ?? 'patient'),
     enabled: !!id,
   });
 

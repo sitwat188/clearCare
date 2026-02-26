@@ -221,4 +221,32 @@ export const adminService = {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch reports');
     }
   },
+
+  /**
+   * Get report by id (for re-download)
+   */
+  getReportById: async (reportId: string): Promise<AdminReport> => {
+    try {
+      const response = await apiEndpoints.admin.getReportById(reportId);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch report');
+    }
+  },
+
+  /**
+   * Generate a report on the server (compliance, users, audit, system)
+   */
+  generateReport: async (reportConfig: {
+    type: 'compliance' | 'users' | 'audit' | 'system';
+    dateRange: { start: string; end: string };
+    format: 'pdf' | 'csv' | 'json';
+  }): Promise<AdminReport> => {
+    try {
+      const response = await apiEndpoints.admin.generateReport(reportConfig);
+      return response.data;
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to generate report');
+    }
+  },
 };

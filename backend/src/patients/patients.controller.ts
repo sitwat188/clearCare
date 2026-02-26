@@ -8,8 +8,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 
+/** @deprecated Prefer role-prefixed routes: GET/PUT /api/v1/providers/patients (provider), admin uses POST /api/v1/patients and PUT /api/v1/patients/:id. */
 @Controller('patients')
-@UseGuards(JwtAuthGuard) // All routes require authentication
+@UseGuards(JwtAuthGuard)
 export class PatientsController {
   constructor(private readonly patientsService: PatientsService) {}
 

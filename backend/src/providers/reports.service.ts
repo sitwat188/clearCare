@@ -1,14 +1,66 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReportGeneratorService } from '../reports/report-generator.service';
+
+/** Shape of a row from GeneratedReport for type-safe mapping. */
+interface ReportRow {
+  id: string;
+  type: string;
+  title: string;
+  description: string | null;
+  generatedAt: Date;
+  generatedBy: string;
+  dateRangeStart: Date;
+  dateRangeEnd: Date;
+  format: string;
+  payload?: unknown;
+}
+
+/** Typed delegate for GeneratedReport to satisfy strict lint when PrismaClient types are stale. */
+type GeneratedReportDelegate = {
+  findMany(args: { where: object; orderBy: object; take: number }): Promise<ReportRow[]>;
+  findFirst(args: { where: object }): Promise<ReportRow | null>;
+  create(args: { data: object }): Promise<ReportRow>;
+};
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private reportGenerator: ReportGeneratorService,
+    private prisma: PrismaService,
+  ) {}
 
-  getReports(providerId: string) {
-    void providerId; // Reserved for future use
-    // Return empty list; in future could persist generated reports
-    return [];
+  private get reports(): GeneratedReportDelegate {
+    return (this.prisma as unknown as { generatedReport: GeneratedReportDelegate }).generatedReport;
+  }
+
+  async getReports(providerId: string): Promise<Array<Record<string, unknown>>> {
+    const list = await this.reports.findMany({
+      where: { scope: 'provider', providerId },
+      orderBy: { generatedAt: 'desc' },
+      take: 100,
+    });
+    return list.map((r) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      description: r.description ?? undefined,
+      generatedAt: r.generatedAt.toISOString(),
+      generatedBy: r.generatedBy,
+      dateRange: {
+        start: r.dateRangeStart.toISOString(),
+        end: r.dateRangeEnd.toISOString(),
+      },
+      format: r.format,
+    }));
+  }
+
+  async getReportById(reportId: string, providerId: string): Promise<Record<string, unknown> | null> {
+    const row = await this.reports.findFirst({
+      where: { id: reportId, scope: 'provider', providerId },
+    });
+    if (!row) return null;
+    return row.payload as Record<string, unknown>;
   }
 
   async generateReport(
@@ -19,101 +71,39 @@ export class ReportsService {
       format: string;
     },
   ) {
-    const start = new Date(config.dateRange.start);
-    const end = new Date(config.dateRange.end);
-
-    const patients = await this.prisma.patient.findMany({
-      where: {
-        patientProviders: { some: { providerId } },
-        deletedAt: null,
-      },
-      include: {
-        user: { select: { firstName: true, lastName: true, email: true } },
-      },
-    });
-
-    const instructions = await this.prisma.careInstruction.findMany({
-      where: {
-        providerId,
-        deletedAt: null,
-        assignedDate: { gte: start, lte: end },
-      },
-      include: {
-        patient: {
-          include: { user: { select: { firstName: true, lastName: true } } },
-        },
-      },
-    });
-
-    const complianceRecords = await this.prisma.complianceRecord.findMany({
-      where: {
-        instruction: {
-          patient: {
-            patientProviders: { some: { providerId } },
-          },
-        },
-        updatedAt: { gte: start, lte: end },
-      },
-      include: {
-        instruction: {
-          select: { title: true, type: true },
-          include: {
-            patient: {
-              include: {
-                user: { select: { firstName: true, lastName: true } },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const byPatient = new Map<string, { instructions: number; acknowledged: number; complianceAvg: number }>();
-    for (const p of patients) {
-      byPatient.set(p.id, {
-        instructions: 0,
-        acknowledged: 0,
-        complianceAvg: 0,
-      });
-    }
-    for (const i of instructions) {
-      const entry = byPatient.get(i.patientId);
-      if (entry) {
-        entry.instructions += 1;
-        if (i.acknowledgedDate) entry.acknowledged += 1;
-      }
-    }
-    let totalCompliance = 0;
-    let complianceCount = 0;
-    for (const c of complianceRecords) {
-      totalCompliance += c.overallPercentage;
-      complianceCount += 1;
-    }
-    const avgCompliance = complianceCount > 0 ? totalCompliance / complianceCount : 0;
-
-    const summary = {
+    const params = {
+      providerId,
       dateRange: config.dateRange,
-      totalPatients: patients.length,
-      totalInstructions: instructions.length,
-      acknowledgedInstructions: instructions.filter((i) => i.acknowledgedDate).length,
-      complianceRecordsCount: complianceRecords.length,
-      averageCompliancePercent: Math.round(avgCompliance * 10) / 10,
-      byPatient: Array.from(byPatient.entries()).map(([patientId, stats]) => ({
-        patientId,
-        ...stats,
-      })),
-    };
-
-    return {
-      id: `report-${Date.now()}`,
-      type: config.type,
-      title: `${config.type} Report`,
-      description: `Report for ${config.dateRange.start} to ${config.dateRange.end}`,
-      generatedAt: new Date().toISOString(),
-      generatedBy: providerId,
-      dateRange: config.dateRange,
-      data: summary,
       format: config.format,
+      generatedBy: providerId,
     };
+    let report: Record<string, unknown>;
+    if (config.type === 'instructions') {
+      report = (await this.reportGenerator.generateInstructionsReport(params)) as unknown as Record<string, unknown>;
+    } else if (config.type === 'acknowledgments') {
+      report = (await this.reportGenerator.generateAcknowledgmentsReport(params)) as unknown as Record<string, unknown>;
+    } else {
+      report = (await this.reportGenerator.generateComplianceReport({
+        scope: 'provider',
+        ...params,
+      })) as unknown as Record<string, unknown>;
+    }
+    const dateRange = report.dateRange as { start: string; end: string };
+    const row = await this.reports.create({
+      data: {
+        type: (report.type as string) ?? 'compliance',
+        title: (report.title as string) ?? 'Report',
+        description: (report.description as string) ?? null,
+        generatedBy: (report.generatedBy as string) ?? '',
+        dateRangeStart: new Date(dateRange?.start ?? Date.now()),
+        dateRangeEnd: new Date(dateRange?.end ?? Date.now()),
+        format: (report.format as string) ?? 'json',
+        scope: 'provider',
+        providerId,
+        payload: report as object,
+      },
+    });
+    report.id = row.id;
+    return report;
   }
 }

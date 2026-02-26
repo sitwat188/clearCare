@@ -1,3 +1,7 @@
+/**
+ * Encryption service: encrypt/decrypt strings, decryptedView (getter-like), encryptFields (setter-like).
+ * For class-based getters/setters use @Encrypted() and decryptedViewOf/encryptForStorage from './encrypted.decorator'.
+ */
 import { Injectable } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from 'crypto';
 
@@ -76,5 +80,47 @@ export class EncryptionService {
     if (email == null || email === '') return '';
     const normalized = email.toLowerCase().trim();
     return createHash('sha256').update(normalized).digest('hex');
+  }
+
+  /**
+   * Return a read-only view of an object where the given keys are decrypted on read (getter-like).
+   * Use when building API responses from Prisma entities.
+   * @example
+   *   const user = await this.prisma.user.findFirst(...);
+   *   return this.encryption.decryptedView(user, ['email', 'firstName', 'lastName']);
+   */
+  decryptedView<T extends Record<string, unknown>>(raw: T, keys: (keyof T)[]): T {
+    return new Proxy(raw, {
+      get: (target, prop: string | symbol) => {
+        const k = prop as keyof T;
+        if (keys.includes(k)) {
+          return this.decrypt(target[k] as string);
+        }
+        return target[k];
+      },
+      set: () => false, // read-only view
+    });
+  }
+
+  /**
+   * Return an object with the given keys from `plain` encrypted (setter-like for storage).
+   * Use when building create/update payloads for Prisma. Skips keys that are undefined.
+   * @example
+   *   const updateData = {
+   *     ...this.encryption.encryptFields(
+   *       { firstName: dto.firstName, lastName: dto.lastName },
+   *       ['firstName', 'lastName'],
+   *     ),
+   *     updatedAt: new Date(),
+   *   };
+   */
+  encryptFields(plain: Record<string, string | null | undefined>, keys: string[]): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const key of keys) {
+      if (key in plain && plain[key] !== undefined) {
+        out[key] = this.encrypt(plain[key] ?? '');
+      }
+    }
+    return out;
   }
 }

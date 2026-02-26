@@ -31,18 +31,16 @@ export const instructionService = {
   },
 
   /**
-   * Get instruction by ID
+   * Get instruction by ID. Caller must pass role so the correct endpoint is used.
    */
-  getInstruction: async (id: string): Promise<CareInstruction> => {
+  getInstruction: async (id: string, role: 'patient' | 'provider'): Promise<CareInstruction> => {
     try {
-      // Try patient endpoint first, fallback to provider
-      try {
+      if (role === 'patient') {
         const response = await apiEndpoints.patient.getMyInstruction(id);
         return response.data;
-      } catch {
-        const response = await apiEndpoints.provider.getInstruction(id);
-        return response.data;
       }
+      const response = await apiEndpoints.provider.getInstruction(id);
+      return response.data;
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch instruction');
     }

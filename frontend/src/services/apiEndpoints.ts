@@ -211,6 +211,19 @@ export const patientEndpoints = {
   },
 
   /**
+   * POST /api/v1/compliance
+   * Create a compliance record for an instruction (e.g. so the patient can log doses).
+   */
+  createComplianceRecord: async (body: {
+    instructionId: string;
+    type: 'medication' | 'lifestyle' | 'appointment';
+    status?: string;
+    overallPercentage?: number;
+  }): Promise<ApiResponse<ComplianceRecord>> => {
+    return makeApiRequest('post', '/compliance', body);
+  },
+
+  /**
    * PUT /api/v1/compliance/:recordId/medication
    * Update medication adherence (dose log)
    */
@@ -324,6 +337,18 @@ export const providerEndpoints = {
    */
   getPatientComplianceMetrics: async (patientId: string): Promise<ApiResponse<ComplianceMetrics>> => {
     return makeApiRequest('get', `/providers/patients/${patientId}/compliance/metrics`);
+  },
+
+  /**
+   * POST /api/v1/providers/reports
+   * Generate compliance report (server-side)
+   */
+  generateReport: async (body: {
+    type: string;
+    dateRange: { start: string; end: string };
+    format: string;
+  }): Promise<ApiResponse<Record<string, unknown>>> => {
+    return makeApiRequest('post', '/providers/reports', body);
   },
 
   /**
@@ -512,6 +537,14 @@ export const adminEndpoints = {
    */
   getReports: async (): Promise<ApiResponse<AdminReport[]>> => {
     return makeApiRequest('get', '/admin/reports');
+  },
+
+  /**
+   * GET /api/v1/admin/reports/:id
+   * Get report payload for re-download
+   */
+  getReportById: async (id: string): Promise<ApiResponse<AdminReport>> => {
+    return makeApiRequest('get', `/admin/reports/${id}`);
   },
 
   /**

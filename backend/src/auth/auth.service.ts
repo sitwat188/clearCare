@@ -62,15 +62,8 @@ export class AuthService {
   ) {}
 
   /** Decrypt email, firstName, lastName for API response / tokens (supports legacy plaintext rows). */
-  private decryptUser<T extends { email: string; firstName: string; lastName: string }>(
-    user: T,
-  ): T & { email: string; firstName: string; lastName: string } {
-    return {
-      ...user,
-      email: this.encryption.decrypt(user.email),
-      firstName: this.encryption.decrypt(user.firstName),
-      lastName: this.encryption.decrypt(user.lastName),
-    };
+  private decryptUser<T extends { email: string; firstName: string; lastName: string }>(user: T) {
+    return this.encryption.decryptedView(user, ['email', 'firstName', 'lastName']);
   }
 
   async register(registerDto: RegisterDto, ipAddress?: string, userAgent?: string) {
@@ -104,31 +97,46 @@ export class AuthService {
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
 
-    const user = await this.prisma.user.create({
-      data: {
-        emailHash,
-        email: this.encryption.encrypt(normalizedEmail),
-        passwordHash,
-        firstName: this.encryption.encrypt(registerDto.firstName),
-        lastName: this.encryption.encrypt(registerDto.lastName),
-        role: registerDto.role,
+    const userEnc = this.encryption.encryptFields(
+      {
+        email: normalizedEmail,
+        firstName: registerDto.firstName,
+        lastName: registerDto.lastName,
       },
-    });
-
-    await this.prisma.userHistory.create({
-      data: {
-        userId: user.id,
-        action: 'create',
-        changedBy: user.id,
-        newValues: redactPHIFromObject({
-          email: this.encryption.encrypt(normalizedEmail),
-          role: user.role,
-          firstName: this.encryption.encrypt(registerDto.firstName),
-          lastName: this.encryption.encrypt(registerDto.lastName),
-        }),
-        ipAddress,
-        userAgent,
-      },
+      ['email', 'firstName', 'lastName'],
+    ) as { email: string; firstName: string; lastName: string };
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          emailHash,
+          passwordHash,
+          role: registerDto.role,
+          email: userEnc.email,
+          firstName: userEnc.firstName,
+          lastName: userEnc.lastName,
+        },
+      });
+      await tx.userHistory.create({
+        data: {
+          userId: created.id,
+          action: 'create',
+          changedBy: created.id,
+          newValues: redactPHIFromObject({
+            role: created.role,
+            ...this.encryption.encryptFields(
+              {
+                email: normalizedEmail,
+                firstName: registerDto.firstName,
+                lastName: registerDto.lastName,
+              },
+              ['email', 'firstName', 'lastName'],
+            ),
+          }),
+          ipAddress,
+          userAgent,
+        },
+      });
+      return created;
     });
 
     const decrypted = this.decryptUser(user);
@@ -161,13 +169,17 @@ export class AuthService {
         where: { email: normalized, deletedAt: null },
       });
       if (user && !user.emailHash) {
+        const view = this.encryption.decryptedView(user, ['email', 'firstName', 'lastName']);
+        const plain = {
+          email: view.email || user.email,
+          firstName: view.firstName || user.firstName,
+          lastName: view.lastName || user.lastName,
+        };
         await this.prisma.user.update({
           where: { id: user.id },
           data: {
-            emailHash: this.encryption.hashEmailForLookup(this.encryption.decrypt(user.email) || user.email),
-            email: this.encryption.encrypt(this.encryption.decrypt(user.email) || user.email),
-            firstName: this.encryption.encrypt(this.encryption.decrypt(user.firstName) || user.firstName),
-            lastName: this.encryption.encrypt(this.encryption.decrypt(user.lastName) || user.lastName),
+            emailHash: this.encryption.hashEmailForLookup(plain.email),
+            ...this.encryption.encryptFields(plain, ['email', 'firstName', 'lastName']),
           },
         });
         const updated = await this.prisma.user.findFirst({
@@ -366,7 +378,7 @@ export class AuthService {
     }
 
     const secret = speakeasy.generateSecret({
-      name: `${TWO_FACTOR_APP_NAME} (${this.encryption.decrypt(user.email)})`,
+      name: `${TWO_FACTOR_APP_NAME} (${this.encryption.decryptedView(user, ['email']).email})`,
       length: 20,
     });
     if (!secret.base32) {

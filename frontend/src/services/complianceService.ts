@@ -8,31 +8,30 @@ import type { ComplianceRecord, ComplianceMetrics } from '../types/compliance.ty
 
 export const complianceService = {
   /**
-   * Get compliance records for patient
+   * Get compliance records. Pass role so the correct endpoint is used (patient = "my", provider = by patientId).
    */
-  getComplianceRecords: async (patientId: string): Promise<ComplianceRecord[]> => {
+  getComplianceRecords: async (patientId: string, role: 'patient' | 'provider'): Promise<ComplianceRecord[]> => {
     try {
-      try {
+      if (role === 'patient') {
         const response = await apiEndpoints.patient.getMyCompliance();
         return Array.isArray(response?.data) ? response.data : [];
-      } catch {
-        const response = await apiEndpoints.provider.getPatientCompliance(patientId);
-        return Array.isArray(response?.data) ? response.data : [];
       }
+      const response = await apiEndpoints.provider.getPatientCompliance(patientId);
+      return Array.isArray(response?.data) ? response.data : [];
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to fetch compliance records');
     }
   },
 
   /**
-   * Get compliance metrics for patient
+   * Get compliance metrics. Pass role so the correct endpoint is used (patient = "my", provider = by patientId).
    */
-  getComplianceMetrics: async (patientId: string): Promise<ComplianceMetrics> => {
+  getComplianceMetrics: async (patientId: string, role: 'patient' | 'provider'): Promise<ComplianceMetrics> => {
     try {
-      try {
+      if (role === 'patient') {
         const response = await apiEndpoints.patient.getMyComplianceMetrics();
         if (response?.data && typeof response.data === 'object') return response.data as ComplianceMetrics;
-      } catch {
+      } else {
         const response = await apiEndpoints.provider.getPatientComplianceMetrics(patientId);
         if (response?.data && typeof response.data === 'object') return response.data as ComplianceMetrics;
       }
@@ -49,6 +48,23 @@ export const complianceService = {
       compliantInstructions: 0,
       trends: [],
     };
+  },
+
+  /**
+   * Create a compliance record for an instruction (patient: own instructions only).
+   * Use when a medication/lifestyle instruction has no record yet so "Log dose" can work.
+   */
+  createComplianceRecord: async (
+    instructionId: string,
+    type: 'medication' | 'lifestyle' | 'appointment'
+  ): Promise<ComplianceRecord> => {
+    const response = await apiEndpoints.patient.createComplianceRecord({
+      instructionId,
+      type,
+      status: 'not-started',
+      overallPercentage: 0,
+    });
+    return response.data as ComplianceRecord;
   },
 
   /**

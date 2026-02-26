@@ -457,3 +457,24 @@ model InstructionTemplate {
   @@index([providerId])
   @@map("instruction_templates")
 }
+
+// Generated report (admin and provider); stored for list and re-download
+model GeneratedReport {
+  id             String   @id @default(uuid())
+  type           String   // 'compliance' | 'users' | 'audit' | 'system' (admin); 'compliance' (provider)
+  title          String
+  description    String?
+  generatedAt    DateTime @default(now()) @map("generated_at")
+  generatedBy    String   @map("generated_by") // userId
+  dateRangeStart DateTime @map("date_range_start")
+  dateRangeEnd   DateTime @map("date_range_end")
+  format         String   // 'pdf' | 'csv' | 'json'
+  scope          String   // 'admin' | 'provider'
+  providerId     String?  @map("provider_id") // set when scope = provider
+  payload        Json     // full report payload for re-download
+
+  @@index([generatedBy])
+  @@index([scope, generatedBy])
+  @@index([generatedAt])
+  @@map("generated_reports")
+}

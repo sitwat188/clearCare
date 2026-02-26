@@ -20,27 +20,21 @@ export class TemplatesService {
       details?: unknown;
     },
   >(row: T): T {
-    return {
-      ...row,
-      name: this.encryption.decrypt(row.name),
-      description: row.description ? this.encryption.decrypt(row.description) : null,
-      content: this.encryption.decrypt(row.content),
-      details:
-        row.details != null &&
-        typeof row.details === 'object' &&
-        '_encrypted' in row.details &&
-        typeof (row.details as { _encrypted: string })._encrypted === 'string'
-          ? (() => {
-              try {
-                return JSON.parse(
-                  this.encryption.decrypt((row.details as { _encrypted: string })._encrypted),
-                ) as unknown;
-              } catch {
-                return row.details;
-              }
-            })()
-          : row.details,
-    };
+    const view = this.encryption.decryptedView(row as Record<string, unknown>, ['name', 'description', 'content']);
+    const details =
+      row.details != null &&
+      typeof row.details === 'object' &&
+      '_encrypted' in row.details &&
+      typeof (row.details as { _encrypted: string })._encrypted === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(this.encryption.decrypt((row.details as { _encrypted: string })._encrypted)) as unknown;
+            } catch {
+              return row.details;
+            }
+          })()
+        : row.details;
+    return { ...row, name: view.name, description: view.description ?? null, content: view.content, details };
   }
 
   private encryptDetails(details: unknown): Prisma.InputJsonValue | undefined {
@@ -71,13 +65,21 @@ export class TemplatesService {
   }
 
   async createTemplate(providerId: string, dto: CreateTemplateDto) {
+    const enc = this.encryption.encryptFields(
+      {
+        name: dto.name,
+        description: dto.description ?? undefined,
+        content: dto.content,
+      },
+      ['name', 'description', 'content'],
+    ) as { name: string; description?: string; content: string };
     const created = await this.prisma.instructionTemplate.create({
       data: {
         providerId,
-        name: this.encryption.encrypt(dto.name),
+        name: enc.name,
+        content: enc.content,
+        description: enc.description ?? null,
         type: dto.type,
-        description: dto.description ? this.encryption.encrypt(dto.description) : null,
-        content: this.encryption.encrypt(dto.content),
         details: this.encryptDetails(dto.details ?? undefined),
       },
     });
@@ -88,17 +90,23 @@ export class TemplatesService {
     await this.prisma.instructionTemplate.findFirstOrThrow({
       where: { id, providerId },
     });
+    const enc =
+      dto.name !== undefined || dto.description !== undefined || dto.content !== undefined
+        ? this.encryption.encryptFields(
+            {
+              name: dto.name,
+              description: dto.description,
+              content: dto.content,
+            },
+            ['name', 'description', 'content'],
+          )
+        : null;
     const data: Prisma.InstructionTemplateUpdateInput = {
-      ...(dto.name !== undefined && {
-        name: this.encryption.encrypt(dto.name),
-      }),
+      ...(enc?.name !== undefined && { name: enc.name }),
       ...(dto.type !== undefined && { type: dto.type }),
-      ...(dto.description !== undefined && {
-        description: dto.description ? this.encryption.encrypt(dto.description) : null,
-      }),
-      ...(dto.content !== undefined && {
-        content: this.encryption.encrypt(dto.content),
-      }),
+      ...(enc?.description !== undefined && { description: enc.description }),
+      ...(dto.description === null && { description: null }),
+      ...(enc?.content !== undefined && { content: enc.content }),
       ...(dto.details !== undefined && {
         details: this.encryptDetails(dto.details),
       }),

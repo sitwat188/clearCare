@@ -38,12 +38,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // Return user object (decrypted) for request.user so UI shows plaintext name/email
+    const view = this.encryption.decryptedView(user, ['email', 'firstName', 'lastName']);
     return {
       id: user.id,
-      email: this.encryption.decrypt(user.email) ?? '',
+      email: view.email ?? '',
       role: user.role,
-      firstName: this.encryption.decrypt(user.firstName) ?? '',
-      lastName: this.encryption.decrypt(user.lastName) ?? '',
+      firstName: view.firstName ?? '',
+      lastName: view.lastName ?? '',
     };
   }
 }

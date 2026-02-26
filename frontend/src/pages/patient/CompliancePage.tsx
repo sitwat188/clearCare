@@ -132,15 +132,17 @@ const PatientCompliance = () => {
 
   const { data: complianceRecords, isLoading: complianceLoading } = useQuery({
     queryKey: ['patient-compliance', user?.id],
-    queryFn: () => complianceService.getComplianceRecords(user?.id || ''),
+    queryFn: () => complianceService.getComplianceRecords(user?.id || '', 'patient'),
     enabled: !!user?.id,
   });
 
   const { data: complianceMetrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['patient-compliance-metrics', user?.id],
-    queryFn: () => complianceService.getComplianceMetrics(user?.id || ''),
+    queryFn: () => complianceService.getComplianceMetrics(user?.id || '', 'patient'),
     enabled: !!user?.id,
   });
+
+  const [creatingRecordForInstructionId, setCreatingRecordForInstructionId] = useState<string | null>(null);
 
   const updateMedicationMutation = useMutation({
     mutationFn: async ({ recordId, date, time, status, reason }: {
@@ -453,24 +455,38 @@ const PatientCompliance = () => {
                               <Chip label={`${adherence.missedDoses} Missed`} color="error" size="small" />
                               <Chip label={`${adherence.totalDoses} Total`} color="default" size="small" />
                             </Box>
-                            {record?.id && (
-                              <Button
-                                variant="contained"
-                                size="small"
-                                startIcon={<AddIcon />}
-                                onClick={() => {
-                                  setSelectedMedicationRecordId(record.id);
-                                  setSelectedDose(null);
-                                  setNewDoseDate(new Date().toISOString().slice(0, 10));
-                                  setNewDoseTime('08:00');
-                                  setDoseStatus('taken');
-                                  setMissedReason('');
-                                  setMedicationDialogOpen(true);
-                                }}
-                              >
-                                Log dose
-                              </Button>
-                            )}
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={creatingRecordForInstructionId === instruction.id ? <CircularProgress size={16} /> : <AddIcon />}
+                              disabled={creatingRecordForInstructionId === instruction.id}
+                              onClick={async () => {
+                                let recordId = record?.id;
+                                if (!recordId) {
+                                  setCreatingRecordForInstructionId(instruction.id);
+                                  try {
+                                    const created = await complianceService.createComplianceRecord(instruction.id, 'medication');
+                                    recordId = created.id;
+                                    queryClient.invalidateQueries({ queryKey: ['patient-compliance', user?.id] });
+                                    queryClient.invalidateQueries({ queryKey: ['patient-compliance-metrics', user?.id] });
+                                  } catch (e) {
+                                    toast.error(e instanceof Error ? e.message : 'Failed to set up tracking');
+                                    return;
+                                  } finally {
+                                    setCreatingRecordForInstructionId(null);
+                                  }
+                                }
+                                setSelectedMedicationRecordId(recordId!);
+                                setSelectedDose(null);
+                                setNewDoseDate(new Date().toISOString().slice(0, 10));
+                                setNewDoseTime('08:00');
+                                setDoseStatus('taken');
+                                setMissedReason('');
+                                setMedicationDialogOpen(true);
+                              }}
+                            >
+                              {record?.id ? 'Log dose' : 'Set up & log dose'}
+                            </Button>
                           </Box>
 
                           {adherence.schedule.length > 0 && (

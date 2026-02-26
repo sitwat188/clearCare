@@ -6,11 +6,12 @@ import { ProvidersController } from './providers.controller';
 import { PatientsModule } from '../patients/patients.module';
 import { ComplianceModule } from '../compliance/compliance.module';
 import { InstructionsModule } from '../instructions/instructions.module';
+import { ReportsModule } from '../reports/reports.module';
 import { TemplatesService } from './templates.service';
 import { ReportsService } from './reports.service';
 
 @Module({
-  imports: [PrismaModule, EncryptionModule, PatientsModule, ComplianceModule, InstructionsModule],
+  imports: [PrismaModule, EncryptionModule, PatientsModule, ComplianceModule, InstructionsModule, ReportsModule],
   controllers: [ProvidersController],
   providers: [TemplatesService, ReportsService, RolesGuard],
 })

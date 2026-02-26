@@ -216,45 +216,55 @@ export const exportAuditLogs = (logs: any[], format: 'csv' | 'json' | 'pdf' = 'c
 };
 
 /**
- * Export report data
+ * Export report data. Handles backend shape: report.data.rows (table) or report.data (object).
  */
 export const exportReport = (report: any, format: 'pdf' | 'csv' | 'json'): void => {
   const timestamp = new Date().toISOString().split('T')[0];
   const filename = `${report.title || 'report'}-${timestamp}`.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  const data = report.data || {};
+  const rows = Array.isArray(data.rows) ? data.rows : null;
 
   switch (format) {
     case 'csv': {
-      // Convert report data to array format
-      const csvData = Object.entries(report.data || {}).map(([key, value]) => ({
-        Metric: key,
-        Value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-      }));
-      exportToCSV(csvData, filename);
+      if (rows && rows.length > 0) {
+        exportToCSV(rows, filename);
+      } else {
+        const csvData = Object.entries(data).filter(([k]) => k !== 'rows').map(([key, value]) => ({
+          Metric: key,
+          Value: typeof value === 'object' && value !== null && !Array.isArray(value) ? JSON.stringify(value) : String(value),
+        }));
+        exportToCSV(csvData.length ? csvData : [{ Metric: 'Message', Value: 'No data' }], filename);
+      }
       break;
     }
     case 'json':
       exportToJSON(report, filename);
       break;
     case 'pdf': {
-      // Create formatted PDF content
       let pdfContent = `
         <h2>${report.title}</h2>
         <p><strong>Description:</strong> ${report.description || 'N/A'}</p>
         <p><strong>Generated:</strong> ${new Date(report.generatedAt).toLocaleString()}</p>
-        <p><strong>Date Range:</strong> ${new Date(report.dateRange.start).toLocaleDateString()} - ${new Date(report.dateRange.end).toLocaleDateString()}</p>
+        <p><strong>Date Range:</strong> ${report.dateRange ? `${new Date(report.dateRange.start).toLocaleDateString()} - ${new Date(report.dateRange.end).toLocaleDateString()}` : 'N/A'}</p>
       `;
-
-      // Add data as table if it's an object
-      if (report.data && typeof report.data === 'object') {
-        const dataTable = arrayToHTMLTable(
-          Object.entries(report.data).map(([key, value]) => ({
-            Metric: key,
-            Value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-          }))
-        );
-        pdfContent += dataTable;
+      if (rows && rows.length > 0) {
+        pdfContent += arrayToHTMLTable(rows);
+      } else if (data && typeof data === 'object') {
+        const entries = Object.entries(data).filter(([k]) => k !== 'rows' && k !== 'byPatient');
+        if (entries.length > 0) {
+          pdfContent += arrayToHTMLTable(
+            entries.map(([key, value]) => ({
+              Metric: key,
+              Value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+            }))
+          );
+        }
+        const byPatient = Array.isArray(data.byPatient) ? data.byPatient : null;
+        if (byPatient && byPatient.length > 0) {
+          pdfContent += `<h3 style="margin-top: 24px;">Per-patient breakdown</h3>`;
+          pdfContent += arrayToHTMLTable(byPatient);
+        }
       }
-
       exportToPDF(pdfContent, filename, report.title);
       break;
     }

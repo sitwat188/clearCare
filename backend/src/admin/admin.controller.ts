@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Req,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -133,6 +145,15 @@ export class AdminController {
   @Get('reports')
   getReports() {
     return this.adminService.getReports();
+  }
+
+  @Get('reports/:id')
+  async getReportById(@Param('id') id: string) {
+    const report = await this.adminService.getReportById(id);
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+    return report;
   }
 
   @Post('reports')

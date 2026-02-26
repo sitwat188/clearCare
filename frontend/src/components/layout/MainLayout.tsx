@@ -6,6 +6,7 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Box, Container } from '@mui/material';
 import Sidebar from './Sidebar';
+import Header from './Header';
 import { drawerWidth, collapsedWidth } from './layoutConstants';
 
 interface MainLayoutProps {
@@ -45,7 +46,8 @@ const MainLayout = ({ children }: MainLayoutProps) => {
           transition: 'margin-left 0.3s ease, width 0.3s ease',
         }}
       >
-        <Box sx={{ flexGrow: 1, p: { xs: 2, sm: 3 }, minWidth: 0 }}>
+        <Header />
+        <Box sx={{ flexGrow: 1, pt: '64px', px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 3 }, minWidth: 0 }}>
           <Container maxWidth="xl">{children}</Container>
         </Box>
       </Box>

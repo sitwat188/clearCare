@@ -65,7 +65,7 @@ const PatientHistory = () => {
 
   const { data: complianceRecords } = useQuery({
     queryKey: ['patient-compliance', user?.id],
-    queryFn: () => complianceService.getComplianceRecords(user?.id || ''),
+    queryFn: () => complianceService.getComplianceRecords(user?.id || '', 'patient'),
     enabled: !!user?.id,
   });
 

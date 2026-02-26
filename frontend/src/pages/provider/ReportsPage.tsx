@@ -28,10 +28,11 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import type { RootState } from '../../store/store';
+import { apiEndpoints } from '../../services/apiEndpoints';
 import { patientService } from '../../services/patientService';
 import { instructionService } from '../../services/instructionService';
 import PageHeader from '../../components/common/PageHeader';
-import { exportComplianceReport } from '../../utils/exportUtils';
+import { exportComplianceReport, exportReport } from '../../utils/exportUtils';
 
 const ProviderReports = () => {
   const user = useSelector((state: RootState) => state.auth.user);
@@ -52,13 +53,29 @@ const ProviderReports = () => {
     enabled: !!user?.id,
   });
 
-  const handleGenerateReport = (exportFormat: 'pdf' | 'csv') => {
+  const handleGenerateReport = async (exportFormat: 'pdf' | 'csv') => {
     try {
-      // Filter data based on selected parameters
+      const start = startDate ? format(startDate, 'yyyy-MM-dd') : format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+      const end = endDate ? format(endDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+      const serverType = reportType === 'summary' ? 'compliance' : reportType;
+      if (serverType === 'compliance' || serverType === 'instructions' || serverType === 'acknowledgments') {
+        const res = await apiEndpoints.provider.generateReport({
+          type: serverType,
+          dateRange: { start, end },
+          format: exportFormat,
+        });
+        const report = res.data as { id?: string; title?: string; description?: string; generatedAt?: string; dateRange?: { start: string; end: string }; data?: unknown; format?: string };
+        if (report?.data) {
+          exportReport(report, exportFormat);
+          toast.success(`Generated ${exportFormat.toUpperCase()} ${serverType} report`);
+          return;
+        }
+      }
+
+      // Fallback: client-side report (e.g. if server returns no data)
       let reportData: Record<string, string | number>[] = [];
       
       if (reportType === 'compliance' || reportType === 'summary') {
-        // Create compliance summary
         const filteredInstructions = instructions?.filter(inst => {
           if (selectedPatient !== 'all' && inst.patientId !== selectedPatient) return false;
           if (startDate && new Date(inst.assignedDate) < startDate) return false;

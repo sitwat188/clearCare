@@ -43,12 +43,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return {
-      ...user,
-      email: this.encryption.decrypt(user.email),
-      firstName: this.encryption.decrypt(user.firstName),
-      lastName: this.encryption.decrypt(user.lastName),
-    };
+    return this.encryption.decryptedView(user, ['email', 'firstName', 'lastName']);
   }
 
   /**
@@ -87,14 +82,21 @@ export class UsersService {
       lastName?: string;
       emailHash?: string;
       updatedAt: Date;
-    } = { updatedAt: new Date() };
+    } = {
+      ...this.encryption.encryptFields(
+        {
+          firstName: updateDto.firstName,
+          lastName: updateDto.lastName,
+          email: updateDto.email ? updateDto.email.toLowerCase().trim() : undefined,
+        },
+        ['firstName', 'lastName', 'email'],
+      ),
+      updatedAt: new Date(),
+    };
     if (updateDto.email) {
       const normalized = updateDto.email.toLowerCase().trim();
       updateData.emailHash = this.encryption.hashEmailForLookup(normalized);
-      updateData.email = this.encryption.encrypt(normalized);
     }
-    if (updateDto.firstName !== undefined) updateData.firstName = this.encryption.encrypt(updateDto.firstName);
-    if (updateDto.lastName !== undefined) updateData.lastName = this.encryption.encrypt(updateDto.lastName);
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
@@ -125,24 +127,17 @@ export class UsersService {
       },
     });
 
-    return {
-      ...updatedUser,
-      email: this.encryption.decrypt(updatedUser.email),
-      firstName: this.encryption.decrypt(updatedUser.firstName),
-      lastName: this.encryption.decrypt(updatedUser.lastName),
-    };
+    return this.encryption.decryptedView(updatedUser, ['email', 'firstName', 'lastName']);
   }
 
   /**
    * Set 2FA secret (encrypted at rest). Use when enabling 2FA.
    */
   async setTwoFactorSecret(userId: string, secret: string): Promise<void> {
+    const encrypted = this.encryption.encryptFields({ twoFactorSecret: secret }, ['twoFactorSecret']);
     await this.prisma.user.update({
       where: { id: userId },
-      data: {
-        twoFactorSecret: this.encryption.encrypt(secret),
-        twoFactorEnabled: true,
-      },
+      data: { ...encrypted, twoFactorEnabled: true },
     });
   }
 
@@ -150,9 +145,10 @@ export class UsersService {
    * Set backup codes (encrypted at rest). Use when enabling 2FA.
    */
   async setBackupCodes(userId: string, codesJson: string): Promise<void> {
+    const encrypted = this.encryption.encryptFields({ backupCodes: codesJson }, ['backupCodes']);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { backupCodes: this.encryption.encrypt(codesJson) },
+      data: encrypted,
     });
   }
 
@@ -165,8 +161,8 @@ export class UsersService {
       select: { twoFactorSecret: true },
     });
     if (!user?.twoFactorSecret) return null;
-    const decrypted = this.encryption.decrypt(user.twoFactorSecret);
-    return decrypted || null;
+    const view = this.encryption.decryptedView(user, ['twoFactorSecret']);
+    return view.twoFactorSecret || null;
   }
 
   /**
@@ -178,8 +174,8 @@ export class UsersService {
       select: { backupCodes: true },
     });
     if (!user?.backupCodes) return null;
-    const decrypted = this.encryption.decrypt(user.backupCodes);
-    return decrypted || null;
+    const view = this.encryption.decryptedView(user, ['backupCodes']);
+    return view.backupCodes || null;
   }
 
   /**
