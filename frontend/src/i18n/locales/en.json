@@ -105,7 +105,8 @@
     "administrator": "Administrator",
     "profile": "Profile",
     "settings": "Settings",
-    "changePassword": "Change password"
+    "changePassword": "Change password",
+    "apiDocs": "API Docs"
   },
   "settings": {
     "title": "Settings",

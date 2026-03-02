@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsEnum, IsOptional, IsDateString, IsBoolean, IsObject } from 'class-validator';
 
 export enum InstructionType {
@@ -15,24 +16,29 @@ export enum InstructionPriority {
 }
 
 export class CreateInstructionDto {
+  @ApiProperty({ description: 'Patient ID' })
   @IsNotEmpty({ message: 'Patient ID is required' })
   @IsString({ message: 'Patient ID must be a string' })
   patientId: string;
 
+  @ApiProperty({ example: 'Take medication daily' })
   @IsNotEmpty({ message: 'Title is required' })
   @IsString({ message: 'Title must be a string' })
   title: string;
 
+  @ApiProperty({ enum: InstructionType })
   @IsNotEmpty({ message: 'Type is required' })
   @IsEnum(InstructionType, { message: 'Type must be a valid instruction type' })
   type: InstructionType;
 
+  @ApiPropertyOptional({ enum: InstructionPriority, default: InstructionPriority.MEDIUM })
   @IsOptional()
   @IsEnum(InstructionPriority, {
     message: 'Priority must be a valid priority level',
   })
   priority?: InstructionPriority;
 
+  @ApiProperty({ description: 'Instruction body content' })
   @IsNotEmpty({ message: 'Content is required' })
   @IsString({ message: 'Content must be a string' })
   content: string;

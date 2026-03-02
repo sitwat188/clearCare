@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InstructionsService } from './instructions.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -8,17 +9,15 @@ import { UpdateInstructionDto } from './dto/update-instruction.dto';
 import { AcknowledgeInstructionDto } from './dto/acknowledge-instruction.dto';
 
 /** @deprecated Prefer role-prefixed routes: GET/POST /api/v1/providers/instructions (provider), GET/POST /api/v1/patients/me/instructions (patient). */
+@ApiTags('instructions')
+@ApiBearerAuth('access-token')
 @Controller('instructions')
 @UseGuards(JwtAuthGuard)
 export class InstructionsController {
   constructor(private readonly instructionsService: InstructionsService) {}
 
-  /**
-   * Create a new care instruction
-   * POST /api/v1/instructions
-   * HIPAA: Provider only
-   */
   @Post()
+  @ApiOperation({ summary: 'Create care instruction (provider)' })
   async createInstruction(
     @Body() createDto: CreateInstructionDto,
     @CurrentUser('id') requestingUserId: string,
@@ -36,11 +35,8 @@ export class InstructionsController {
     );
   }
 
-  /**
-   * Get all instructions (with access control)
-   * GET /api/v1/instructions
-   */
   @Get()
+  @ApiOperation({ summary: 'List instructions (access by role)' })
   async getInstructions(
     @CurrentUser('id') requestingUserId: string,
     @CurrentUser('role') requestingUserRole: string,
@@ -55,11 +51,8 @@ export class InstructionsController {
     });
   }
 
-  /**
-   * Get instruction by ID
-   * GET /api/v1/instructions/:id
-   */
   @Get(':id')
+  @ApiOperation({ summary: 'Get instruction by ID' })
   async getInstruction(
     @Param('id') instructionId: string,
     @CurrentUser('id') requestingUserId: string,
@@ -68,12 +61,8 @@ export class InstructionsController {
     return this.instructionsService.getInstruction(instructionId, requestingUserId, requestingUserRole);
   }
 
-  /**
-   * Update instruction
-   * PUT /api/v1/instructions/:id
-   * HIPAA: Provider only
-   */
   @Put(':id')
+  @ApiOperation({ summary: 'Update instruction (provider)' })
   async updateInstruction(
     @Param('id') instructionId: string,
     @Body() updateDto: UpdateInstructionDto,

@@ -49,6 +49,7 @@ import {
   Person as PersonIcon,
   Logout as LogoutIcon,
   Edit as EditIcon,
+  MenuBook as ApiDocsIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import type { RootState } from '../../store/store';
@@ -56,7 +57,12 @@ import { ROUTES } from '../../config/routes';
 import { logout } from '../../store/slices/authSlice';
 import { APP_NAME } from '../../utils/constants';
 import { notificationService } from '../../services/notificationService';
+import { getApiDocsUrl } from '../../services/api';
 import { drawerWidth, collapsedWidth } from './layoutConstants';
+
+type SidebarMenuItem =
+  | { text: string; icon: React.ReactElement; path: string }
+  | { text: string; icon: React.ReactElement; path?: undefined; external: true; href: string };
 
 const Sidebar = () => {
   const { t } = useTranslation();
@@ -101,7 +107,7 @@ const Sidebar = () => {
     return t(`nav.${key}` as const) || role;
   };
 
-  const getPatientMenuItems = () => [
+  const getPatientMenuItems = (): SidebarMenuItem[] => [
     { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.PATIENT.DASHBOARD },
     { text: t('nav.myInstructions'), icon: <InstructionsIcon />, path: ROUTES.PATIENT.INSTRUCTIONS },
     { text: t('nav.compliance'), icon: <ComplianceIcon />, path: ROUTES.PATIENT.COMPLIANCE },
@@ -110,7 +116,7 @@ const Sidebar = () => {
     { text: t('nav.notifications'), icon: <NotificationsIcon />, path: ROUTES.PATIENT.NOTIFICATIONS },
   ];
 
-  const getProviderMenuItems = () => [
+  const getProviderMenuItems = (): SidebarMenuItem[] => [
     { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.PROVIDER.DASHBOARD },
     { text: t('nav.myPatients'), icon: <PatientsIcon />, path: ROUTES.PROVIDER.PATIENTS },
     { text: t('nav.medplumPatients'), icon: <MedplumIcon />, path: ROUTES.PROVIDER.MEDPLUM_PATIENTS },
@@ -124,7 +130,7 @@ const Sidebar = () => {
     { text: t('nav.notifications'), icon: <NotificationsIcon />, path: ROUTES.PROVIDER.NOTIFICATIONS },
   ];
 
-  const getAdminMenuItems = () => [
+  const getAdminMenuItems = (): SidebarMenuItem[] => [
     { text: t('nav.dashboard'), icon: <DashboardIcon />, path: ROUTES.ADMIN.DASHBOARD },
     { text: t('nav.users'), icon: <UsersIcon />, path: ROUTES.ADMIN.USERS },
     { text: t('nav.medplumPatients'), icon: <MedplumIcon />, path: ROUTES.ADMIN.MEDPLUM_PATIENTS },
@@ -135,6 +141,7 @@ const Sidebar = () => {
     { text: t('nav.reports'), icon: <ReportsIcon />, path: ROUTES.ADMIN.REPORTS },
     { text: t('nav.settings'), icon: <SettingsIcon />, path: ROUTES.ADMIN.SETTINGS },
     { text: t('nav.notifications'), icon: <NotificationsIcon />, path: ROUTES.ADMIN.NOTIFICATIONS },
+    { text: t('nav.apiDocs'), icon: <ApiDocsIcon />, path: undefined, external: true, href: getApiDocsUrl() },
   ];
 
   const getMenuItems = () => {
@@ -274,7 +281,8 @@ const Sidebar = () => {
         {menuItems.map((item) => {
           const isNotifications = item.path?.includes('notifications');
           const showBadge = isNotifications && unreadCount > 0;
-          const isSelected = location.pathname === item.path;
+          const isExternal = 'external' in item && item.external && item.href;
+          const isSelected = !isExternal && location.pathname === item.path;
 
           return (
             <Tooltip
@@ -286,7 +294,13 @@ const Sidebar = () => {
               <ListItem disablePadding sx={{ mb: 0.5 }}>
                 <ListItemButton
                   selected={isSelected}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => {
+                    if (isExternal && item.href) {
+                      window.open(item.href, '_blank', 'noopener,noreferrer');
+                    } else if (item.path) {
+                      navigate(item.path);
+                    }
+                  }}
                   sx={{
                     borderRadius: 2,
                     mx: collapsed ? 0.5 : 1,

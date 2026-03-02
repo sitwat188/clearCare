@@ -1,11 +1,12 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsString, Length } from 'class-validator';
 
 export class VerifyTwoFactorDto {
-  /** Short-lived token returned from login when user has 2FA enabled */
+  @ApiProperty({ description: 'Short-lived token from login when 2FA is enabled' })
   @IsString()
   twoFactorToken: string;
 
-  /** 6-digit TOTP code from authenticator app, or a backup code (8 chars) */
+  @ApiProperty({ example: '123456', description: '6-digit TOTP or 8-char backup code' })
   @IsString()
   @Length(6, 10, {
     message: 'Code must be 6 digits (authenticator) or 8 characters (backup code)',

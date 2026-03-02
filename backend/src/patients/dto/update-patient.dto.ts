@@ -1,11 +1,14 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsOptional, IsEnum, IsString, IsArray } from 'class-validator';
 import { Gender } from './create-patient.dto';
 
 export class UpdatePatientDto {
+  @ApiPropertyOptional()
   @IsOptional()
   @IsDateString({}, { message: 'Date of birth must be a valid date' })
   dateOfBirth?: string;
 
+  @ApiPropertyOptional({ enum: Gender })
   @IsOptional()
   @IsEnum(Gender, { message: 'Gender must be a valid value' })
   gender?: Gender;

@@ -4,6 +4,11 @@ import { clearAuthState, updateAccessToken, getRefreshToken, setRefreshToken } f
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1';
 
+/** Base URL of the backend (no path). Used for Swagger UI. */
+export function getApiDocsUrl(): string {
+  return `${new URL(API_BASE_URL).origin}/api/docs`;
+}
+
 // In-memory access token (auth state + refresh token in sessionStorage via authStorage)
 let accessToken: string | null = null;
 export const setAccessToken = (token: string | null): void => {

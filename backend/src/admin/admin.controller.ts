@@ -12,6 +12,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -20,6 +21,8 @@ import { AdminService } from './admin.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
+@ApiTags('admin')
+@ApiBearerAuth('access-token')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('administrator')
@@ -27,6 +30,8 @@ export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('users')
+  @ApiOperation({ summary: 'List all users (active and inactive)' })
+  @ApiResponse({ status: 200, description: 'List of users' })
   async getUsers() {
     return this.adminService.getUsers();
   }
@@ -36,16 +41,21 @@ export class AdminController {
    * GET /api/v1/admin/users/:userId/patient
    */
   @Get('users/:userId/patient')
+  @ApiOperation({ summary: 'Get patient record by user ID' })
   async getPatientByUserId(@Param('userId') userId: string) {
     return this.adminService.getPatientByUserId(userId);
   }
 
   @Get('users/:id')
+  @ApiOperation({ summary: 'Get user by ID' })
   async getUser(@Param('id') id: string) {
     return this.adminService.getUser(id);
   }
 
   @Post('users')
+  @ApiOperation({ summary: 'Create user (invitation flow)' })
+  @ApiResponse({ status: 201, description: 'User created' })
+  @ApiResponse({ status: 409, description: 'Email exists or inactive user' })
   async createUser(@Body() dto: CreateUserDto, @CurrentUser('id') adminUserId: string, @Req() req: Request) {
     const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
@@ -53,6 +63,7 @@ export class AdminController {
   }
 
   @Put('users/:id')
+  @ApiOperation({ summary: 'Update user' })
   async updateUser(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
@@ -65,6 +76,7 @@ export class AdminController {
   }
 
   @Delete('users/:id')
+  @ApiOperation({ summary: 'Soft-delete user' })
   async deleteUser(@Param('id') id: string, @CurrentUser('id') adminUserId: string, @Req() req: Request) {
     const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
@@ -76,6 +88,7 @@ export class AdminController {
    * POST /api/v1/admin/users/:id/restore
    */
   @Post('users/:id/restore')
+  @ApiOperation({ summary: 'Restore soft-deleted user' })
   async restoreUser(@Param('id') id: string, @CurrentUser('id') adminUserId: string, @Req() req: Request) {
     const ipAddress = req.ip ?? req.socket?.remoteAddress ?? undefined;
     const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
@@ -83,6 +96,7 @@ export class AdminController {
   }
 
   @Get('roles')
+  @ApiOperation({ summary: 'List roles with user counts' })
   async getRoles() {
     return this.adminService.getRoles();
   }
@@ -113,6 +127,7 @@ export class AdminController {
   }
 
   @Get('audit-logs')
+  @ApiOperation({ summary: 'List audit logs with filters' })
   async getAuditLogs(
     @Query('userId') userId?: string,
     @Query('action') action?: string,
@@ -133,6 +148,7 @@ export class AdminController {
   }
 
   @Get('settings')
+  @ApiOperation({ summary: 'Get system settings' })
   getSystemSettings() {
     return this.adminService.getSystemSettings();
   }
@@ -143,11 +159,13 @@ export class AdminController {
   }
 
   @Get('reports')
+  @ApiOperation({ summary: 'List generated reports' })
   getReports() {
     return this.adminService.getReports();
   }
 
   @Get('reports/:id')
+  @ApiOperation({ summary: 'Get report by ID (payload for download)' })
   async getReportById(@Param('id') id: string) {
     const report = await this.adminService.getReportById(id);
     if (!report) {
@@ -157,6 +175,7 @@ export class AdminController {
   }
 
   @Post('reports')
+  @ApiOperation({ summary: 'Generate and store a report' })
   generateReport(
     @Body()
     reportConfig: {

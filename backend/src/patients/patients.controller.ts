@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Body, Param, UseGuards, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PatientsService } from './patients.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -9,17 +10,15 @@ import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 
 /** @deprecated Prefer role-prefixed routes: GET/PUT /api/v1/providers/patients (provider), admin uses POST /api/v1/patients and PUT /api/v1/patients/:id. */
+@ApiTags('patients')
+@ApiBearerAuth('access-token')
 @Controller('patients')
 @UseGuards(JwtAuthGuard)
 export class PatientsController {
   constructor(private readonly patientsService: PatientsService) {}
 
-  /**
-   * Create a new patient record
-   * POST /api/v1/patients
-   * HIPAA: Admin only
-   */
   @Post()
+  @ApiOperation({ summary: 'Create patient (admin only)' })
   async createPatient(
     @Body() createDto: CreatePatientDto,
     @CurrentUser('id') requestingUserId: string,
@@ -31,11 +30,8 @@ export class PatientsController {
     return this.patientsService.createPatient(createDto, requestingUserId, requestingUserRole, ipAddress, userAgent);
   }
 
-  /**
-   * Get all patients (with access control)
-   * GET /api/v1/patients
-   */
   @Get()
+  @ApiOperation({ summary: 'List patients (access by role)' })
   async getPatients(@CurrentUser('id') requestingUserId: string, @CurrentUser('role') requestingUserRole: string) {
     return this.patientsService.getPatients(requestingUserId, requestingUserRole);
   }
@@ -47,15 +43,13 @@ export class PatientsController {
   @Get('by-user/:userId')
   @UseGuards(RolesGuard)
   @Roles('administrator')
+  @ApiOperation({ summary: 'Get patient by user ID (admin only)' })
   async getPatientByUserId(@Param('userId') userId: string, @CurrentUser('role') requestingUserRole: string) {
     return this.patientsService.getPatientByUserId(userId, requestingUserRole);
   }
 
-  /**
-   * Get patient by ID
-   * GET /api/v1/patients/:id
-   */
   @Get(':id')
+  @ApiOperation({ summary: 'Get patient by ID' })
   async getPatient(
     @Param('id') patientId: string,
     @CurrentUser('id') requestingUserId: string,
@@ -64,11 +58,8 @@ export class PatientsController {
     return this.patientsService.getPatient(patientId, requestingUserId, requestingUserRole);
   }
 
-  /**
-   * Update patient record
-   * PUT /api/v1/patients/:id
-   */
   @Put(':id')
+  @ApiOperation({ summary: 'Update patient' })
   async updatePatient(
     @Param('id') patientId: string,
     @Body() updateDto: UpdatePatientDto,

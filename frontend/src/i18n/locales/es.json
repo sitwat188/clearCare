@@ -105,7 +105,8 @@
     "administrator": "Administrador",
     "profile": "Perfil",
     "settings": "Configuración",
-    "changePassword": "Cambiar contraseña"
+    "changePassword": "Cambiar contraseña",
+    "apiDocs": "Documentación API"
   },
   "settings": {
     "title": "Configuración",

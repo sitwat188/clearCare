@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ResponseWrapperInterceptor } from './common/response-wrapper.interceptor';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 function getCorsOrigin(): string | string[] {
   const origins = process.env.CORS_ORIGINS;
@@ -47,6 +48,28 @@ async function bootstrap() {
       },
     }),
   );
+
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('ClearCare+ API')
+      .setDescription(
+        'API documentation for ClearCare+ backend.\n\n' +
+          '**Using protected endpoints:**\n' +
+          '1. Call `POST /auth/login` (or register) and copy the `accessToken` from the response.\n' +
+          '2. Click the **Authorize** button (lock icon) at the top.\n' +
+          '3. Paste the token (the word "Bearer" is added automatically) and click Authorize.\n' +
+          '4. Call any protected endpoint; the token will be sent in the Authorization header.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT', in: 'header' }, 'access-token')
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

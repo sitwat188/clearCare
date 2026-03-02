@@ -1,21 +1,26 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEnum, IsDateString, IsBoolean, IsObject } from 'class-validator';
 import { InstructionType, InstructionPriority } from './create-instruction.dto';
 
 export class UpdateInstructionDto {
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString({ message: 'Title must be a string' })
   title?: string;
 
+  @ApiPropertyOptional({ enum: InstructionType })
   @IsOptional()
   @IsEnum(InstructionType, { message: 'Type must be a valid instruction type' })
   type?: InstructionType;
 
+  @ApiPropertyOptional({ enum: InstructionPriority })
   @IsOptional()
   @IsEnum(InstructionPriority, {
     message: 'Priority must be a valid priority level',
   })
   priority?: InstructionPriority;
 
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString({ message: 'Content must be a string' })
   content?: string;

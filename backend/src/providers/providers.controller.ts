@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req, NotFoundException } from '@nestjs/common';
 import type { Request } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -14,9 +15,8 @@ import { UpdateInstructionDto } from '../instructions/dto/update-instruction.dto
 import { CreateTemplateDto } from './dto/create-template.dto';
 import { UpdateTemplateDto } from './dto/update-template.dto';
 
-/**
- * Provider-facing API: patients, instructions, compliance, reports, templates.
- */
+@ApiTags('providers')
+@ApiBearerAuth('access-token')
 @Controller('providers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('provider')
@@ -29,19 +29,15 @@ export class ProvidersController {
     private readonly reportsService: ReportsService,
   ) {}
 
-  /**
-   * GET /api/v1/providers/reports
-   */
   @Get('reports')
+  @ApiOperation({ summary: 'List provider reports' })
   getReports(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     if (role !== 'provider') return [];
     return this.reportsService.getReports(userId);
   }
 
-  /**
-   * GET /api/v1/providers/reports/:id
-   */
   @Get('reports/:id')
+  @ApiOperation({ summary: 'Get report by ID' })
   async getReportById(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     if (role !== 'provider') throw new NotFoundException('Report not found');
     const report = await this.reportsService.getReportById(id, userId);
@@ -49,10 +45,8 @@ export class ProvidersController {
     return report;
   }
 
-  /**
-   * POST /api/v1/providers/reports
-   */
   @Post('reports')
+  @ApiOperation({ summary: 'Generate report' })
   async generateReport(
     @CurrentUser('id') userId: string,
     @Body()
@@ -65,68 +59,51 @@ export class ProvidersController {
     return this.reportsService.generateReport(userId, body);
   }
 
-  /**
-   * GET /api/v1/providers/templates
-   */
   @Get('templates')
+  @ApiOperation({ summary: 'List templates' })
   async getTemplates(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     if (role !== 'provider') return [];
     return this.templatesService.getTemplates(userId);
   }
 
-  /**
-   * POST /api/v1/providers/templates
-   */
   @Post('templates')
+  @ApiOperation({ summary: 'Create template' })
   async createTemplate(@CurrentUser('id') userId: string, @Body() dto: CreateTemplateDto) {
     return this.templatesService.createTemplate(userId, dto);
   }
 
-  /**
-   * GET /api/v1/providers/templates/:id
-   */
   @Get('templates/:id')
+  @ApiOperation({ summary: 'Get template by ID' })
   async getTemplate(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.templatesService.getTemplate(id, userId);
   }
 
-  /**
-   * PUT /api/v1/providers/templates/:id
-   */
   @Put('templates/:id')
+  @ApiOperation({ summary: 'Update template' })
   async updateTemplate(@Param('id') id: string, @CurrentUser('id') userId: string, @Body() dto: UpdateTemplateDto) {
     return this.templatesService.updateTemplate(id, userId, dto);
   }
 
-  /**
-   * DELETE /api/v1/providers/templates/:id
-   */
   @Delete('templates/:id')
+  @ApiOperation({ summary: 'Delete template' })
   async deleteTemplate(@Param('id') id: string, @CurrentUser('id') userId: string) {
     await this.templatesService.deleteTemplate(id, userId);
   }
 
-  /**
-   * GET /api/v1/providers/instructions
-   * List instructions (for assigned patients)
-   */
   @Get('instructions')
+  @ApiOperation({ summary: 'List instructions for assigned patients' })
   async getInstructions(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.instructionsService.getInstructions(userId, role, {});
   }
 
-  /**
-   * GET /api/v1/providers/instructions/:id
-   */
   @Get('instructions/:id')
+  @ApiOperation({ summary: 'Get instruction by ID' })
   async getInstruction(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.instructionsService.getInstruction(id, userId, role);
   }
 
-  /**
-   * POST /api/v1/providers/instructions
-   */
   @Post('instructions')
+  @ApiOperation({ summary: 'Create instruction' })
   async createInstruction(
     @Body() body: CreateInstructionDto,
     @CurrentUser('id') userId: string,
@@ -138,10 +115,8 @@ export class ProvidersController {
     return this.instructionsService.createInstruction(body, userId, role, ipAddress, userAgent);
   }
 
-  /**
-   * PUT /api/v1/providers/instructions/:id
-   */
   @Put('instructions/:id')
+  @ApiOperation({ summary: 'Update instruction' })
   async updateInstruction(
     @Param('id') id: string,
     @Body() body: UpdateInstructionDto,
@@ -154,10 +129,8 @@ export class ProvidersController {
     return this.instructionsService.updateInstruction(id, body, userId, role, ipAddress, userAgent);
   }
 
-  /**
-   * DELETE /api/v1/providers/instructions/:id
-   */
   @Delete('instructions/:id')
+  @ApiOperation({ summary: 'Delete instruction' })
   async deleteInstruction(
     @Param('id') id: string,
     @CurrentUser('id') userId: string,
@@ -169,20 +142,14 @@ export class ProvidersController {
     return this.instructionsService.deleteInstruction(id, userId, role, ipAddress, userAgent);
   }
 
-  /**
-   * GET /api/v1/providers/patients
-   * List patients (access control: provider sees only assigned, admin sees all)
-   */
   @Get('patients')
+  @ApiOperation({ summary: 'List patients (assigned for provider)' })
   async getPatients(@CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.patientsService.getPatients(userId, role);
   }
 
-  /**
-   * GET /api/v1/providers/patients/:patientId/compliance/metrics
-   * Must be before patients/:id so "compliance/metrics" is not captured as id
-   */
   @Get('patients/:patientId/compliance/metrics')
+  @ApiOperation({ summary: 'Get patient compliance metrics' })
   async getPatientComplianceMetrics(
     @Param('patientId') patientId: string,
     @CurrentUser('id') userId: string,
@@ -193,10 +160,8 @@ export class ProvidersController {
     });
   }
 
-  /**
-   * GET /api/v1/providers/patients/:patientId/compliance
-   */
   @Get('patients/:patientId/compliance')
+  @ApiOperation({ summary: 'Get patient compliance records' })
   async getPatientCompliance(
     @Param('patientId') patientId: string,
     @CurrentUser('id') userId: string,
@@ -207,10 +172,8 @@ export class ProvidersController {
     });
   }
 
-  /**
-   * GET /api/v1/providers/patients/:id
-   */
   @Get('patients/:id')
+  @ApiOperation({ summary: 'Get patient by ID' })
   async getPatient(@Param('id') id: string, @CurrentUser('id') userId: string, @CurrentUser('role') role: string) {
     return this.patientsService.getPatient(id, userId, role);
   }
