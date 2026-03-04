@@ -114,7 +114,6 @@ const HealthConnectionsPage = () => {
   });
 
   const hasAnyHealthData = healthData && (healthData.observations.length > 0 || healthData.medications.length > 0 || healthData.conditions.length > 0 || healthData.encounters.length > 0);
-  const allConnectionsFailedExport = connections.length > 0 && connections.every((c) => c.lastExportFailureReason);
   const showHealthDataLoading = healthDataLoading || healthDataRefetching;
 
   useEffect(() => {
