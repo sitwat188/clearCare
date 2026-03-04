@@ -37,12 +37,12 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { Link as LinkIcon, Delete as DeleteIcon, Sync as SyncIcon, LocalHospital as HealthIcon, Science as LabIcon, Medication as MedIcon, Assignment as ConditionIcon, Event as EncounterIcon } from '@mui/icons-material';
+import { Link as LinkIcon, Delete as DeleteIcon, Sync as SyncIcon, LocalHospital as HealthIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { toast } from 'react-toastify';
 import PageHeader from '../../components/common/PageHeader';
 import { healthConnectionsService } from '../../services/healthConnectionsService';
-import type { HealthConnection, HealthObservation } from '../../types/health-connections.types';
+import type { HealthConnection } from '../../types/health-connections.types';
 import { isUserFacingExportFailure } from '../../types/health-connections.types';
 
 const observationCategoryLabel = (cat: string | undefined): string => {
