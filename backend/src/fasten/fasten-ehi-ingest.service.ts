@@ -141,6 +141,7 @@ export class FastenEhiIngestService {
     }> = [];
 
     const lines = ndjsonText.split('\n').filter((line) => line.trim());
+    const resourceTypeCounts: Record<string, number> = {};
     for (const line of lines) {
       let resource: FhirResource;
       try {
@@ -148,11 +149,12 @@ export class FastenEhiIngestService {
       } catch {
         continue;
       }
-      const rt = resource.resourceType;
+      const rt = resource.resourceType ?? 'unknown';
+      resourceTypeCounts[rt] = (resourceTypeCounts[rt] ?? 0) + 1;
       if (rt === 'Observation') this.pushObservation(resource, connectionId, patientId, observations);
-      else if (rt === 'MedicationRequest' || rt === 'MedicationStatement')
+      else if (rt === 'MedicationRequest' || rt === 'MedicationStatement') {
         this.pushMedication(resource, connectionId, patientId, medications);
-      else if (rt === 'Condition') this.pushCondition(resource, connectionId, patientId, conditions);
+      } else if (rt === 'Condition') this.pushCondition(resource, connectionId, patientId, conditions);
       else if (rt === 'Encounter') this.pushEncounter(resource, connectionId, patientId, encounters);
     }
 
@@ -211,9 +213,6 @@ export class FastenEhiIngestService {
       throw err;
     }
 
-    this.logger.log(
-      `Ingested connection=${connectionId}: observations=${observations.length} medications=${medications.length} conditions=${conditions.length} encounters=${encounters.length}`,
-    );
     return {
       observations: observations.length,
       medications: medications.length,

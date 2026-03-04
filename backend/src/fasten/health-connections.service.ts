@@ -1,7 +1,15 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  ConflictException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { FastenConnectService } from './fasten-connect.service';
+import { FastenEhiIngestService } from './fasten-ehi-ingest.service';
 import type { FastenConnectionStatus } from './fasten-connect.service';
 
 const healthDataInclude = {
@@ -74,6 +82,7 @@ export class HealthConnectionsService {
     private prisma: PrismaService,
     private fasten: FastenConnectService,
     private config: ConfigService,
+    private ingest: FastenEhiIngestService,
   ) {}
 
   /**
@@ -151,28 +160,7 @@ export class HealthConnectionsService {
       },
     });
     if (existing) {
-      // Same patient already has this connection; idempotent, trigger export again.
-      // Fasten's bulk export endpoint is idempotent per org_connection_id.
-      const response = this.toConnectionResponse(existing);
-      if (!this.fasten.isConfigured()) {
-        this.logger.warn(`Fasten not configured; skipping EHI export for orgConnectionId=${trimmed}`);
-        return response;
-      }
-      try {
-        const result = await this.fasten.requestEhiExport(trimmed);
-        if (result) {
-          return {
-            ...response,
-            ehiExport: { taskId: result.task_id, status: result.status },
-          };
-        }
-        this.logger.warn(`EHI export request returned null: patient=${patient.id} orgConnectionId=${trimmed}`);
-      } catch (err) {
-        this.logger.warn(
-          `EHI export request failed (connection already saved): ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-      return response;
+      throw new ConflictException('This organization is already connected.');
     }
     const connection = await this.prisma.patientHealthConnection.create({
       data: {
@@ -181,7 +169,20 @@ export class HealthConnectionsService {
         sourceName: sourceName?.trim() || null,
       },
     });
-    this.logger.log(`Health connection added: patient=${patient.id} orgConnectionId=${trimmed}`);
+
+    // Resolve organization display name from Fasten catalog and persist for UI.
+    try {
+      const displayName = await this.fasten.getConnectionDisplayName(trimmed);
+      if (displayName) {
+        await this.prisma.patientHealthConnection.update({
+          where: { id: connection.id },
+          data: { sourceName: displayName },
+        });
+        connection.sourceName = displayName;
+      }
+    } catch {
+      // Non-fatal; list will retry resolution when missing
+    }
 
     // Trigger bulk (EHI) export immediately after connect so records are requested right away.
     let ehiExport: { taskId: string; status: string } | undefined;
@@ -192,9 +193,6 @@ export class HealthConnectionsService {
         const result = await this.fasten.requestEhiExport(trimmed);
         if (result) {
           ehiExport = { taskId: result.task_id, status: result.status };
-          this.logger.log(
-            `EHI export requested: patient=${patient.id} orgConnectionId=${trimmed} taskId=${result.task_id}`,
-          );
         } else {
           this.logger.warn(`EHI export request returned null: patient=${patient.id} orgConnectionId=${trimmed}`);
         }
@@ -213,6 +211,7 @@ export class HealthConnectionsService {
 
   /**
    * List health connections for the current user's patient.
+   * Resolves organization name from Fasten catalog when sourceName is missing.
    */
   async listMyConnections(userId: string, role: string) {
     const patient = await this.getPatientForCurrentUser(userId, role);
@@ -220,11 +219,31 @@ export class HealthConnectionsService {
       where: { patientId: patient.id },
       orderBy: { connectedAt: 'desc' },
     });
-    return connections.map((c) => this.toConnectionResponse(c));
+    const results = await Promise.all(
+      connections.map(async (c) => {
+        if (!c.sourceName?.trim() && this.fasten.isConfigured()) {
+          try {
+            const displayName = await this.fasten.getConnectionDisplayName(c.orgConnectionId);
+            if (displayName) {
+              await this.prisma.patientHealthConnection.update({
+                where: { id: c.id },
+                data: { sourceName: displayName },
+              });
+              return this.toConnectionResponse({ ...c, sourceName: displayName });
+            }
+          } catch {
+            // Keep existing sourceName (null)
+          }
+        }
+        return this.toConnectionResponse(c);
+      }),
+    );
+    return results;
   }
 
   /**
    * List health connections for a patient (provider or admin).
+   * Resolves organization name from Fasten catalog when sourceName is missing.
    */
   async listConnectionsForPatient(patientId: string, requestingUserId: string, requestingUserRole: string) {
     await this.ensureCanAccessPatient(patientId, requestingUserId, requestingUserRole);
@@ -232,7 +251,26 @@ export class HealthConnectionsService {
       where: { patientId },
       orderBy: { connectedAt: 'desc' },
     });
-    return connections.map((c) => this.toConnectionResponse(c));
+    const results = await Promise.all(
+      connections.map(async (c) => {
+        if (!c.sourceName?.trim() && this.fasten.isConfigured()) {
+          try {
+            const displayName = await this.fasten.getConnectionDisplayName(c.orgConnectionId);
+            if (displayName) {
+              await this.prisma.patientHealthConnection.update({
+                where: { id: c.id },
+                data: { sourceName: displayName },
+              });
+              return this.toConnectionResponse({ ...c, sourceName: displayName });
+            }
+          } catch {
+            // Keep existing sourceName (null)
+          }
+        }
+        return this.toConnectionResponse(c);
+      }),
+    );
+    return results;
   }
 
   /**
@@ -249,7 +287,6 @@ export class HealthConnectionsService {
     await this.prisma.patientHealthConnection.delete({
       where: { id: connection.id },
     });
-    this.logger.log(`Health connection removed: patient=${patient.id} orgConnectionId=${orgConnectionId}`);
     return { success: true };
   }
 
@@ -315,33 +352,142 @@ export class HealthConnectionsService {
   }
 
   private async getHealthDataByPatientId(patientId: string) {
-    const db = this.prisma as unknown as HealthDataPrismaDelegates;
-    const [observations, medications, conditions, encounters] = await Promise.all([
-      db.patientHealthObservation.findMany({
-        where: { patientId },
-        orderBy: { effectiveAt: 'desc' },
-        take: 200,
-        include: healthDataInclude,
-      }),
-      db.patientHealthMedication.findMany({
-        where: { patientId },
-        orderBy: { prescribedAt: 'desc' },
-        take: 200,
-        include: healthDataInclude,
-      }),
-      db.patientHealthCondition.findMany({
-        where: { patientId },
-        orderBy: { onsetAt: 'desc' },
-        take: 200,
-        include: healthDataInclude,
-      }),
-      db.patientHealthEncounter.findMany({
-        where: { patientId },
-        orderBy: { periodStart: 'desc' },
-        take: 200,
-        include: healthDataInclude,
-      }),
+    const connections = await this.prisma.patientHealthConnection.findMany({
+      where: { patientId },
+      select: { id: true, sourceName: true, orgConnectionId: true },
+    });
+    const connectionIds = connections.map((r) => r.id);
+    if (connectionIds.length === 0) {
+      return this.mapHealthDataToResponse([], [], [], []);
+    }
+
+    // Resolve organization name for connections missing sourceName (parallel, non-blocking).
+    if (this.fasten.isConfigured()) {
+      const toResolve = connections.filter((c) => !c.sourceName?.trim());
+      await Promise.all(
+        toResolve.map(async (c) => {
+          try {
+            const displayName = await this.fasten.getConnectionDisplayName(c.orgConnectionId);
+            if (displayName?.trim()) {
+              await this.prisma.patientHealthConnection.update({
+                where: { id: c.id },
+                data: { sourceName: displayName },
+              });
+            }
+          } catch {
+            // ignore; UI shows fallback
+          }
+        }),
+      );
+    }
+
+    // Fetch by organization (connectionId): all records per connection, then concatenate so every org is represented.
+    // Use a high per-connection limit so all records from all organizations are returned.
+    const perConn = 2000;
+    const [obsByConn, medByConn, condByConn, encByConn] = await Promise.all([
+      Promise.all(
+        connectionIds.map((cid) =>
+          this.prisma.patientHealthObservation.findMany({
+            where: { connectionId: cid },
+            orderBy: { effectiveAt: 'desc' },
+            take: perConn,
+            include: healthDataInclude,
+          }),
+        ),
+      ),
+      Promise.all(
+        connectionIds.map((cid) =>
+          this.prisma.patientHealthMedication.findMany({
+            where: { connectionId: cid },
+            orderBy: { prescribedAt: 'desc' },
+            take: perConn,
+            include: healthDataInclude,
+          }),
+        ),
+      ),
+      Promise.all(
+        connectionIds.map((cid) =>
+          this.prisma.patientHealthCondition.findMany({
+            where: { connectionId: cid },
+            orderBy: { onsetAt: 'desc' },
+            take: perConn,
+            include: healthDataInclude,
+          }),
+        ),
+      ),
+      Promise.all(
+        connectionIds.map((cid) =>
+          this.prisma.patientHealthEncounter.findMany({
+            where: { connectionId: cid },
+            orderBy: { periodStart: 'desc' },
+            take: perConn,
+            include: healthDataInclude,
+          }),
+        ),
+      ),
     ]);
+
+    // Concatenate in connection order (no global re-sort) so each connection's data is present.
+    const byConnection: [
+      HealthDataObservationRow[],
+      HealthDataMedicationRow[],
+      HealthDataConditionRow[],
+      HealthDataEncounterRow[],
+    ] = [
+      obsByConn.flat() as HealthDataObservationRow[],
+      medByConn.flat() as HealthDataMedicationRow[],
+      condByConn.flat() as HealthDataConditionRow[],
+      encByConn.flat() as HealthDataEncounterRow[],
+    ];
+
+    const hasAny = byConnection.some((arr) => arr.length > 0);
+    if (!hasAny) {
+      const byPatient = await Promise.all([
+        this.prisma.patientHealthObservation.findMany({
+          where: { patientId },
+          orderBy: { effectiveAt: 'desc' },
+          take: 200,
+          include: healthDataInclude,
+        }),
+        this.prisma.patientHealthMedication.findMany({
+          where: { patientId },
+          orderBy: { prescribedAt: 'desc' },
+          take: 200,
+          include: healthDataInclude,
+        }),
+        this.prisma.patientHealthCondition.findMany({
+          where: { patientId },
+          orderBy: { onsetAt: 'desc' },
+          take: 200,
+          include: healthDataInclude,
+        }),
+        this.prisma.patientHealthEncounter.findMany({
+          where: { patientId },
+          orderBy: { periodStart: 'desc' },
+          take: 200,
+          include: healthDataInclude,
+        }),
+      ]);
+      const fallbackHasAny = byPatient.some((arr) => arr.length > 0);
+      if (fallbackHasAny) {
+        return this.mapHealthDataToResponse(
+          byPatient[0] as HealthDataObservationRow[],
+          byPatient[1] as HealthDataMedicationRow[],
+          byPatient[2] as HealthDataConditionRow[],
+          byPatient[3] as HealthDataEncounterRow[],
+        );
+      }
+    }
+
+    return this.mapHealthDataToResponse(byConnection[0], byConnection[1], byConnection[2], byConnection[3]);
+  }
+
+  private mapHealthDataToResponse(
+    observations: Array<HealthDataObservationRow>,
+    medications: Array<HealthDataMedicationRow>,
+    conditions: Array<HealthDataConditionRow>,
+    encounters: Array<HealthDataEncounterRow>,
+  ) {
     return {
       observations: observations.map((o) => ({
         id: o.id,
@@ -410,6 +556,33 @@ export class HealthConnectionsService {
     if (!connection) throw new NotFoundException('Connection not found');
     await this.ensureCanAccessPatient(connection.patientId, requestingUserId, requestingUserRole);
     return this.fasten.requestEhiExport(connection.orgConnectionId);
+  }
+
+  /**
+   * Dev-only: ingest NDJSON manually for a connection (bypasses Fasten webhook).
+   * Allowed when NODE_ENV !== 'production' or ALLOW_DEV_INGEST=true.
+   */
+  async devIngestNdjson(
+    userId: string,
+    role: string,
+    orgConnectionId: string,
+    ndjson: string,
+  ): Promise<{ observations: number; medications: number; conditions: number; encounters: number }> {
+    const allow = process.env.NODE_ENV !== 'production' || this.config.get<string>('ALLOW_DEV_INGEST') === 'true';
+    if (!allow) {
+      throw new ForbiddenException('Dev ingest is disabled in production');
+    }
+    const patient = await this.getPatientForCurrentUser(userId, role);
+    const connection = await this.prisma.patientHealthConnection.findFirst({
+      where: { patientId: patient.id, orgConnectionId: orgConnectionId.trim() },
+    });
+    if (!connection) throw new NotFoundException('Connection not found');
+    const counts = await this.ingest.ingestNdjson(ndjson, connection.id, connection.patientId);
+    await this.prisma.patientHealthConnection.update({
+      where: { id: connection.id },
+      data: { lastSyncedAt: new Date(), lastExportFailureReason: null },
+    });
+    return counts;
   }
 
   private toConnectionResponse(row: {

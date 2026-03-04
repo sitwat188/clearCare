@@ -667,6 +667,16 @@ export const healthConnectionsEndpoints = {
   },
 
   /**
+   * POST /api/v1/patients/me/health-connections/:orgConnectionId/request-export (sync connection)
+   */
+  requestExport: async (orgConnectionId: string): Promise<ApiResponse<FastenEhiExportResponse | null>> => {
+    return makeApiRequest(
+      'post',
+      `/patients/me/health-connections/${encodeURIComponent(orgConnectionId)}/request-export`,
+    );
+  },
+
+  /**
    * DELETE /api/v1/patients/me/health-connections/:orgConnectionId
    */
   removeConnection: async (orgConnectionId: string): Promise<ApiResponse<{ success: boolean }>> => {

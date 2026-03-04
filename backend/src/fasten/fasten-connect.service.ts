@@ -148,6 +148,59 @@ export class FastenConnectService {
   }
 
   /**
+   * Get catalog entry (brand/portal) name for display. Prefer brand_id, then portal_id.
+   * GET /bridge/catalog?api_mode=&public_id=&brand_id= or portal_id=
+   */
+  async getCatalogName(
+    brandId?: string | null,
+    portalId?: string | null,
+    apiMode?: string | null,
+  ): Promise<string | null> {
+    if (!this.authHeader) return null;
+    const publicId = this.getEnvValue('FASTEN_PUBLIC_ID')?.trim();
+    if (!publicId) return null;
+    const id = brandId?.trim() || portalId?.trim();
+    if (!id) return null;
+    const mode = apiMode?.trim() || 'live';
+    const params = new URLSearchParams({
+      api_mode: mode,
+      public_id: publicId,
+      ...(brandId?.trim() ? { brand_id: brandId.trim() } : { portal_id: portalId!.trim() }),
+    });
+    const url = `${this.baseUrl}/bridge/catalog?${params.toString()}`;
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Authorization: this.authHeader,
+          Accept: 'application/json',
+        },
+      });
+      if (!res.ok) {
+        this.logger.warn(`Fasten getCatalog ${id}: ${res.status}`);
+        return null;
+      }
+      const json = (await res.json()) as { success?: boolean; data?: { name?: string } };
+      const name = json?.data?.name?.trim();
+      return name || null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Fasten getCatalog failed: ${msg}`);
+      return null;
+    }
+  }
+
+  /**
+   * Resolve organization display name for an org connection (status + catalog). Returns null on failure.
+   */
+  async getConnectionDisplayName(orgConnectionId: string): Promise<string | null> {
+    const status = await this.getConnectionStatus(orgConnectionId);
+    if (!status?.catalog_brand_id && !status?.catalog_portal_id) return null;
+    const name = await this.getCatalogName(status.catalog_brand_id, status.catalog_portal_id, status.api_mode);
+    return name ?? null;
+  }
+
+  /**
    * Download EHI export file from Fasten (URL from webhook download_links).
    * Uses same Basic auth as other API calls.
    */

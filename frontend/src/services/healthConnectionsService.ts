@@ -4,7 +4,13 @@
  */
 
 import { apiEndpoints } from './apiEndpoints';
-import type { HealthConnection, AddConnectionResponse, FastenConnectionStatus, FastenEhiExportResponse, PatientHealthData } from '../types/health-connections.types';
+import type {
+  HealthConnection,
+  AddConnectionResponse,
+  FastenConnectionStatus,
+  FastenEhiExportResponse,
+  PatientHealthData,
+} from '../types/health-connections.types';
 
 const getData = <T>(res: { success: boolean; data: T }): T => res.data;
 
@@ -25,6 +31,12 @@ export const healthConnectionsService = {
   addConnection: async (orgConnectionId: string, sourceName?: string): Promise<AddConnectionResponse> => {
     const res = await apiEndpoints.healthConnections.addConnection(orgConnectionId, sourceName);
     return getData(res);
+  },
+
+  /** Request EHI export / sync for a connection (patient) */
+  requestExport: async (orgConnectionId: string): Promise<FastenEhiExportResponse | null> => {
+    const res = await apiEndpoints.healthConnections.requestExport(orgConnectionId);
+    return getData(res) ?? null;
   },
 
   /** Remove connection (patient) */
@@ -62,7 +74,7 @@ export const healthConnectionsService = {
     return getData(res) ?? null;
   },
 
-  /** Patient: get imported health data (observations, medications, conditions, encounters) */
+  /** Patient: get imported health data (observations, medications, conditions, encounters). Filter on the frontend. */
   getMyHealthData: async (): Promise<PatientHealthData> => {
     const res = await apiEndpoints.healthConnections.getMyHealthData();
     return getData(res) ?? { observations: [], medications: [], conditions: [], encounters: [] };

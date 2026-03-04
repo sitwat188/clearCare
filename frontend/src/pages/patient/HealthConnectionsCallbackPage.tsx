@@ -6,13 +6,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, Typography, CircularProgress, Alert } from '@mui/material';
+import { toast } from 'react-toastify';
 import { healthConnectionsService } from '../../services/healthConnectionsService';
 import { ROUTES } from '../../config/routes';
 
 const HealthConnectionsCallbackPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'success' | 'info' | 'error'>('loading');
   const [message, setMessage] = useState<string>('');
 
   useEffect(() => {
@@ -41,8 +42,25 @@ const HealthConnectionsCallbackPage = () => {
         setTimeout(() => navigate(ROUTES.PATIENT.HEALTH_CONNECTIONS, { replace: true }), 1500);
       })
       .catch((err) => {
-        setStatus('error');
-        setMessage(err?.message || 'Failed to save connection. Please try again.');
+        const anyErr = err as Record<string, unknown>;
+        const response = anyErr?.response as { status?: number; data?: { message?: string } } | undefined;
+        const statusCode = response?.status;
+        const apiMessage =
+          (response?.data && typeof response.data === 'object' && typeof response.data.message === 'string'
+            ? response.data.message
+            : '') || (typeof anyErr?.message === 'string' ? anyErr.message : '');
+        const isAlreadyConnected =
+          statusCode === 409 || (typeof apiMessage === 'string' && apiMessage.toLowerCase().includes('already connected'));
+        if (isAlreadyConnected) {
+          const msg = 'This organization is already connected.';
+          setStatus('info');
+          setMessage(msg);
+          toast.info(msg);
+          setTimeout(() => navigate(ROUTES.PATIENT.HEALTH_CONNECTIONS, { replace: true }), 1500);
+        } else {
+          setStatus('error');
+          setMessage(apiMessage || 'Failed to save connection. Please try again.');
+        }
       });
   }, [searchParams, navigate]);
 
@@ -72,6 +90,16 @@ const HealthConnectionsCallbackPage = () => {
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {message} Redirecting…
+          </Typography>
+        </>
+      )}
+      {status === 'info' && (
+        <>
+          <Alert severity="info" sx={{ maxWidth: 400, mb: 2 }}>
+            {message}
+          </Alert>
+          <Typography variant="body2" color="text.secondary">
+            Redirecting…
           </Typography>
         </>
       )}

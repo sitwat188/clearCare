@@ -5,6 +5,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { HealthConnectionsService } from './health-connections.service';
 import { AddConnectionDto } from './dto/add-connection.dto';
+import { DevIngestDto } from './dto/dev-ingest.dto';
 
 /**
  * Patient "me" health connections: connect, list, remove.
@@ -44,6 +45,32 @@ export class HealthConnectionsMeController {
     @CurrentUser('role') role: string,
   ) {
     return this.healthConnections.addConnection(userId, role, dto.orgConnectionId, dto.sourceName);
+  }
+
+  /**
+   * POST :orgConnectionId/request-export: request EHI export (sync) for this connection (patient).
+   */
+  @Post(':orgConnectionId/request-export')
+  async requestExport(
+    @Param('orgConnectionId') orgConnectionId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.healthConnections.requestEhiExport(orgConnectionId, userId, role);
+  }
+
+  /**
+   * POST :orgConnectionId/dev-ingest: dev-only manual ingest of NDJSON (bypasses Fasten webhook).
+   * Allowed when NODE_ENV !== 'production' or ALLOW_DEV_INGEST=true.
+   */
+  @Post(':orgConnectionId/dev-ingest')
+  async devIngest(
+    @Param('orgConnectionId') orgConnectionId: string,
+    @Body() dto: DevIngestDto,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.healthConnections.devIngestNdjson(userId, role, orgConnectionId, dto.ndjson);
   }
 
   @Delete(':orgConnectionId')

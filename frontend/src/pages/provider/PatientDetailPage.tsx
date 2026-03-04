@@ -246,7 +246,7 @@ const ProviderPatientDetail = () => {
                       }}
                     >
                       <ListItemText
-                        primary={conn.sourceName || 'Health record'}
+                        primary={conn.sourceName ?? 'Health record'}
                         secondary={
                           <>
                             Connected {format(new Date(conn.connectedAt), 'MMM d, yyyy')}

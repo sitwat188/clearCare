@@ -42,8 +42,6 @@ export class FastenWebhookService {
       await this.handleExportSuccess(data as FastenEhiExportSuccessData);
     } else if (type === 'patient.ehi_export_failed') {
       await this.handleExportFailed(data as FastenEhiExportFailedData);
-    } else {
-      this.logger.log(`Unhandled webhook type: ${type}`);
     }
   }
 
@@ -55,7 +53,6 @@ export class FastenWebhookService {
       );
       return;
     }
-    this.logger.log(`EHI export_success: org_connection_id=${orgConnectionId} task_id=${data.task_id}`);
     const connections = await this.prisma.patientHealthConnection.findMany({
       where: { orgConnectionId },
     });
@@ -102,9 +99,6 @@ export class FastenWebhookService {
     for (const connection of connections) {
       try {
         const counts = await this.ingest.ingestNdjson(ndjson, connection.id, connection.patientId);
-        this.logger.log(
-          `EHI ingest done: connection=${connection.id} patient=${connection.patientId} observations=${counts.observations} medications=${counts.medications} conditions=${counts.conditions} encounters=${counts.encounters}`,
-        );
         await this.prisma.patientHealthConnection.update({
           where: { id: connection.id },
           data: updatePayload,
